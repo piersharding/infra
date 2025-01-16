@@ -29,7 +29,7 @@ type logger struct {
 
 func init() {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
-	zerolog.CallerMarshalFunc = func(file string, line int) string {
+	zerolog.CallerMarshalFunc = func(pc uintptr, file string, line int) string {
 		short := filepath.Join(filepath.Base(filepath.Dir(file)), filepath.Base(file))
 		return fmt.Sprintf("%s:%d", short, line)
 	}
