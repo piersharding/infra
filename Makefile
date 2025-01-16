@@ -1,3 +1,6 @@
+
+TAG ?= 0.21.2
+
 test: check-psql-env
 	go test -short ./...
 
@@ -8,10 +11,30 @@ test-all: check-psql-env
 test/update:
 	go test ./internal/cmd -test.update-golden
 
+
+fmt: ## Run go fmt against code.
+	go fmt ./...
+
+vet: ## Run go vet against code.
+	pwd
+	env | grep GO
+	ls -latr *
+	go mod download
+	go vet ./...
+
+
 DOCKER_CONTEXT=.
 
 docker/%:
 	docker buildx build $(DOCKER_CONTEXT) --load -t infrahq/$*:dev
+
+docker-build: fmt vet
+	docker buildx build $(DOCKER_CONTEXT) --load -t registry.gitlab.com/piersharding/infra/infra:$(TAG)
+	docker buildx build ./ui --load -t registry.gitlab.com/piersharding/infra/ui:$(TAG)
+
+docker-push:
+	docker push registry.gitlab.com/piersharding/infra/infra:$(TAG)
+	docker push registry.gitlab.com/piersharding/infra/ui:$(TAG)
 
 docker/ui: DOCKER_CONTEXT=ui
 
