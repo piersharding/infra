@@ -1,5 +1,5 @@
 
-TAG ?= 0.21.2
+TAG ?= 0.21.3
 
 test: check-psql-env
 	go test -short ./...
@@ -22,19 +22,24 @@ vet: ## Run go vet against code.
 	go mod download
 	go vet ./...
 
+# must install goreleaser first - https://goreleaser.com/install/
+release: ## build the release artefacts
+	RELEASE_NAME=$(TAG) goreleaser release --snapshot --clean
 
-DOCKER_CONTEXT=.
+
+DOCKER_CONTEXT ?= .
+DOCKER_REGISTRY ?= registry.gitlab.com/piersharding/infra
 
 docker/%:
 	docker buildx build $(DOCKER_CONTEXT) --load -t infrahq/$*:dev
 
 docker-build: fmt vet
-	docker buildx build $(DOCKER_CONTEXT) --load -t registry.gitlab.com/piersharding/infra/infra:$(TAG)
-	docker buildx build ./ui --load -t registry.gitlab.com/piersharding/infra/ui:$(TAG)
+	docker buildx build $(DOCKER_CONTEXT) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
+	docker buildx build $(DOCKER_CONTEXT)/ui --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
 
 docker-push:
-	docker push registry.gitlab.com/piersharding/infra/infra:$(TAG)
-	docker push registry.gitlab.com/piersharding/infra/ui:$(TAG)
+	docker push $(DOCKER_REGISTRY)/infra:$(TAG)
+	docker push $(DOCKER_REGISTRY)/ui:$(TAG)
 
 docker/ui: DOCKER_CONTEXT=ui
 

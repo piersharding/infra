@@ -1,3 +1,4 @@
+version: 2
 env:
   # Disable CGO for now. This means binaries won't be able to run
   # "infra server" until we enable CGO at a later time.
@@ -73,12 +74,14 @@ nfpms:
 archives:
   - id: zip
     format: zip
-    replacements:
-      amd64: x86_64
+    name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    # replacements:
+    #   amd64: x86_64
     files:
       - none*
 brews:
-  - tap:
+  - name: infra
+    repository:
       owner: infrahq
       name: homebrew-tap
     commit_author:
@@ -95,16 +98,17 @@ brews:
       (zsh_completion/"_infra").write output
       output = Utils.popen_read("#{bin}/infra completion fish")
       (fish_completion/"infra.fish").write output
-scoop:
-  bucket:
-    owner: infrahq
-    name: scoop
-  commit_author:
-    name: infra-ci
-    email: contact@infrahq.com
-  homepage: https://infrahq.com
-  description: Infra
-  url_template: "https://github.com/infrahq/infra/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+scoops:
+  - name: infra
+    repository:
+      owner: infrahq
+      name: scoop
+    commit_author:
+      name: infra-ci
+      email: contact@infrahq.com
+    homepage: https://infrahq.com
+    description: Infra
+    url_template: "https://github.com/infrahq/infra/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
 publishers:
   - name: gemfury
     ids: [packages]
