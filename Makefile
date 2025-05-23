@@ -1,5 +1,7 @@
 
-TAG ?= 0.21.3
+DOCKER_CONTEXT ?= .
+DOCKER_REGISTRY ?= registry.gitlab.com/ska-telescope/external/infra
+TAG ?= 0.21.4
 
 test: check-psql-env
 	go test -short ./...
@@ -26,16 +28,22 @@ vet: ## Run go vet against code.
 release: ## build the release artefacts
 	RELEASE_NAME=$(TAG) goreleaser release --snapshot --clean
 
-
-DOCKER_CONTEXT ?= .
-DOCKER_REGISTRY ?= registry.gitlab.com/piersharding/infra
-
 docker/%:
 	docker buildx build $(DOCKER_CONTEXT) --load -t infrahq/$*:dev
 
 docker-build: fmt vet
 	docker buildx build $(DOCKER_CONTEXT) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
 	docker buildx build $(DOCKER_CONTEXT)/ui --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
+
+# perform update of go dependencies
+go-update:
+	go get -u ./...
+
+# perform update of node dependencies
+npm-update:
+	cd ui && npm update
+	cd ui && npm audit fix
+	cd ui && npm audit fix --force
 
 docker-push:
 	docker push $(DOCKER_REGISTRY)/infra:$(TAG)

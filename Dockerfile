@@ -1,8 +1,8 @@
-FROM --platform=$BUILDPLATFORM golang:1.23 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24 AS builder
 RUN apt-get update && \
-    apt-get install -y gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu && \
-    ln -s /usr/bin/aarch64-linux-gnu-gcc /usr/bin/arm64-linux-gnu-gcc  && \
-    ln -s /usr/bin/x86_64-linux-gnu-gcc /usr/bin/amd64-linux-gnu-gcc
+    apt-get install -y gcc-12-aarch64-linux-gnu gcc-x86-64-linux-gnu && \
+    ln -s /usr/bin/aarch64-linux-gnu-gcc-12 /usr/bin/arm64-linux-gnu-gcc  && \
+    ln -s /usr/bin/x86_64-linux-gnu-gcc-12 /usr/bin/amd64-linux-gnu-gcc
 
 # 1. Precompile the entire go standard library into the first Docker cache layer: useful for other projects too!
 RUN CGO_ENABLED=0 GOOS=linux go install -v -installsuffix cgo -a std
