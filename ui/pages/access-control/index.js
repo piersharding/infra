@@ -483,7 +483,7 @@ export default function AccessControl() {
     Number(router.query.p) < 1
       ? 1
       : router.query.p
-  const limit = 10
+  const limit = 50
 
   const { user, isAdmin } = useUser()
 

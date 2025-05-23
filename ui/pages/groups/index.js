@@ -95,7 +95,7 @@ function AddGroupsDialog({ setOpen }) {
 export default function Groups() {
   const router = useRouter()
   const page = router.query.p === undefined ? 1 : router.query.p
-  const limit = 10
+  const limit = 50
   const { data: { items: groups, totalPages, totalCount } = {} } = useSWR(
     `/api/groups?page=${page}&limit=${limit}`
   )

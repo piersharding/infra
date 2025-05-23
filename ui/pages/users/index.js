@@ -191,7 +191,7 @@ function ProviderImg({ content, src }) {
 export default function Users() {
   const router = useRouter()
   const page = Math.max(parseInt(router.query.p) || 1, 1)
-  const limit = 20
+  const limit = 50
   const { data: { items: users, totalPages, totalCount } = {}, mutate } =
     useSWR(`/api/users?page=${page}&limit=${limit}`)
   const [open, setOpen] = useState(false)

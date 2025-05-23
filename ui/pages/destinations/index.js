@@ -15,7 +15,7 @@ import DeleteModal from '../../components/delete-modal'
 export default function Destinations() {
   const router = useRouter()
   const page = router.query.p === undefined ? 1 : router.query.p
-  const limit = 20
+  const limit = 50
 
   const { isAdmin, isAdminLoading } = useUser()
 
