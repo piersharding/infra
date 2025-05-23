@@ -1369,7 +1369,7 @@ func dumpSchema(t *testing.T, conn string, args ...string) string {
 	if _, err := exec.LookPath("pg_dump"); err != nil {
 		msg := "pg_dump is required to run this test. Install pg_dump or set $PATH to include it."
 		if isEnvironmentCI {
-			t.Fatalf(msg)
+			t.Fatalf("%s", msg)
 		}
 		t.Skip(msg)
 	}

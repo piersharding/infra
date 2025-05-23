@@ -151,7 +151,7 @@ func SendSMTP(msg Message, bypassListManagement bool) error {
 		if err := writeln(w, "--c3VwYWhpbmZyYQ\r\nContent-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n"); err != nil {
 			return err
 		}
-		if err := writeln(w, base64encode(string(msg.PlainBody))); err != nil {
+		if err := writeln(w, "%s", base64encode(string(msg.PlainBody))); err != nil {
 			return err
 		}
 	}
@@ -161,7 +161,7 @@ func SendSMTP(msg Message, bypassListManagement bool) error {
 		if err := writeln(w, "--c3VwYWhpbmZyYQ\r\nContent-Type: text/html\r\nContent-Transfer-Encoding: base64\r\n"); err != nil {
 			return err
 		}
-		if err := writeln(w, base64encode(string(msg.HTMLBody))); err != nil {
+		if err := writeln(w, "%s", base64encode(string(msg.HTMLBody))); err != nil {
 			return err
 		}
 	}

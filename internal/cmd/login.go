@@ -482,7 +482,7 @@ func deviceFlowLogin(ctx context.Context, client *api.Client, cli *CLI) (*api.Lo
 				return pollResp.LoginResponse, nil
 			case api.DeviceFlowStatusPending:
 			default:
-				logging.Warnf("unexpected response status: " + pollResp.Status)
+				logging.Warnf("%s", "unexpected response status: "+pollResp.Status)
 			}
 		}
 	}
