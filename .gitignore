@@ -2,6 +2,7 @@
 .env
 .test
 .vscode
+PrivateRules.mak
 
 # infra binary
 dist/
