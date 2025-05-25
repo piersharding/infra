@@ -60,8 +60,8 @@ release:
   mode: append
 
   gitlab:
-    owner: ska-telescope
-    name: external/infra
+    owner: ska-telescope/external
+    name: infra
 
   footer: >-
 
