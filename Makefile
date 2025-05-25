@@ -1,7 +1,14 @@
 
 DOCKER_CONTEXT ?= .
-DOCKER_REGISTRY ?= registry.gitlab.com/ska-telescope/external/infra
+REPOSITORY_USER ?= ska-telescope
+REPOSITORY_NAME ?= external/infra
+DOCKER_REGISTRY ?= registry.gitlab.com/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
 TAG ?= 0.21.4
+GITLAB_TOKEN ?=
+
+# define overides for above variables in here
+-include PrivateRules.mak
+
 
 test: check-psql-env
 	go test -short ./...
@@ -24,9 +31,19 @@ vet: ## Run go vet against code.
 	go mod download
 	go vet ./...
 
+# add the git tag based on $TAG, and push.  This is the tag that goreleaser will use
+git-tag-and-push:
+	git tag v$(TAG)
+	git push --tags
+
 # must install goreleaser first - https://goreleaser.com/install/
-release: ## build the release artefacts
-	RELEASE_NAME=$(TAG) goreleaser release --snapshot --clean
+release-artefacts-local: ## build the release artefacts locally to test what will happen
+	rm -rf dist
+	RELEASE_NAME=v$(TAG) goreleaser release --snapshot --clean
+
+release-artefacts: ## build the release artefacts and publish ti gitlab
+	rm -rf dist
+	RELEASE_NAME=v$(TAG) GITLAB_TOKEN=$(GITLAB_TOKEN) goreleaser release --verbose --clean --skip announce,validate
 
 docker/%:
 	docker buildx build $(DOCKER_CONTEXT) --load -t infrahq/$*:dev
