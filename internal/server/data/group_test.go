@@ -167,13 +167,49 @@ func TestListGroups(t *testing.T) {
 			assert.DeepEqual(t, actual, expected, cmpGroupShallow)
 		})
 
-		t.Run("by name", func(t *testing.T) {
+		t.Run("by name exact match", func(t *testing.T) {
 			actual, err := ListGroups(db, ListGroupsOptions{ByName: engineers.Name})
 			assert.NilError(t, err)
 			expected := []models.Group{
 				{Name: "Engineering", TotalUsers: 1},
 			}
 			assert.DeepEqual(t, actual, expected, cmpGroupShallow)
+		})
+
+		t.Run("by name partial match", func(t *testing.T) {
+			actual, err := ListGroups(db, ListGroupsOptions{ByName: "Eng"})
+			assert.NilError(t, err)
+			expected := []models.Group{
+				{Name: "Engineering", TotalUsers: 1},
+			}
+			assert.DeepEqual(t, actual, expected, cmpGroupShallow)
+		})
+
+		t.Run("by name case insensitive", func(t *testing.T) {
+			actual, err := ListGroups(db, ListGroupsOptions{ByName: "eng"})
+			assert.NilError(t, err)
+			expected := []models.Group{
+				{Name: "Engineering", TotalUsers: 1},
+			}
+			assert.DeepEqual(t, actual, expected, cmpGroupShallow)
+		})
+
+		t.Run("by name multiple matches", func(t *testing.T) {
+			actual, err := ListGroups(db, ListGroupsOptions{ByName: "E"})
+			assert.NilError(t, err)
+			expected := []models.Group{
+				{Name: "Empty", TotalUsers: 0},
+				{Name: "Engineering", TotalUsers: 1},
+				{Name: "Everyone", TotalUsers: 2},
+			}
+			assert.DeepEqual(t, actual, expected, cmpGroupShallow)
+		})
+
+		t.Run("by name no matches", func(t *testing.T) {
+			actual, err := ListGroups(db, ListGroupsOptions{ByName: "xyz"})
+			assert.NilError(t, err)
+			var expected []models.Group
+			assert.DeepEqual(t, actual, expected)
 		})
 
 		t.Run("by group member", func(t *testing.T) {

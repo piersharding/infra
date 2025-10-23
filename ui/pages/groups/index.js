@@ -2,12 +2,14 @@ import Head from 'next/head'
 import useSWR from 'swr'
 import { useRouter } from 'next/router'
 import { Transition, Dialog } from '@headlessui/react'
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 
 import { PlusIcon } from '@heroicons/react/24/outline'
 
 import Table from '../../components/table'
 import Dashboard from '../../components/layouts/dashboard'
+import SearchInput from '../../components/search-input'
+import { useSearch } from '../../lib/useSearch'
 
 function AddGroupsDialog({ setOpen }) {
   const router = useRouter()
@@ -20,6 +22,7 @@ function AddGroupsDialog({ setOpen }) {
     e.preventDefault()
 
     setError('')
+    setSubmitting(true)
 
     try {
       const res = await fetch('/api/groups', {
@@ -94,12 +97,34 @@ function AddGroupsDialog({ setOpen }) {
 
 export default function Groups() {
   const router = useRouter()
-  const page = router.query.p === undefined ? 1 : router.query.p
+  const page = Math.max(parseInt(router.query.p) || 1, 1)
   const limit = 50
-  const { data: { items: groups, totalPages, totalCount } = {} } = useSWR(
-    `/api/groups?page=${page}&limit=${limit}`
-  )
+
+  // Search functionality
+  const {
+    searchQuery,
+    setSearchQuery,
+    executeSearch,
+    buildApiUrl,
+    getEmptyMessage,
+    getResultMessage,
+  } = useSearch()
+
   const [open, setOpen] = useState(false)
+
+  // Build API URL with pagination
+  const apiUrl = useMemo(() => buildApiUrl('/api/groups', {
+    page: page.toString(),
+    limit: limit.toString(),
+  }), [buildApiUrl, page, limit])
+
+  // Fetch groups data
+  const { data: { items: groups, totalPages, totalCount } = {} } =
+    useSWR(apiUrl)
+
+  // Generate appropriate messages
+  const emptyMessage = getEmptyMessage('No groups')
+  const resultText = getResultMessage(totalCount || 0, 'group')
 
   return (
     <div className='mb-10'>
@@ -107,15 +132,30 @@ export default function Groups() {
         <title>Groups - Infra</title>
       </Head>
 
-      <header className='my-6 flex items-center justify-between'>
-        <h1 className='py-1 font-display text-xl font-medium'>Groups</h1>
+      <header className='my-6'>
+        <div className='flex items-center justify-between'>
+          <div className='flex flex-1 items-center space-x-4'>
+            <h1 className='py-1 font-display text-xl font-medium'>Groups</h1>
+            <SearchInput
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onSearch={executeSearch}
+              placeholder='Search groups... (press Enter)'
+              ariaLabel='Search groups by name'
+              ariaDescribedBy='search-results-count'
+            />
+          </div>
+
+          {/* Add dialog button */}
+          <button
+            onClick={() => setOpen(true)}
+            className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
+          >
+            <PlusIcon className='mr-1 h-3 w-3' /> Group
+          </button>
+        </div>
+
         {/* Add dialog */}
-        <button
-          onClick={() => setOpen(true)}
-          className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
-        >
-          <PlusIcon className='mr-1 h-3 w-3' /> Group
-        </button>
         <Transition.Root show={open} as={Fragment}>
           <Dialog as='div' className='relative z-30' onClose={setOpen}>
             <Transition.Child
@@ -149,19 +189,27 @@ export default function Groups() {
           </Dialog>
         </Transition.Root>
       </header>
+
+      {/* Search results summary for screen readers */}
+      <div id='search-results-count' className='sr-only'>
+        {resultText}
+      </div>
+
+      {/* Table */}
       <div className='flex min-h-0 flex-1 flex-col'>
         <Table
           href={row => `/groups/${row.original.id}`}
           count={totalCount}
           pageCount={totalPages}
-          pageIndex={parseInt(page) - 1}
+          pageIndex={page - 1}
           pageSize={limit}
           data={groups}
-          empty='No groups'
+          empty={emptyMessage}
           onPageChange={({ pageIndex }) => {
+            const newQuery = { ...router.query, p: pageIndex + 1 }
             router.push({
               pathname: router.pathname,
-              query: { ...router.query, p: pageIndex + 1 },
+              query: newQuery,
             })
           }}
           columns={[

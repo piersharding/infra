@@ -358,11 +358,39 @@ func TestListIdentities(t *testing.T) {
 			assert.DeepEqual(t, identities, expected, cmpModelsIdentityShallow)
 		})
 
-		t.Run("filter by name", func(t *testing.T) {
+		t.Run("filter by name exact match", func(t *testing.T) {
 			identities, err := ListIdentities(db, ListIdentityOptions{ByName: bond.Name})
 			assert.NilError(t, err)
 			expected := []models.Identity{bond}
 			assert.DeepEqual(t, identities, expected, cmpModelsIdentityShallow)
+		})
+
+		t.Run("filter by name partial match", func(t *testing.T) {
+			identities, err := ListIdentities(db, ListIdentityOptions{ByName: "jb"})
+			assert.NilError(t, err)
+			expected := []models.Identity{bauer, bond, bourne}
+			assert.DeepEqual(t, identities, expected, cmpModelsIdentityShallow)
+		})
+
+		t.Run("filter by name case insensitive", func(t *testing.T) {
+			identities, err := ListIdentities(db, ListIdentityOptions{ByName: "SALT"})
+			assert.NilError(t, err)
+			expected := []models.Identity{salt}
+			assert.DeepEqual(t, identities, expected, cmpModelsIdentityShallow)
+		})
+
+		t.Run("filter by name domain partial", func(t *testing.T) {
+			identities, err := ListIdentities(db, ListIdentityOptions{ByName: "infrahq"})
+			assert.NilError(t, err)
+			expected := []models.Identity{bauer, bond, bourne, salt}
+			assert.DeepEqual(t, identities, expected, cmpModelsIdentityShallow)
+		})
+
+		t.Run("filter by name no matches", func(t *testing.T) {
+			identities, err := ListIdentities(db, ListIdentityOptions{ByName: "xyz"})
+			assert.NilError(t, err)
+			var expected []models.Identity
+			assert.DeepEqual(t, identities, expected)
 		})
 
 		t.Run("filter by not name", func(t *testing.T) {

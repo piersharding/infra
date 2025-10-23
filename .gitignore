@@ -11,3 +11,5 @@ querylinter.so
 sendgrid.env
 test/root.key
 SECURITY_AUDIT_REPORT.md
+package-files/
+mytools/

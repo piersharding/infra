@@ -3,12 +3,14 @@ DOCKER_CONTEXT ?= .
 REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_REGISTRY ?= registry.gitlab.com/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.4
+TAG ?= 0.21.5
 GITLAB_TOKEN ?=
 
 # define overides for above variables in here
 -include PrivateRules.mak
 
+docker-login:
+	docker login registry.gitlab.com -u$(REPOSITORY_USER) -p $(GITLAB_TOKEN)
 
 test: check-psql-env
 	go test -short ./...
@@ -65,6 +67,10 @@ npm-update:
 docker-push:
 	docker push $(DOCKER_REGISTRY)/infra:$(TAG)
 	docker push $(DOCKER_REGISTRY)/ui:$(TAG)
+
+load:
+	minikube image load $(DOCKER_REGISTRY)/infra:$(TAG)
+	minikube image load $(DOCKER_REGISTRY)/ui:$(TAG)
 
 docker/ui: DOCKER_CONTEXT=ui
 

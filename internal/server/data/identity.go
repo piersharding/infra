@@ -461,7 +461,7 @@ func ListIdentities(tx ReadTxn, opts ListIdentityOptions) ([]models.Identity, er
 		queryInClause(query, opts.ByIDs)
 	}
 	if opts.ByName != "" {
-		query.B("AND identities.name = ?", opts.ByName)
+		query.B("AND identities.name ILIKE ?", "%"+opts.ByName+"%")
 	}
 	if opts.ByNotName != "" {
 		query.B("AND identities.name != ?", opts.ByNotName)

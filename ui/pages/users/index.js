@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 
@@ -17,10 +17,12 @@ import {
 import { useUser } from '../../lib/hooks'
 import { useServerConfig } from '../../lib/serverconfig'
 import { sortByName } from '../../lib/grants'
+import { useSearch } from '../../lib/useSearch'
 
 import DeleteModal from '../../components/delete-modal'
 import Table from '../../components/table'
 import Dashboard from '../../components/layouts/dashboard'
+import SearchInput from '../../components/search-input'
 
 function UsersAddDialog({ setOpen, onAdded = () => {} }) {
   const [email, setEmail] = useState('')
@@ -192,8 +194,25 @@ export default function Users() {
   const router = useRouter()
   const page = Math.max(parseInt(router.query.p) || 1, 1)
   const limit = 50
+
+  // Search functionality
+  const {
+    searchQuery,
+    setSearchQuery,
+    executeSearch,
+    buildApiUrl,
+    getEmptyMessage,
+    getResultMessage,
+  } = useSearch()
+
+  // Build API URL with pagination and search
+  const apiUrl = useMemo(() => buildApiUrl('/api/users', {
+    page: page.toString(),
+    limit: limit.toString(),
+  }), [buildApiUrl, page, limit])
+
   const { data: { items: users, totalPages, totalCount } = {}, mutate } =
-    useSWR(`/api/users?page=${page}&limit=${limit}`)
+    useSWR(apiUrl)
   const [open, setOpen] = useState(false)
 
   const { data: { items: providers } = {} } = useSWR(`/api/providers?limit=999`)
@@ -205,6 +224,10 @@ export default function Users() {
     return 0
   })
 
+  // Generate appropriate messages
+  const emptyMessage = getEmptyMessage('No users')
+  const resultText = getResultMessage(totalCount || 0, 'user')
+
   return (
     <div className='mb-10'>
       <Head>
@@ -212,14 +235,27 @@ export default function Users() {
       </Head>
 
       {/* Header */}
-      <header className='my-6 flex items-center justify-between'>
-        <h1 className='py-1 font-display text-xl font-medium'>Users</h1>
-        <button
-          onClick={() => setOpen(true)}
-          className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
-        >
-          <PlusIcon className='mr-1 h-3 w-3' /> User
-        </button>
+      <header className='my-6'>
+        <div className='flex items-center justify-between'>
+          <div className='flex flex-1 items-center space-x-4'>
+            <h1 className='py-1 font-display text-xl font-medium'>Users</h1>
+            <SearchInput
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onSearch={executeSearch}
+              placeholder='Search users... (press Enter)'
+              ariaLabel='Search users by name'
+              ariaDescribedBy='search-results-count'
+            />
+          </div>
+
+          <button
+            onClick={() => setOpen(true)}
+            className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
+          >
+            <PlusIcon className='mr-1 h-3 w-3' /> User
+          </button>
+        </div>
 
         {/* Add dialog */}
         <Transition.Root show={open} as={Fragment}>
@@ -261,6 +297,11 @@ export default function Users() {
         </Transition.Root>
       </header>
 
+      {/* Search results summary for screen readers */}
+      <div id='search-results-count' className='sr-only'>
+        {resultText}
+      </div>
+
       {/* Table */}
       <Table
         onPageChange={({ pageIndex }) => {
@@ -274,6 +315,7 @@ export default function Users() {
         pageIndex={parseInt(page) - 1}
         pageSize={limit}
         data={sortedUsers}
+        empty={emptyMessage}
         columns={[
           {
             cell: info => (

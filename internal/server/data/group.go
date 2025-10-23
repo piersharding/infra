@@ -95,7 +95,7 @@ func ListGroups(tx ReadTxn, opts ListGroupsOptions) ([]models.Group, error) {
 	query.B("AND organization_id = ?", tx.OrganizationID())
 
 	if opts.ByName != "" {
-		query.B("AND name = ?", opts.ByName)
+		query.B("AND name ILIKE ?", "%"+opts.ByName+"%")
 	}
 	if len(opts.ByIDs) > 0 {
 		query.B("AND groups.id IN")
