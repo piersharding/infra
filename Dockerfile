@@ -8,7 +8,7 @@ RUN apt-get update && \
 RUN CGO_ENABLED=0 GOOS=linux go install -v -installsuffix cgo -a std
 
 ARG TARGETARCH
-ARG BUILDVERSION=99.99.99999
+ARG BUILDVERSION=0.21.6
 ARG TELEMETRY_WRITE_KEY
 WORKDIR /go/src/github.com/infrahq/infra
 

@@ -7,8 +7,19 @@ tls:
 
 dbHost: localhost
 dbName: postgres
-dbPort: 5432
-dbPassword: postgres
+dbPort: 15432
+dbUsername: postgres
+dbPassword: password123
 
-enableSignup: true
+# enableSignup: true
 baseDomain: localhost
+
+addr:
+  http: :10000
+  https: :9443   # or whatever you prefer
+  metrics: :9090
+
+users:
+  - infraRole: admin
+    name: dev@local
+    password: "password"

@@ -111,6 +111,7 @@ type connector struct {
 	destination *api.Destination
 	certCache   *CertCache
 	options     Options
+	lastGrants  []api.Grant
 }
 
 type apiClient interface {
@@ -213,7 +214,7 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 
 	group, ctx := errgroup.WithContext(ctx)
 
-	con := connector{
+	con := &connector{
 		k8s:         k8s,
 		client:      client,
 		destination: destination,
@@ -396,7 +397,7 @@ func httpTransportFromOptions(opts ServerOptions) *http.Transport {
 	return transport
 }
 
-func syncDestination(ctx context.Context, con connector) error {
+func syncDestination(ctx context.Context, con *connector) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
@@ -427,6 +428,9 @@ func syncDestination(ctx context.Context, con connector) error {
 	if err != nil {
 		return fmt.Errorf("could not get kubernetes namespaces: %w", err)
 	}
+	logging.L.Debug().
+		Strs("namespaces", namespaces).
+		Msg("connector: fetched namespaces to report to server")
 
 	clusterRoles, err := con.k8s.ClusterRoles()
 	if err != nil {
@@ -449,6 +453,10 @@ func syncDestination(ctx context.Context, con connector) error {
 
 	case !slicesEqual(con.destination.Resources, namespaces):
 		con.destination.Resources = namespaces
+		logging.L.Debug().Msg("connector: namespace list changed, reconciling RBAC")
+		if err := updateRoles(ctx, con.client, con.k8s, con.lastGrants); err != nil {
+			logging.L.Warn().Err(err).Msg("connector: failed to reconcile RBAC after namespace update")
+		}
 		fallthrough
 
 	case !slicesEqual(con.destination.Roles, clusterRoles):
@@ -489,7 +497,7 @@ type waiter interface {
 
 func syncGrantsToDestination(
 	ctx context.Context,
-	con connector,
+	con *connector,
 	waiter waiter,
 	toDestination func(context.Context, []api.Grant) error,
 ) error {
@@ -499,7 +507,7 @@ func syncGrantsToDestination(
 		ctx, cancel := context.WithTimeout(ctx, 7*time.Minute)
 		defer cancel()
 
-		grants, err := con.client.ListGrants(ctx, api.ListGrantsRequest{
+		grantsResp, err := con.client.ListGrants(ctx, api.ListGrantsRequest{
 			Destination:     con.destination.Name, // TODO: use options.Name when that is required
 			BlockingRequest: api.BlockingRequest{LastUpdateIndex: latestIndex},
 		})
@@ -515,17 +523,19 @@ func syncGrantsToDestination(
 			return fmt.Errorf("list grants: %w", err)
 		}
 		logging.L.Info().
-			Int64("updateIndex", grants.LastUpdateIndex.Index).
-			Int("grants", len(grants.Items)).
+			Int64("updateIndex", grantsResp.LastUpdateIndex.Index).
+			Int("grants", len(grantsResp.Items)).
 			Msg("received grants from server")
 
-		err = toDestination(ctx, grants.Items)
+		con.lastGrants = grantsResp.Items
+
+		err = toDestination(ctx, grantsResp.Items)
 		if err != nil {
 			return fmt.Errorf("sync to destination: %w", err)
 		}
 
 		// Only update latestIndex once the entire operation was a success
-		latestIndex = grants.LastUpdateIndex.Index
+		latestIndex = grantsResp.LastUpdateIndex.Index
 		return nil
 	}
 
@@ -547,6 +557,10 @@ func syncGrantsToDestination(
 
 // UpdateRoles converts infra grants to role-bindings in the current cluster
 func updateRoles(ctx context.Context, c apiClient, k kubeClient, grants []api.Grant) error {
+	if len(grants) == 0 {
+		logging.L.Debug().Msg("updateRoles: no grants available to reconcile, skipping RBAC update")
+		return nil
+	}
 	logging.Debugf("syncing local grants from infra configuration")
 
 	crSubjects := make(map[string][]rbacv1.Subject)                           // cluster-role: subject

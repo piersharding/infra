@@ -3,7 +3,7 @@ DOCKER_CONTEXT ?= .
 REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_REGISTRY ?= registry.gitlab.com/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.5
+TAG ?= 0.21.6
 GITLAB_TOKEN ?=
 
 # define overides for above variables in here
@@ -51,7 +51,7 @@ docker/%:
 	docker buildx build $(DOCKER_CONTEXT) --load -t infrahq/$*:dev
 
 docker-build: fmt vet
-	docker buildx build $(DOCKER_CONTEXT) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
+	docker buildx build $(DOCKER_CONTEXT) --build-arg VERSION=v0.21.6 --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
 	docker buildx build $(DOCKER_CONTEXT)/ui --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
 
 # perform update of go dependencies
