@@ -269,7 +269,7 @@ func TestSyncGrantsToDestination_KubeBindings(t *testing.T) {
 		if tc.fakeKube == nil {
 			tc.fakeKube = &fakeKubeClient{}
 		}
-		con := connector{
+		con := &connector{
 			k8s:         tc.fakeKube,
 			client:      tc.fakeAPI,
 			destination: &api.Destination{Name: "the-dest"},

@@ -46,7 +46,7 @@ func runSSHConnector(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to register destination: %w", err)
 	}
 
-	con := connector{
+	con := &connector{
 		client:      client,
 		destination: destination,
 		options:     opts,
