@@ -29,7 +29,7 @@ config:
       7pe/4rPE5iJ8sBLiUX8BbErgVQ==
       -----END CERTIFICATE-----
   name: test-k8s
-  accessKey: ftn59TSyay.nVC9C46rwDlf0rZQzh3zDb36
+  accessKey: iv0bYbZBxJ.hHO31YzYcshnFBXkqhlZng0A
 
 service:
   type: LoadBalancer
@@ -37,6 +37,6 @@ service:
 
 
 image:
-  repository: infra-connector
-  tag: dev2
+  repository: registry.gitlab.com/ska-telescope/external/infra/infra
+  tag: 0.21.6
   pullPolicy: IfNotPresent
