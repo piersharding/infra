@@ -304,6 +304,7 @@ export default function Users() {
 
       {/* Table */}
       <Table
+        href={row => `/users/${row.original.id}`}
         onPageChange={({ pageIndex }) => {
           router.push({
             pathname: router.pathname,

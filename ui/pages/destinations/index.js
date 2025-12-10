@@ -50,10 +50,7 @@ export default function Destinations() {
       </header>
 
       <Table
-        href={row =>
-          row.original.kind === 'kubernetes' &&
-          `/destinations/${row.original.id}`
-        }
+        href={row => `/destinations/${row.original.id}`}
         count={totalCount}
         pageCount={totalPages}
         pageIndex={parseInt(page) - 1}
@@ -72,7 +69,7 @@ export default function Destinations() {
               <div className='flex flex-row items-center py-1'>
                 <div className='mr-3 flex h-9 w-9 flex-none items-center justify-center rounded-md border border-gray-200'>
                   {info.row.original.kind === 'ssh' ? (
-                    <CommandLineIcon className='h-5 text-black' />
+                    <CommandLineIcon className='h-5 w-5 text-gray-800' />
                   ) : (
                     <img
                       alt='kubernetes icon'

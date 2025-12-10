@@ -16,6 +16,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
 } from '@heroicons/react/24/outline'
+import { CommandLineIcon as SolidCommandLineIcon } from '@heroicons/react/24/solid'
 import { Popover, Transition, Listbox, Disclosure } from '@headlessui/react'
 
 import { useUser } from '../../../lib/hooks'
@@ -159,6 +160,10 @@ function EditRoleMenu({
 }
 
 function GrantCell({ grantsList, grant, destination, onRemove, onUpdate }) {
+  const destinationRoles =
+    destination?.roles && destination.roles.length > 0
+      ? destination.roles
+      : ['connect']
   const checkbox = useRef()
   const [checked, setChecked] = useState(false)
   const [selectedNamespaces, setSelectedNamespaces] = useState([])
@@ -215,15 +220,14 @@ function GrantCell({ grantsList, grant, destination, onRemove, onUpdate }) {
 
   return (
     <div className='py-1'>
-      {/* Destination Resource */}
       {destinationPrivileges?.length > 0 && (
         <div className='flex items-center justify-between space-x-2 py-2'>
           <div className='text-xs font-medium text-black'>
-            Cluster-wide access
+            Destination access
           </div>
           <div className='item-center flex justify-between'>
             <EditRoleMenu
-              roles={destination?.roles}
+              roles={destinationRoles}
               selectedRoles={sortByRole(destinationPrivileges)}
               onChange={v => {
                 handleUpdate(v, destinationPrivileges, destination.name)
@@ -237,7 +241,7 @@ function GrantCell({ grantsList, grant, destination, onRemove, onUpdate }) {
         </div>
       )}
       {/* Namespaces List */}
-      {namespacesPrivilegeMap.size > 0 && (
+      {destination?.resources?.length > 0 && namespacesPrivilegeMap.size > 0 && (
         <div className='py-2'>
           <Disclosure defaultOpen={destinationPrivileges === undefined}>
             {({ open }) => (
@@ -339,7 +343,7 @@ function GrantCell({ grantsList, grant, destination, onRemove, onUpdate }) {
                                 </div>
                               )}
                               <EditRoleMenu
-                                roles={destination?.roles}
+                                roles={destinationRoles}
                                 selectedRoles={sortByRole(privileges)}
                                 onChange={v => {
                                   handleUpdate(v, privileges, resource)
@@ -674,6 +678,10 @@ export default function DestinationDetail() {
 
   const [currentUserRoles, setCurrentUserRoles] = useState([])
   const [selectedResources, setSelectedResources] = useState([])
+  const destinationRoles =
+    destination?.roles && destination.roles.length > 0
+      ? destination.roles
+      : ['connect']
 
   useEffect(() => {
     mutateCurrentUserGrants(
@@ -690,7 +698,10 @@ export default function DestinationDetail() {
 
   const metadata = [
     { label: 'ID', value: destination?.id, font: 'font-mono' },
-    { label: '# of namespaces', value: destination?.resources.length },
+    {
+      label: '# of namespaces',
+      value: destination?.resources ? destination.resources.length : 0,
+    },
     {
       label: METADATA_STATUS_LABEL,
       value: destination?.connected
@@ -726,12 +737,16 @@ export default function DestinationDetail() {
             </Link>{' '}
             <span className='mx-3 font-light text-gray-400'> / </span>{' '}
             <div className='flex truncate'>
-              <div className='mr-2 flex h-8 w-8 flex-none items-center justify-center rounded-md border border-gray-200'>
-                <img
-                  alt='kubernetes icon'
-                  className='h-[18px]'
-                  src={`/kubernetes.svg`}
-                />
+              <div className='mr-2 flex h-8 w-8 flex-none items-center justify-center rounded-md border border-gray-200 bg-white'>
+                {destination?.kind === 'ssh' ? (
+                  <SolidCommandLineIcon className='h-5 w-5 text-gray-800' />
+                ) : (
+                  <img
+                    alt='kubernetes icon'
+                    className='h-[18px]'
+                    src={`/kubernetes.svg`}
+                  />
+                )}
               </div>
               <div className='flex items-center space-x-2'>
                 <span className='truncate'>{destination?.name}</span>
@@ -852,7 +867,7 @@ export default function DestinationDetail() {
                     </span>
                   </h3>{' '}
                   <GrantForm
-                    roles={destination?.roles}
+                    roles={destinationRoles}
                     selectedResources={selectedResources}
                     grants={grants}
                     onSubmit={async ({

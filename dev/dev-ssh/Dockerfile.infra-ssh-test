@@ -1,0 +1,21 @@
+FROM ubuntu:22.04
+
+RUN apt update -y
+RUN apt install openssh-server curl gnupg apt-transport-https gcc-multilib -y
+
+
+EXPOSE 22
+
+COPY --chmod=400 dev/dev-ssh/authorized_keys /root/.ssh/authorized_keys
+
+COPY internal/server/testdata/pki/ca.crt /usr/local/share/ca-certificates/infra-ca.crt
+RUN update-ca-certificates
+
+# Copy infra binary
+COPY bin/infra /usr/bin/infra
+
+# Create infra user
+RUN groupadd infra-users \
+    && useradd -r -s /bin/false -g infra-users infra
+
+CMD ["bash", "-c", "service ssh start && tail -f /dev/null"]

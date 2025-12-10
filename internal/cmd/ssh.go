@@ -123,7 +123,9 @@ func destinationForName(dests []api.Destination, hostname, port string) *api.Des
 			return &dest
 		}
 
-		// TODO: match destination name as well?
+		if hostname == dest.Name && port == destPort {
+			return &dest
+		}
 	}
 	return nil
 }
@@ -433,6 +435,14 @@ const infraDestinationSSHConfig = `
 
 # This file is managed by Infra. Do not edit!
 
+Host {{ .DestinationName }}
+    IdentityFile {{ .KeyFilename }}
+    IdentitiesOnly yes
+    UserKnownHostsFile {{ .InfraSSHDir }}/known_hosts
+    User {{ .Username }}
+    Port {{ .Port }}
+    Hostname {{ .Hostname }}
+
 Host {{ .Hostname }}
     IdentityFile {{ .KeyFilename }}
     IdentitiesOnly yes
@@ -489,11 +499,12 @@ func writeDestinationSSHConfig(
 
 	host, port := splitHostPortSSH(destination.Connection.URL)
 	data := map[string]any{
-		"Username":    user.SSHLoginName,
-		"Hostname":    host,
-		"Port":        port,
-		"KeyFilename": keyFilename,
-		"InfraSSHDir": infraSSHDir,
+		"Username":        user.SSHLoginName,
+		"Hostname":        host,
+		"Port":            port,
+		"KeyFilename":     keyFilename,
+		"InfraSSHDir":     infraSSHDir,
+		"DestinationName": destination.Name,
 	}
 	if err := infraDestinationSSHConfigTemplate.Execute(fh, data); err != nil {
 		return err
