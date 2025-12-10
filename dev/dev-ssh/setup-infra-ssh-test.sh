@@ -5,8 +5,8 @@ set -euo pipefail
 # CONFIGURATION
 # ==========================================================
 
-INFRA_SERVER_URL="${INFRA_SERVER_URL:-https://172.17.0.1:9443}"
-INFRA_ACCESS_KEY="${INFRA_ACCESS_KEY:-1QT6AMNsvJ.FOCH4Dpu9yEjApNvlRJdC0qR}"
+INFRA_SERVER_URL="${INFRA_SERVER_URL:-172.17.0.1:9443}"
+INFRA_ACCESS_KEY="${INFRA_ACCESS_KEY:-N82GAsqHb8.lwh3PlKOogtBkaMgc8Q85OFz}"
 
 IMAGE="infra-ssh-test"
 CONTAINER="infra-ssh-test-1"
