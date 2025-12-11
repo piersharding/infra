@@ -1,4 +1,9 @@
 FROM --platform=$BUILDPLATFORM golang:1.25 AS builder
+
+ARG TARGETARCH
+ARG BUILDVERSION=0.9.99
+ARG TELEMETRY_WRITE_KEY
+
 RUN apt-get update && \
     apt-get install -y gcc-12-aarch64-linux-gnu gcc-x86-64-linux-gnu && \
     ln -s /usr/bin/aarch64-linux-gnu-gcc-12 /usr/bin/arm64-linux-gnu-gcc  && \
@@ -7,9 +12,6 @@ RUN apt-get update && \
 # 1. Precompile the entire go standard library into the first Docker cache layer: useful for other projects too!
 RUN CGO_ENABLED=0 GOOS=linux go install -v -installsuffix cgo -a std
 
-ARG TARGETARCH
-ARG BUILDVERSION=0.21.6
-ARG TELEMETRY_WRITE_KEY
 WORKDIR /go/src/github.com/infrahq/infra
 
 # get deps first so it's cached

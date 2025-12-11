@@ -1,4 +1,5 @@
 import useSWR, { useSWRConfig } from 'swr'
+import { useState, useEffect } from 'react'
 
 const INFRA_ADMIN_ROLE = 'admin'
 
@@ -39,4 +40,15 @@ export function useUser() {
       await mutate(undefined)
     },
   }
+}
+
+export function useDebouncedSearch(searchTerm, delay = 300) {
+  const [debouncedTerm, setDebouncedTerm] = useState('')
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedTerm(searchTerm), delay)
+    return () => clearTimeout(timer)
+  }, [searchTerm, delay])
+
+  return debouncedTerm
 }

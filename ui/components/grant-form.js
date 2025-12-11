@@ -5,6 +5,7 @@ import { Combobox } from '@headlessui/react'
 import { PlusIcon, CheckIcon } from '@heroicons/react/24/outline'
 
 import { sortByRole } from '../lib/grants'
+import { useDebouncedSearch } from '../lib/hooks'
 
 import RoleSelect from './role-select'
 
@@ -15,11 +16,6 @@ export default function GrantForm({
   multiselect = true,
   onSubmit = () => {},
 }) {
-  const { data: { items: users } = { items: [] }, mutate: mutateUsers } =
-    useSWR('/api/users?limit=1000')
-  const { data: { items: groups } = { items: [] }, mutate: mutateGroups } =
-    useSWR('/api/groups?limit=1000')
-
   const [role, setRole] = useState('')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(null)
@@ -27,11 +23,31 @@ export default function GrantForm({
 
   const button = useRef()
 
+  const debouncedQuery = useDebouncedSearch(query, 300)
+
+  const { data: { items: users } = { items: [] }, isLoading: usersLoading } =
+    useSWR(
+      debouncedQuery.length >= 2
+        ? `/api/users?name=${encodeURIComponent(debouncedQuery)}&limit=50`
+        : null
+    )
+  const { data: { items: groups } = { items: [] }, isLoading: groupsLoading } =
+    useSWR(
+      debouncedQuery.length >= 2
+        ? `/api/groups?name=${encodeURIComponent(debouncedQuery)}&limit=50`
+        : null
+    )
+
   useEffect(() => {
     setRole(sortByRole(roles)?.[0])
   }, [roles])
 
   useEffect(() => {
+    if (debouncedQuery.length < 2) {
+      setOptions([])
+      return
+    }
+
     if (users && groups) {
       const optionsList = [
         ...(groups?.map(g => ({ ...g, group: true })) || []),
@@ -44,13 +60,9 @@ export default function GrantForm({
               !grants?.find(g => g.user === item.id || g.group === item.id)
           )
 
-      setOptions(
-        filteredOptions.filter(s =>
-          s?.name?.toLowerCase()?.includes(query.toLowerCase())
-        )
-      )
+      setOptions(filteredOptions)
     }
-  }, [users, groups, grants, query])
+  }, [users, groups, grants, debouncedQuery, multiselect])
 
   return (
     <form
@@ -74,14 +86,10 @@ export default function GrantForm({
           className='relative flex-1'
           value={selected?.name || ''}
           onChange={setSelected}
-          onFocus={() => {
-            mutateUsers()
-            mutateGroups()
-          }}
         >
           <Combobox.Input
             className={`block w-full rounded-md border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500`}
-            placeholder='Enter group or user'
+            placeholder='Enter group or user (min 2 chars)'
             onChange={e => {
               setQuery(e.target.value)
               if (e.target.value.length === 0) {
@@ -89,13 +97,38 @@ export default function GrantForm({
               }
             }}
             onFocus={() => {
-              if (!selected) {
+              if (!selected && query.length >= 2) {
                 button.current?.click()
               }
             }}
             type='search'
           />
-          {options?.length > 0 && (
+          {query.length > 0 && query.length < 2 && (
+            <div className='absolute z-10 mt-2 w-56 rounded-md bg-white p-3 shadow-lg ring-1 ring-black ring-opacity-5'>
+              <div className='text-xs text-gray-500'>
+                Type at least 2 characters to search
+              </div>
+            </div>
+          )}
+          {(groupsLoading || usersLoading) && query.length >= 2 && (
+            <div className='absolute z-10 mt-2 w-56 rounded-md bg-white p-3 shadow-lg ring-1 ring-black ring-opacity-5'>
+              <div className='flex items-center text-xs text-gray-500'>
+                <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500 mr-2'></div>
+                Searching...
+              </div>
+            </div>
+          )}
+          {!groupsLoading &&
+            !usersLoading &&
+            options?.length === 0 &&
+            query.length >= 2 && (
+              <div className='absolute z-10 mt-2 w-56 rounded-md bg-white p-3 shadow-lg ring-1 ring-black ring-opacity-5'>
+                <div className='text-xs text-gray-500'>
+                  No users or groups found
+                </div>
+              </div>
+            )}
+          {!groupsLoading && !usersLoading && options?.length > 0 && (
             <Combobox.Options className='absolute z-10 mt-2 max-h-60 w-56 origin-top-right divide-y divide-gray-100 overflow-auto rounded-md bg-white text-xs shadow-lg shadow-gray-300/20 ring-1 ring-black ring-opacity-5 focus:outline-none'>
               {options?.map(f => (
                 <Combobox.Option

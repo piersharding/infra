@@ -22,16 +22,18 @@ test-all: check-psql-env
 test/update:
 	go test ./internal/cmd -test.update-golden
 
-
 fmt: ## Run go fmt against code.
 	go fmt ./...
 
 vet: ## Run go vet against code.
 	pwd
-	env | grep GO
+	env | grep GO || true
 	ls -latr *
 	go mod download
 	go vet ./...
+
+version: ## current image version
+	@echo "$(TAG)"
 
 # add the git tag based on $TAG, and push.  This is the tag that goreleaser will use
 git-tag-and-push:
@@ -51,7 +53,7 @@ docker/%:
 	docker buildx build $(DOCKER_CONTEXT) --load -t infrahq/$*:dev
 
 docker-build: fmt vet
-	docker buildx build $(DOCKER_CONTEXT) --build-arg VERSION=v0.21.6 --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
+	docker buildx build $(DOCKER_CONTEXT) --build-arg BUILDVERSION=v$(TAG) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
 	docker buildx build $(DOCKER_CONTEXT)/ui --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
 
 # perform update of go dependencies
