@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { Transition, Dialog } from '@headlessui/react'
+import { Dialog } from '@headlessui/react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import useSWR, { useSWRConfig } from 'swr'
 import dayjs from 'dayjs'
 
+import Transition from '../../../components/ui/transition'
 import Dashboard from '../../../components/layouts/dashboard'
 import RemoveButton from '../../../components/remove-button'
 import Notification from '../../../components/notification'

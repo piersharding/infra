@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { Dialog, Transition } from '@headlessui/react'
+import { Dialog } from '@headlessui/react'
+import Transition from '../ui/transition'
 import {
   CpuChipIcon,
   UserGroupIcon,

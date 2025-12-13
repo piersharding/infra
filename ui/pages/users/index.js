@@ -6,7 +6,8 @@ import useSWR from 'swr'
 import dayjs from 'dayjs'
 import copy from 'copy-to-clipboard'
 import Tippy from '@tippyjs/react'
-import { Transition, Dialog } from '@headlessui/react'
+import { Dialog } from '@headlessui/react'
+import Transition from '../../components/ui/transition'
 import {
   CheckIcon,
   DocumentDuplicateIcon,
@@ -206,10 +207,14 @@ export default function Users() {
   } = useSearch()
 
   // Build API URL with pagination and search
-  const apiUrl = useMemo(() => buildApiUrl('/api/users', {
-    page: page.toString(),
-    limit: limit.toString(),
-  }), [buildApiUrl, page, limit])
+  const apiUrl = useMemo(
+    () =>
+      buildApiUrl('/api/users', {
+        page: page.toString(),
+        limit: limit.toString(),
+      }),
+    [buildApiUrl, page, limit]
+  )
 
   const { data: { items: users, totalPages, totalCount } = {}, mutate } =
     useSWR(apiUrl)

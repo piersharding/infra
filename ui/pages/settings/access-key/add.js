@@ -12,12 +12,13 @@ import {
   CheckIcon,
   DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline'
-import { Transition, Listbox, Dialog, Popover } from '@headlessui/react'
+import { Listbox, Dialog, Popover } from '@headlessui/react'
 import copy from 'copy-to-clipboard'
 import moment from 'moment'
 
 import { useUser } from '../../../lib/hooks'
 
+import Transition from '../../../components/ui/transition'
 import Dashboard from '../../../components/layouts/dashboard'
 import Calendar from '../../../components/calendar'
 

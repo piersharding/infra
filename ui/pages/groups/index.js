@@ -1,7 +1,7 @@
 import Head from 'next/head'
 import useSWR from 'swr'
 import { useRouter } from 'next/router'
-import { Transition, Dialog } from '@headlessui/react'
+import { Dialog } from '@headlessui/react'
 import { Fragment, useState, useMemo } from 'react'
 
 import { PlusIcon } from '@heroicons/react/24/outline'
@@ -9,6 +9,7 @@ import { PlusIcon } from '@heroicons/react/24/outline'
 import Table from '../../components/table'
 import Dashboard from '../../components/layouts/dashboard'
 import SearchInput from '../../components/search-input'
+import Transition from '../../components/ui/transition'
 import { useSearch } from '../../lib/useSearch'
 
 function AddGroupsDialog({ setOpen }) {
@@ -113,10 +114,14 @@ export default function Groups() {
   const [open, setOpen] = useState(false)
 
   // Build API URL with pagination
-  const apiUrl = useMemo(() => buildApiUrl('/api/groups', {
-    page: page.toString(),
-    limit: limit.toString(),
-  }), [buildApiUrl, page, limit])
+  const apiUrl = useMemo(
+    () =>
+      buildApiUrl('/api/groups', {
+        page: page.toString(),
+        limit: limit.toString(),
+      }),
+    [buildApiUrl, page, limit]
+  )
 
   // Fetch groups data
   const { data: { items: groups, totalPages, totalCount } = {} } =
