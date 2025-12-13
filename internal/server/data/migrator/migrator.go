@@ -194,7 +194,8 @@ func (g *Migrator) runMigration(migration *Migration) error {
 		return nil
 	}
 
-	logging.Infof("Running migration %s", migration.ID)
+	secureLogger := logging.SecureLogger(logging.L)
+	secureLogger.SecureInfo(fmt.Sprintf("Running migration %s", migration.ID))
 	if err := migration.Migrate(g.tx); err != nil {
 		return fmt.Errorf("failed to apply migration %v: %w", migration.ID, err)
 	}

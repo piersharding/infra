@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"time"
 
 	"gopkg.in/segmentio/analytics-go.v3"
@@ -65,27 +66,32 @@ func (t *Telemetry) Close() {
 func (t *Telemetry) EnqueueHeartbeat() {
 	users, err := data.CountAllIdentities(t.db)
 	if err != nil {
-		logging.Debugf("%s", err.Error())
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureDebug(fmt.Sprintf("%s", err.Error()))
 	}
 
 	groups, err := data.CountAllGroups(t.db)
 	if err != nil {
-		logging.Debugf("%s", err.Error())
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureDebug(fmt.Sprintf("%s", err.Error()))
 	}
 
 	grants, err := data.CountAllGrants(t.db)
 	if err != nil {
-		logging.Debugf("%s", err.Error())
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureDebug(fmt.Sprintf("%s", err.Error()))
 	}
 
 	providers, err := data.CountAllProviders(t.db)
 	if err != nil {
-		logging.Debugf("%s", err.Error())
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureDebug(fmt.Sprintf("%s", err.Error()))
 	}
 
 	destinations, err := data.CountAllDestinations(t.db)
 	if err != nil {
-		logging.Debugf("%s", err.Error())
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureDebug(fmt.Sprintf("%s", err.Error()))
 	}
 
 	t.Event("heartbeat", "", "", map[string]interface{}{
@@ -131,7 +137,8 @@ func (t *Telemetry) Event(event string, userId string, orgId string, properties 
 	}
 
 	if err := t.Enqueue(track); err != nil {
-		logging.Debugf("%s", err.Error())
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureDebug(fmt.Sprintf("%s", err.Error()))
 	}
 }
 
@@ -139,13 +146,14 @@ func (t *Telemetry) User(id string, name string) {
 	if t == nil {
 		return
 	}
+	secureLogger := logging.SecureLogger(logging.L)
 	err := t.Enqueue(analytics.Identify{
 		UserId:    id,
 		Traits:    analytics.NewTraits().SetEmail(name),
 		Timestamp: time.Now().UTC(),
 	})
 	if err != nil {
-		logging.Debugf("%s", err.Error())
+		secureLogger.SecureDebug(fmt.Sprintf("%s", err.Error()))
 	}
 }
 
@@ -153,6 +161,7 @@ func (t *Telemetry) Org(id, userID, name, domain string) {
 	if t == nil {
 		return
 	}
+	secureLogger := logging.SecureLogger(logging.L)
 	err := t.Enqueue(analytics.Group{
 		GroupId: id,
 		UserId:  userID,
@@ -165,7 +174,7 @@ func (t *Telemetry) Org(id, userID, name, domain string) {
 		Timestamp: time.Now().UTC(),
 	})
 	if err != nil {
-		logging.Debugf("%s", err.Error())
+		secureLogger.SecureDebug(fmt.Sprintf("%s", err.Error()))
 	}
 }
 
@@ -173,6 +182,7 @@ func (t *Telemetry) OrgMembership(orgID, userID string) {
 	if t == nil {
 		return
 	}
+	secureLogger := logging.SecureLogger(logging.L)
 	err := t.Enqueue(analytics.Group{
 		GroupId:   orgID,
 		UserId:    userID,
@@ -182,6 +192,6 @@ func (t *Telemetry) OrgMembership(orgID, userID string) {
 		},
 	})
 	if err != nil {
-		logging.Debugf("%s", err.Error())
+		secureLogger.SecureDebug(fmt.Sprintf("%s", err.Error()))
 	}
 }

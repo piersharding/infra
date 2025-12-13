@@ -32,6 +32,15 @@ vet: ## Run go vet against code.
 	go mod download
 	go vet ./...
 
+GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(TAG)" \
+					-X github.com/infrahq/infra/internal.TelemetryWriteKey="none" \
+					-linkmode external -extldflags "-static"
+build: ## build infra
+	mkdir -p bin && rm -rf bin/infra
+	CGO_ENABLED=1 GOOS=linux go build -o bin/infra -ldflags '$(GO_BUILD_LDFLAGS)' .
+	ls -latr bin/
+	./bin/infra --help
+
 version: ## current image version
 	@echo "$(TAG)"
 

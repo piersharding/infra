@@ -3,10 +3,94 @@ package validate
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/infrahq/infra/internal/openapi3"
 )
+
+// SecureStringRule provides enhanced input validation for string fields
+type SecureStringRule struct {
+	name      string
+	value     string
+	minLength int
+	maxLength int
+	pattern   *regexp.Regexp
+}
+
+// SecureString creates a validation rule for secure string input
+func SecureString(name string, value string, minLength, maxLength int, pattern *regexp.Regexp) ValidationRule {
+	return SecureStringRule{
+		name:      name,
+		value:     value,
+		minLength: minLength,
+		maxLength: maxLength,
+		pattern:   pattern,
+	}
+}
+
+func (r SecureStringRule) Validate() *Failure {
+	if reflect.ValueOf(r.value).IsZero() {
+		return nil // Let Required rule handle this
+	}
+
+	if len(r.value) < r.minLength {
+		return Fail(r.name, fmt.Sprintf("must be at least %d characters", r.minLength))
+	}
+
+	if len(r.value) > r.maxLength {
+		return Fail(r.name, fmt.Sprintf("must not exceed %d characters", r.maxLength))
+	}
+
+	if r.pattern != nil && !r.pattern.MatchString(r.value) {
+		return Fail(r.name, "contains invalid characters")
+	}
+
+	return nil
+}
+
+func (r SecureStringRule) DescribeSchema(schema *openapi3.Schema) {
+	property := schemaForProperty(schema, r.name)
+	property.MinLength = uint64(r.minLength)
+	property.MaxLength = &[]uint64{uint64(r.maxLength)}[0]
+	if r.pattern != nil {
+		property.Pattern = r.pattern.String()
+	}
+}
+
+// EmailValidationRule provides enhanced email validation
+type EmailValidationRule struct {
+	name  string
+	value string
+}
+
+// SecureEmail creates a validation rule for email addresses
+func SecureEmail(name string, value string) ValidationRule {
+	return EmailValidationRule{
+		name:  name,
+		value: value,
+	}
+}
+
+var emailPattern = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+func (r EmailValidationRule) Validate() *Failure {
+	if reflect.ValueOf(r.value).IsZero() {
+		return nil // Let Required rule handle this
+	}
+
+	if !emailPattern.MatchString(r.value) {
+		return Fail(r.name, "is not a valid email address")
+	}
+
+	return nil
+}
+
+func (r EmailValidationRule) DescribeSchema(schema *openapi3.Schema) {
+	property := schemaForProperty(schema, r.name)
+	property.Format = "email"
+	property.Pattern = emailPattern.String()
+}
 
 // Validate that the values in the Request struct are valid according to the
 // validation rules defined on the struct.
@@ -298,3 +382,87 @@ func (f ValidatorFunc) Validate() *Failure {
 }
 
 func (f ValidatorFunc) DescribeSchema(*openapi3.Schema) {}
+
+// Additional security validation rules
+
+// UsernameValidationRule provides secure username validation
+type UsernameValidationRule struct {
+	name  string
+	value string
+}
+
+// SecureUsername creates a validation rule for usernames
+func SecureUsername(name string, value string) ValidationRule {
+	return UsernameValidationRule{
+		name:  name,
+		value: value,
+	}
+}
+
+var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]{3,32}$`)
+
+func (r UsernameValidationRule) Validate() *Failure {
+	if reflect.ValueOf(r.value).IsZero() {
+		return nil // Let Required rule handle this
+	}
+
+	if !usernamePattern.MatchString(r.value) {
+		return Fail(r.name, "must be 3-32 characters and contain only letters, numbers, dots, underscores, or hyphens")
+	}
+
+	return nil
+}
+
+func (r UsernameValidationRule) DescribeSchema(schema *openapi3.Schema) {
+	property := schemaForProperty(schema, r.name)
+	property.MinLength = 3
+	property.MaxLength = &[]uint64{32}[0]
+	property.Pattern = usernamePattern.String()
+}
+
+// PasswordValidationRule provides secure password validation
+type PasswordValidationRule struct {
+	name  string
+	value string
+}
+
+// SecurePassword creates a validation rule for passwords
+func SecurePassword(name string, value string) ValidationRule {
+	return PasswordValidationRule{
+		name:  name,
+		value: value,
+	}
+}
+
+func (r PasswordValidationRule) Validate() *Failure {
+	if reflect.ValueOf(r.value).IsZero() {
+		return nil // Let Required rule handle this
+	}
+
+	if len(r.value) < 8 {
+		return Fail(r.name, "must be at least 8 characters")
+	}
+
+	if len(r.value) > 128 {
+		return Fail(r.name, "must not exceed 128 characters")
+	}
+
+	// Basic complexity requirements
+	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(r.value)
+	hasLower := regexp.MustCompile(`[a-z]`).MatchString(r.value)
+	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(r.value)
+	hasSpecial := regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`).MatchString(r.value)
+
+	if !(hasUpper && hasLower && hasNumber && hasSpecial) {
+		return Fail(r.name, "must contain at least one uppercase letter, one lowercase letter, one number, and one special character")
+	}
+
+	return nil
+}
+
+func (r PasswordValidationRule) DescribeSchema(schema *openapi3.Schema) {
+	property := schemaForProperty(schema, r.name)
+	property.MinLength = 8
+	property.MaxLength = &[]uint64{128}[0]
+	property.Format = "password"
+}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/infrahq/infra/internal/logging"
+	"github.com/infrahq/infra/uid"
 )
 
 type logSampler struct {
@@ -53,12 +55,15 @@ func loggingMiddleware(enableSampling bool) gin.HandlerFunc {
 			logger = logger.Sample(sampler.Get(c.Request.Method, c.FullPath()))
 		}
 
+		// Sanitize sensitive information from user agent
+		userAgent := sanitizeLogMessage(c.Request.UserAgent())
+
 		event := logger.Info().
 			Str("method", method).
 			Str("path", c.Request.URL.Path).
 			Str("localAddr", c.Request.Host).
 			Str("remoteAddr", c.ClientIP()).
-			Str("userAgent", c.Request.UserAgent())
+			Str("userAgent", userAgent)
 
 		if c.Request.ContentLength > 0 {
 			event = event.Int64("contentLength", c.Request.ContentLength)
@@ -66,15 +71,16 @@ func loggingMiddleware(enableSampling bool) gin.HandlerFunc {
 
 		rCtx := getRequestContext(c)
 		if user := rCtx.Authenticated.User; user != nil {
-			event = event.Str("userID", user.ID.String())
+			// Sanitize user information in logs
+			event = event.Str("userID", sanitizeUserIDForLogging(user.ID))
 		} else if rCtx.Response != nil && rCtx.Response.LoginUserID != 0 {
-			event = event.Str("userID", rCtx.Response.LoginUserID.String())
+			event = event.Str("userID", sanitizeUserIDForLogging(rCtx.Response.LoginUserID))
 		}
 
 		if org := rCtx.Authenticated.Organization; org != nil {
-			event = event.Str("orgID", org.ID.String())
+			event = event.Str("orgID", sanitizeOrgIDForLogging(org.ID))
 		} else if rCtx.Response != nil && rCtx.Response.SignupOrgID != 0 {
-			event = event.Str("orgID", rCtx.Response.SignupOrgID.String())
+			event = event.Str("orgID", sanitizeOrgIDForLogging(rCtx.Response.SignupOrgID))
 		}
 
 		rCtx.Response.ApplyLogFields(event)
@@ -84,4 +90,19 @@ func loggingMiddleware(enableSampling bool) gin.HandlerFunc {
 			Int("size", c.Writer.Size()).
 			Msg("API request completed")
 	}
+}
+
+// Helper functions for sanitizing IDs in logs
+func sanitizeUserIDForLogging(userID uid.ID) string {
+	if userID == 0 {
+		return "unknown"
+	}
+	return fmt.Sprintf("user_%s", userID.String()[:8])
+}
+
+func sanitizeOrgIDForLogging(orgID uid.ID) string {
+	if orgID == 0 {
+		return "unknown"
+	}
+	return fmt.Sprintf("org_%s", orgID.String()[:8])
 }

@@ -82,7 +82,7 @@ func TestUpdateLocalUsers_RemoveFailed(t *testing.T) {
 
 	opts := SSHOptions{Group: "infra-users"}
 	err := updateLocalUsers(ctx, fakeClient, opts, grants)
-	assert.ErrorContains(t, err, "remove user failremove: userdel: exit status 8")
+	assert.ErrorContains(t, err, "remove user failremove: userdel: failed to remove user: exit status 8")
 
 	actual, err := os.ReadFile(logFile)
 	assert.NilError(t, err)

@@ -66,7 +66,8 @@ retry:
 	tries++
 	if err = insert(tx, prt); err != nil {
 		if tries <= 3 && errors.As(err, &ucErr) {
-			logging.Warnf("generated random token %q already exists in the database", token)
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureWarn("generated random token already exists in the database", nil)
 			goto retry // on the off chance the token exists.
 		}
 		return "", err

@@ -62,7 +62,8 @@ func (g *google) GetUserInfo(ctx context.Context, providerUser *models.ProviderU
 	if g.GoogleCredentials.PrivateKey != "" {
 		newGroups, err := g.checkGoogleWorkspaceGroups(ctx, providerUser)
 		if err != nil {
-			logging.Debugf("unable to retrieve groups from google api: %s", err.Error())
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureDebug(fmt.Sprintf("unable to retrieve groups from google api: %s", err.Error()))
 
 			if errors.Is(err, context.DeadlineExceeded) {
 				return nil, fmt.Errorf("%w: %s", internal.ErrBadGateway, err.Error())
@@ -74,14 +75,16 @@ func (g *google) GetUserInfo(ctx context.Context, providerUser *models.ProviderU
 			}
 
 			newGroups = []string{} // set the groups empty to clear them
-			logging.Warnf("Unable to get groups from the Google API for provider ID:%q. Make sure the service account has the required permissions.", providerUser.ProviderID)
+			secureLogger.SecureWarn("Unable to get groups from the Google API for provider ID. Make sure the service account has the required permissions.", nil)
 		}
 
 		info.Groups = newGroups
 
-		logging.Debugf("user synchronized with %q groups from google provider", &newGroups)
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureDebug(fmt.Sprintf("user synchronized with %q groups from google provider", newGroups))
 	} else {
-		logging.Debugf("skipped checking google groups, no private key set")
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureDebug("skipped checking google groups, no private key set")
 	}
 
 	return info, nil

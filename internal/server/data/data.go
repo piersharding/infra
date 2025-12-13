@@ -399,7 +399,8 @@ func handleError(err error) error {
 				Column: col,
 			}
 		default:
-			logging.Warnf("unhandled unique constraint error format: %q", err.Error())
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureWarn("unhandled unique constraint error format", nil)
 
 			return UniqueConstraintError{}
 		}

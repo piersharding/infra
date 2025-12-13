@@ -136,7 +136,8 @@ func (s Server) loadUser(db data.WriteTxn, input User) error {
 		if input.Name != models.InternalInfraConnectorIdentityName {
 			_, err := mail.ParseAddress(input.Name)
 			if err != nil {
-				logging.Warnf("user name %q in server configuration is not a valid email, please update this name to a valid email", input.Name)
+				secureLogger := logging.SecureLogger(logging.L)
+				secureLogger.SecureWarn("user name in server configuration is not a valid email, please update this name to a valid email", nil)
 			}
 		}
 

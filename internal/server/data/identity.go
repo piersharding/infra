@@ -657,23 +657,40 @@ func UpdateIdentityLastSeenAt(tx WriteTxn, user *models.Identity) error {
 		return nil
 	}
 
-	origUpdatedAt := user.UpdatedAt
-	user.LastSeenAt = time.Now()
-	if err := user.OnUpdate(); err != nil {
-		return err
+	// Use database-level advisory lock to prevent race conditions
+	lockKey := fmt.Sprintf("user_last_seen_%d", user.ID)
+	_, err := tx.Exec("SELECT pg_advisory_lock($1)", lockKey)
+	if err != nil {
+		return fmt.Errorf("failed to acquire advisory lock: %w", err)
+	}
+	defer func() {
+		_, _ = tx.Exec("SELECT pg_advisory_unlock($1)", lockKey)
+	}()
+
+	// Re-read the user to ensure we have the latest data
+	latestUser, err := GetIdentity(tx, GetIdentityOptions{ByID: user.ID})
+	if err != nil {
+		return fmt.Errorf("failed to re-read user: %w", err)
 	}
 
-	table := (*identitiesTable)(user)
-	query := querybuilder.New("UPDATE identities SET")
-	query.B(columnsForUpdate(table), table.Values()...)
-	query.B("WHERE deleted_at is null")
-	query.B("AND organization_id = ?", user.OrganizationID)
-	// only update if the row has not changed since the SELECT
-	query.B("AND updated_at = ?", origUpdatedAt)
-	query.B("AND id IN (SELECT id from identities WHERE id = ? FOR UPDATE SKIP LOCKED)", table.Primary())
+	// Check threshold again with fresh data
+	if time.Since(latestUser.LastSeenAt) < lastSeenUpdateThreshold {
+		return nil
+	}
 
-	_, err := tx.Exec(query.String(), query.Args...)
-	return handleError(err)
+	// Use atomic update with RETURNING clause for thread-safe operation
+	query := querybuilder.New("UPDATE identities SET last_seen_at = NOW()")
+	query.B("WHERE id = ? AND organization_id = ? AND deleted_at IS NULL", user.ID, user.OrganizationID)
+	query.B("RETURNING last_seen_at")
+
+	var updatedTime time.Time
+	err = tx.QueryRow(query.String(), query.Args...).Scan(&updatedTime)
+	if err != nil {
+		return handleError(err)
+	}
+
+	user.LastSeenAt = updatedTime
+	return nil
 }
 
 type DeleteIdentitiesOptions struct {

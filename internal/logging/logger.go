@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -14,7 +16,132 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var L = &logger{
+var sensitivePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)(password|token|key|secret|auth)\s*[:=]\s*[^&\s]+`),
+	regexp.MustCompile(`(?i)(username|email)\s*[:=]\s*[^&\s]+`),
+}
+
+// secureLogger wraps zerolog.Logger to provide secure logging functionality
+type secureLogger struct {
+	*zerolog.Logger
+}
+
+func sanitizeLogMessage(msg string) string {
+	for _, pattern := range sensitivePatterns {
+		msg = pattern.ReplaceAllString(msg, "***REDACTED***")
+	}
+	return msg
+}
+
+func isSensitiveField(field string) bool {
+	sensitiveFields := []string{"password", "token", "secret", "key", "username", "email", "auth", "credential"}
+	for _, sf := range sensitiveFields {
+		if strings.Contains(strings.ToLower(field), sf) {
+			return true
+		}
+	}
+	return false
+}
+
+// secureEvent wraps zerolog.Event to provide secure logging functionality
+type secureEvent struct {
+	*zerolog.Event
+}
+
+func (e secureEvent) Str(k string, v string) *secureEvent {
+	if isSensitiveField(k) {
+		return &secureEvent{e.Event.Str(k, "***REDACTED***")}
+	}
+	return &secureEvent{e.Event.Str(k, v)}
+}
+
+func (e secureEvent) Int(k string, v int) *secureEvent {
+	return &secureEvent{e.Event.Int(k, v)}
+}
+
+func (e secureEvent) Bool(k string, v bool) *secureEvent {
+	return &secureEvent{e.Event.Bool(k, v)}
+}
+
+func (e secureEvent) Float64(k string, v float64) *secureEvent {
+	return &secureEvent{e.Event.Float64(k, v)}
+}
+
+func (e secureEvent) Msg(msg string) {
+	sanitizedMsg := sanitizeLogMessage(msg)
+	e.Event.Msg(sanitizedMsg)
+}
+
+func sanitizeEvent(event *zerolog.Event) *secureEvent {
+	return &secureEvent{event}
+}
+
+func (l secureLogger) SecureInfo(msg string) {
+	sanitizedMsg := sanitizeLogMessage(msg)
+	l.Logger.Info().Msg(sanitizedMsg)
+}
+
+func (l secureLogger) SecureError(msg string, err error) {
+	sanitizedMsg := sanitizeLogMessage(msg)
+	if err != nil {
+		l.Logger.Error().Err(err).Msg(sanitizedMsg)
+	} else {
+		l.Logger.Error().Msg(sanitizedMsg)
+	}
+}
+
+func (l secureLogger) SecureWarn(msg string, data map[string]interface{}) {
+	sanitizedMsg := sanitizeLogMessage(msg)
+	safeFields := make(map[string]interface{})
+	for k, v := range data {
+		if !isSensitiveField(k) {
+			safeFields[k] = v
+		}
+	}
+	l.Logger.Warn().Fields(safeFields).Msg(sanitizedMsg)
+}
+
+func (l secureLogger) SecureWarnError(msg string, err error) {
+	sanitizedMsg := sanitizeLogMessage(msg)
+	if err != nil {
+		l.Logger.Warn().Err(err).Msg(sanitizedMsg)
+	} else {
+		l.Logger.Warn().Msg(sanitizedMsg)
+	}
+}
+
+func (l secureLogger) SecureTrace(msg string) {
+	sanitizedMsg := sanitizeLogMessage(msg)
+	l.Logger.Trace().Msg(sanitizedMsg)
+}
+
+func (l secureLogger) SecureDebug(msg string) {
+	sanitizedMsg := sanitizeLogMessage(msg)
+	l.Logger.Debug().Msg(sanitizedMsg)
+}
+
+func (l secureLogger) Info() *secureEvent {
+	return sanitizeEvent(l.Logger.Info())
+}
+
+func (l secureLogger) Error() *secureEvent {
+	return sanitizeEvent(l.Logger.Error())
+}
+
+func (l secureLogger) Debug() *secureEvent {
+	return sanitizeEvent(l.Logger.Debug())
+}
+
+func (l secureLogger) Warn() *secureEvent {
+	return sanitizeEvent(l.Logger.Warn())
+}
+
+// SecureLogger creates a secure logger wrapper
+func SecureLogger(logger *Logger) secureLogger {
+	return secureLogger{Logger: &logger.Logger}
+}
+
+var L = &Logger{
 	Logger: zerolog.New(zerolog.ConsoleWriter{
 		Out:          os.Stderr,
 		NoColor:      !isTerminal(),
@@ -23,7 +150,7 @@ var L = &logger{
 	}),
 }
 
-type logger struct {
+type Logger struct {
 	zerolog.Logger
 }
 
@@ -36,8 +163,8 @@ func init() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 }
 
-func newLogger(writer io.Writer) *logger {
-	return &logger{
+func newLogger(writer io.Writer) *Logger {
+	return &Logger{
 		Logger: zerolog.New(writer).With().Timestamp().Caller().Logger(),
 	}
 }

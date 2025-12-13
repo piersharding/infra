@@ -308,7 +308,8 @@ func SyncProviderUser(ctx context.Context, tx WriteTxn, user *models.ProviderUse
 
 	// update the stored access token if it was refreshed
 	if accessToken != string(user.AccessToken) {
-		logging.Debugf("access token for user at provider %s was refreshed", user.ProviderID)
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureDebug(fmt.Sprintf("access token for user at provider %s was refreshed", user.ProviderID))
 
 		user.AccessToken = models.EncryptedAtRest(accessToken)
 		user.ExpiresAt = *expiry

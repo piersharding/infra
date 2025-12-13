@@ -131,7 +131,8 @@ func listGrantsWithMaxUpdateIndex(rCtx RequestContext, opts data.ListGrantsOptio
 
 func logError(fn func() error, msg string) {
 	if err := fn(); err != nil {
-		logging.L.Warn().Err(err).Msg(msg)
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureWarnError(msg, err)
 	}
 }
 

@@ -90,12 +90,14 @@ func (a *azure) GetUserInfo(ctx context.Context, providerUser *models.ProviderUs
 		logging.L.Debug().Err(err).Msg("failed to check Azure groups")
 
 		newGroups = []string{} // set the groups empty to clear them
-		logging.Warnf("unable to get groups from the Azure API for provider ID:%q. Make sure the application client has the required permissions.", providerUser.ProviderID)
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureWarn("unable to get groups from the Azure API for provider ID. Make sure the application client has the required permissions.", nil)
 	}
 
 	info.Groups = newGroups
 
-	logging.Debugf("user synchronized with %q groups from azure provider", &newGroups)
+	secureLogger := logging.SecureLogger(logging.L)
+	secureLogger.SecureDebug(fmt.Sprintf("user synchronized with %q groups from azure provider", newGroups))
 
 	return info, nil
 }

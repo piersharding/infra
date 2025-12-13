@@ -16,7 +16,8 @@ type OptionsDiffV0dot1 struct {
 
 // ToV0dot2 applies the 0.1 options to the 0.2 version
 func (o OptionsDiffV0dot1) applyToV0dot2(base *Options) {
-	logging.Warnf("updated server options from version 0.1 to 0.2")
+	secureLogger := logging.SecureLogger(logging.L)
+	secureLogger.SecureWarn("updated server options from version 0.1 to 0.2", nil)
 
 	base.Version = 0.2
 	base.BootstrapConfig.Users = o.Identities
@@ -28,7 +29,8 @@ type OptionsDiffV0dot2 struct {
 
 // ToV0dot2 applies the 0.2 options to the 0.3 version
 func (o OptionsDiffV0dot2) applyToV0dot3(base *Options) {
-	logging.Warnf("updated server options from version 0.2 to 0.3")
+	secureLogger := logging.SecureLogger(logging.L)
+	secureLogger.SecureWarn("updated server options from version 0.2 to 0.3", nil)
 
 	base.Version = 0.3
 

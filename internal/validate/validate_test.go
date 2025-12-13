@@ -2,6 +2,8 @@ package validate
 
 import (
 	"errors"
+	"regexp"
+	"strings"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -311,5 +313,376 @@ func TestRequireOneOf_Validate(t *testing.T) {
 		e := OneOfExample{First: "v", Third: 34}
 		err := Validate(e)
 		assert.Error(t, err, "validation failed: only one of (first, third) can have a value")
+	})
+}
+
+// TestSecureStringRule tests the enhanced secure string validation
+func TestSecureStringRule(t *testing.T) {
+	tests := []struct {
+		name      string
+		value     string
+		minLength int
+		maxLength int
+		pattern   *regexp.Regexp
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:      "valid string - meets all criteria",
+			value:     "validstring123",
+			minLength: 5,
+			maxLength: 20,
+			pattern:   regexp.MustCompile(`^[a-zA-Z0-9]+$`),
+			wantErr:   false,
+		},
+		{
+			name:      "too short",
+			value:     "abc",
+			minLength: 5,
+			maxLength: 20,
+			pattern:   regexp.MustCompile(`^[a-zA-Z0-9]+$`),
+			wantErr:   true,
+			errMsg:    "must be at least 5 characters",
+		},
+		{
+			name:      "too long",
+			value:     "thisstringiswaytoolongforourlimits",
+			minLength: 5,
+			maxLength: 20,
+			pattern:   regexp.MustCompile(`^[a-zA-Z0-9]+$`),
+			wantErr:   true,
+			errMsg:    "must not exceed 20 characters",
+		},
+		{
+			name:      "invalid pattern - contains special chars",
+			value:     "invalid@string",
+			minLength: 5,
+			maxLength: 20,
+			pattern:   regexp.MustCompile(`^[a-zA-Z0-9]+$`),
+			wantErr:   true,
+			errMsg:    "contains invalid characters",
+		},
+		{
+			name:      "empty string - valid for optional",
+			value:     "",
+			minLength: 5,
+			maxLength: 20,
+			pattern:   regexp.MustCompile(`^[a-zA-Z0-9]+$`),
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := SecureString(tt.name, tt.value, tt.minLength, tt.maxLength, tt.pattern)
+			failure := rule.Validate()
+
+			if tt.wantErr {
+				assert.Assert(t, failure != nil)
+				assert.Assert(t, failure != nil)
+				assert.Assert(t, len(failure.Problems) > 0)
+				assert.Assert(t, strings.Contains(failure.Problems[0], tt.errMsg))
+			} else {
+				assert.Assert(t, failure == nil)
+			}
+		})
+	}
+}
+
+// TestSecureEmailRule tests the enhanced email validation
+func TestSecureEmailRule(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "valid email",
+			value:   "user@example.com",
+			wantErr: false,
+		},
+		{
+			name:    "valid email with subdomain",
+			value:   "user@mail.example.com",
+			wantErr: false,
+		},
+		{
+			name:    "valid email with numbers",
+			value:   "user123@example123.com",
+			wantErr: false,
+		},
+		{
+			name:    "invalid email - no @",
+			value:   "userexample.com",
+			wantErr: true,
+			errMsg:  "is not a valid email address",
+		},
+		{
+			name:    "invalid email - no domain",
+			value:   "user@",
+			wantErr: true,
+			errMsg:  "is not a valid email address",
+		},
+		{
+			name:    "invalid email - no TLD",
+			value:   "user@example",
+			wantErr: true,
+			errMsg:  "is not a valid email address",
+		},
+		{
+			name:    "empty string - valid for optional",
+			value:   "",
+			wantErr: false,
+		},
+		{
+			name:    "invalid email - special chars",
+			value:   "user@ex ample.com",
+			wantErr: true,
+			errMsg:  "is not a valid email address",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := SecureEmail(tt.name, tt.value)
+			failure := rule.Validate()
+
+			if tt.wantErr {
+				assert.Assert(t, failure != nil)
+				assert.Assert(t, len(failure.Problems) > 0)
+				assert.Assert(t, strings.Contains(failure.Problems[0], tt.errMsg))
+			} else {
+				assert.Assert(t, failure == nil)
+			}
+		})
+	}
+}
+
+// TestSecureUsernameRule tests the enhanced username validation
+func TestSecureUsernameRule(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "valid username - letters",
+			value:   "alice",
+			wantErr: false,
+		},
+		{
+			name:    "valid username - alphanumeric",
+			value:   "user123",
+			wantErr: false,
+		},
+		{
+			name:    "valid username - with dots",
+			value:   "user.name",
+			wantErr: false,
+		},
+		{
+			name:    "valid username - with underscores",
+			value:   "user_name",
+			wantErr: false,
+		},
+		{
+			name:    "valid username - with hyphens",
+			value:   "user-name",
+			wantErr: false,
+		},
+		{
+			name:    "valid username - exactly 3 chars",
+			value:   "abc",
+			wantErr: false,
+		},
+		{
+			name:    "valid username - exactly 32 chars",
+			value:   "12345678901234567890123456789012",
+			wantErr: false,
+		},
+		{
+			name:    "invalid username - too short",
+			value:   "ab",
+			wantErr: true,
+			errMsg:  "must be 3-32 characters and contain only letters, numbers, dots, underscores, or hyphens",
+		},
+		{
+			name:    "invalid username - too long",
+			value:   "123456789012345678901234567890123",
+			wantErr: true,
+			errMsg:  "must be 3-32 characters and contain only letters, numbers, dots, underscores, or hyphens",
+		},
+		{
+			name:    "invalid username - special characters",
+			value:   "user@domain",
+			wantErr: true,
+			errMsg:  "must be 3-32 characters and contain only letters, numbers, dots, underscores, or hyphens",
+		},
+		{
+			name:    "invalid username - spaces",
+			value:   "user name",
+			wantErr: true,
+			errMsg:  "must be 3-32 characters and contain only letters, numbers, dots, underscores, or hyphens",
+		},
+		{
+			name:    "empty string - valid for optional",
+			value:   "",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := SecureUsername(tt.name, tt.value)
+			failure := rule.Validate()
+
+			if tt.wantErr {
+				assert.Assert(t, failure != nil)
+				assert.Assert(t, len(failure.Problems) > 0)
+				assert.Assert(t, strings.Contains(failure.Problems[0], tt.errMsg))
+			} else {
+				assert.Assert(t, failure == nil)
+			}
+		})
+	}
+}
+
+// TestSecurePasswordRule tests the enhanced password validation
+func TestSecurePasswordRule(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "valid password - meets all criteria",
+			value:   "MyStr0ngP@ssw0rd",
+			wantErr: false,
+		},
+		{
+			name:    "valid password - minimum length",
+			value:   "12345678",
+			wantErr: true,
+			errMsg:  "must contain at least one uppercase letter",
+		},
+		{
+			name:    "valid password - with special chars",
+			value:   "P@ssw0rd123!",
+			wantErr: false,
+		},
+		{
+			name:    "too short password",
+			value:   "1234567",
+			wantErr: true,
+			errMsg:  "must be at least 8 characters",
+		},
+		{
+			name:    "password without uppercase",
+			value:   "mypassword123",
+			wantErr: true,
+			errMsg:  "must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+		},
+		{
+			name:    "password without lowercase",
+			value:   "MYPASSWORD123",
+			wantErr: true,
+			errMsg:  "must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+		},
+		{
+			name:    "password without numbers",
+			value:   "MyPassword!",
+			wantErr: true,
+			errMsg:  "must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+		},
+		{
+			name:    "password without special characters",
+			value:   "MyPassword123",
+			wantErr: true,
+			errMsg:  "must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+		},
+		{
+			name:    "empty password - valid for optional",
+			value:   "",
+			wantErr: false,
+		},
+		{
+			name:    "password exceeding max length",
+			value:   "ThisIsAVeryLongPasswordThatExceedsTheMaximumLengthAllowedByTheSystemAndShouldFailValidation",
+			wantErr: true,
+			errMsg:  "must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := SecurePassword(tt.name, tt.value)
+			failure := rule.Validate()
+
+			if tt.wantErr {
+				assert.Assert(t, failure != nil)
+				assert.Assert(t, len(failure.Problems) > 0)
+				assert.Assert(t, strings.Contains(failure.Problems[0], tt.errMsg))
+			} else {
+				assert.Assert(t, failure == nil)
+			}
+		})
+	}
+}
+
+// UserRegistrationRequest is a test struct for integration testing
+type UserRegistrationRequest struct {
+	Username string
+	Email    string
+	Password string
+	Bio      string
+}
+
+func (r UserRegistrationRequest) ValidationRules() []ValidationRule {
+	return []ValidationRule{
+		SecureUsername("username", r.Username),
+		SecureEmail("email", r.Email),
+		SecurePassword("password", r.Password),
+		SecureString("bio", r.Bio, 10, 500, regexp.MustCompile(`^[a-zA-Z0-9 .,!?:;()-]+$`)),
+	}
+}
+
+// TestEnhancedValidationIntegration tests the integration of enhanced validation rules
+func TestEnhancedValidationIntegration(t *testing.T) {
+	t.Run("valid registration", func(t *testing.T) {
+		req := UserRegistrationRequest{
+			Username: "alice",
+			Email:    "alice@example.com",
+			Password: "MyStr0ngP@ssw0rd",
+			Bio:      "I am a software developer with 5 years of experience.",
+		}
+		err := Validate(req)
+		assert.NilError(t, err)
+	})
+
+	t.Run("invalid registration - multiple errors", func(t *testing.T) {
+		req := UserRegistrationRequest{
+			Username: "ab",            // too short
+			Email:    "invalid-email", // invalid format
+			Password: "weak",          // too short and doesn't meet complexity
+			Bio:      "short",         // too short
+		}
+		err := Validate(req)
+		assert.ErrorContains(t, err, "validation failed: ")
+
+		var fieldError Error
+		assert.Assert(t, errors.As(err, &fieldError))
+
+		assert.Assert(t, len(fieldError) > 0)
+		assert.Assert(t, len(fieldError["username"]) > 0)
+		assert.Assert(t, strings.Contains(fieldError["username"][0], "must be 3-32 characters"))
+		assert.Assert(t, len(fieldError["email"]) > 0)
+		assert.Assert(t, strings.Contains(fieldError["email"][0], "is not a valid email address"))
+		assert.Assert(t, len(fieldError["password"]) > 0)
+		assert.Assert(t, strings.Contains(fieldError["password"][0], "must be at least 8 characters"))
+		assert.Assert(t, len(fieldError["bio"]) > 0)
+		assert.Assert(t, strings.Contains(fieldError["bio"][0], "must be at least 10 characters"))
 	})
 }

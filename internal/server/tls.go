@@ -59,14 +59,15 @@ func tlsConfigFromOptions(opts TLSOptions) (*tls.Config, error) {
 	if opts.CA != "" {
 		raw := pemDecode([]byte(opts.CA))
 		if len(raw) == 0 {
-			logging.Errorf("could not read CA %q", opts.CA)
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureError(fmt.Sprintf("could not read CA %q", opts.CA), nil)
 		} else {
-			logging.L.Info().
-				Str("SHA256 fingerprint", certs.Fingerprint(raw)).
-				Msg("TLS CA")
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureInfo(fmt.Sprintf("TLS CA SHA256 fingerprint: %s", certs.Fingerprint(raw)))
 
 			if !roots.AppendCertsFromPEM([]byte(opts.CA)) {
-				logging.Warnf("failed to load TLS CA, invalid PEM")
+				secureLogger := logging.SecureLogger(logging.L)
+				secureLogger.SecureWarn("failed to load TLS CA, invalid PEM", nil)
 			}
 		}
 	}
@@ -113,7 +114,8 @@ func getCertificate(cache autocert.Cache, ca keyPair) func(hello *tls.ClientHell
 		certBytes, _ := cache.Get(context.TODO(), serverName+".crt")
 		keyBytes, _ := cache.Get(context.TODO(), serverName+".key")
 		if certBytes == nil || keyBytes == nil {
-			logging.Infof("no cached TLS cert for %v", serverName)
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureInfo(fmt.Sprintf("no cached TLS cert for %v", serverName))
 		}
 		return certBytes, keyBytes
 	}

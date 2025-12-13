@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 
@@ -17,6 +18,21 @@ import (
 	"github.com/infrahq/infra/internal/server/redis"
 	"github.com/infrahq/infra/internal/validate"
 )
+
+var sensitivePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)(password|token|key|secret|auth)\s*[:=]\s*[^&\s]+`),
+	regexp.MustCompile(`(?i)(username|email)\s*[:=]\s*[^&\s]+`),
+	regexp.MustCompile(`\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b`), // email addresses
+	regexp.MustCompile(`\b[A-Fa-f0-9]{64}\b`),                                 // hex tokens/hashes
+	regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`),              // IP addresses
+}
+
+func sanitizeLogMessage(msg string) string {
+	for _, pattern := range sensitivePatterns {
+		msg = pattern.ReplaceAllString(msg, "***REDACTED***")
+	}
+	return msg
+}
 
 // sendAPIError translates err into the appropriate HTTP status code, builds a
 // response body using api.Error, then sends both as a response to the active
@@ -114,13 +130,14 @@ func sendAPIError(writer http.ResponseWriter, req *http.Request, err error) {
 		log = logging.L.Error()
 	}
 
+	sanitizedMessage := sanitizeLogMessage(fmt.Sprintf("api request error: %v", err))
 	log.CallerSkipFrame(1).
 		Err(err).
 		Str("method", req.Method).
 		Str("path", req.URL.Path).
 		Int32("statusCode", resp.Code).
 		Str("remoteAddr", req.RemoteAddr).
-		Msg("api request error")
+		Msg(sanitizedMessage)
 
 	if resp.Code == http.StatusNotModified {
 		writer.WriteHeader(int(resp.Code))
@@ -130,7 +147,8 @@ func sendAPIError(writer http.ResponseWriter, req *http.Request, err error) {
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	writer.WriteHeader(int(resp.Code))
 	if err := json.NewEncoder(writer).Encode(resp); err != nil {
-		logging.L.Error().Err(err).Msg("failed to write error response")
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureError("failed to write error response", err)
 	}
 }
 

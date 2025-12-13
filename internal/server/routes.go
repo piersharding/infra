@@ -19,6 +19,7 @@ import (
 	"github.com/infrahq/infra/internal/access"
 	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/internal/openapi3"
+
 	"github.com/infrahq/infra/internal/validate"
 	"github.com/infrahq/infra/metrics"
 )
@@ -446,7 +447,8 @@ func (a *API) notFoundHandler(c *gin.Context) {
 
 	_, err := c.Writer.Write([]byte("404 not found"))
 	if err != nil {
-		logging.Errorf("%s", err.Error())
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureError("failed to write 404 response", err)
 	}
 }
 

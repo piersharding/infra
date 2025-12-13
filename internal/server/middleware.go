@@ -260,7 +260,8 @@ func getRequestContext(c *gin.Context) access.RequestContext {
 func getOrgFromRequest(req *http.Request, tx data.ReadTxn) (*models.Organization, error) {
 	host := req.Host
 
-	logging.Debugf("Host: %s", host)
+	secureLogger := logging.SecureLogger(logging.L)
+	secureLogger.SecureDebug(fmt.Sprintf("Host: %s", host))
 	if host == "" {
 		return nil, nil
 	}
@@ -269,7 +270,7 @@ hostLookup:
 	org, err := data.GetOrganization(tx, data.GetOrganizationOptions{ByDomain: host})
 	if err != nil {
 		if errors.Is(err, internal.ErrNotFound) {
-			logging.Debugf("Host not found: %s", host)
+			secureLogger.SecureDebug(fmt.Sprintf("Host not found: %s", host))
 			// first, remove port and try again
 			h, p, err := net.SplitHostPort(host)
 			if len(p) > 0 && err == nil {

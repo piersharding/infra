@@ -27,7 +27,8 @@ func backgroundJob(ctx context.Context, db *data.DB, job BackgroundJobFunc, ever
 			}
 			defer func() {
 				if err := recover(); err != nil {
-					logging.Errorf("background job %s panic: %s", funcName, err)
+					secureLogger := logging.SecureLogger(logging.L)
+					secureLogger.SecureError(fmt.Sprintf("background job %s panic", funcName), nil)
 				}
 			}()
 
@@ -46,11 +47,12 @@ func backgroundJob(ctx context.Context, db *data.DB, job BackgroundJobFunc, ever
 			select {
 			case <-t.C:
 				startAt := time.Now().UTC()
-				logging.Debugf("background job %s starting", funcName)
+				secureLogger := logging.SecureLogger(logging.L)
+				secureLogger.SecureDebug(fmt.Sprintf("background job %s starting", funcName))
 				if err := jobWithRecover(); err != nil {
-					logging.Errorf("background job %s error: %s", funcName, err.Error())
+					secureLogger.SecureError(fmt.Sprintf("background job %s error", funcName), err)
 				} else {
-					logging.Infof("background job %s successful, elapsed: %s", funcName, time.Since(startAt))
+					secureLogger.SecureInfo(fmt.Sprintf("background job %s successful, elapsed: %s", funcName, time.Since(startAt)))
 				}
 			case <-ctx.Done():
 				t.Stop()

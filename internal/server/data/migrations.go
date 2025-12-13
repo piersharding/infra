@@ -149,7 +149,8 @@ func addAuthURLAndScopeToProviders() *migrator.Migration {
 		ID: "202206281027",
 		Migrate: func(tx migrator.DB) error {
 			if !migrator.HasColumn(tx, "providers", "scopes") {
-				logging.Debugf("migrating provider table auth URL and scopes")
+				secureLogger := logging.SecureLogger(logging.L)
+				secureLogger.SecureDebug("migrating provider table auth URL and scopes")
 				if _, err := tx.Exec(`ALTER TABLE providers ADD COLUMN auth_url text`); err != nil {
 					return err
 				}
@@ -175,7 +176,8 @@ func addAuthURLAndScopeToProviders() *migrator.Migration {
 						continue
 					}
 
-					logging.Debugf("migrating %s provider", provider.Name)
+					secureLogger := logging.SecureLogger(logging.L)
+					secureLogger.SecureDebug(fmt.Sprintf("migrating %s provider", provider.Name))
 
 					providerClient := providers.NewOIDCClient(provider, "not-used", "")
 					authServerInfo, err := providerClient.AuthServerInfo(context.Background())
@@ -407,7 +409,8 @@ func addOrganizations() *migrator.Migration {
 	return &migrator.Migration{
 		ID: "2022-07-27T15:54",
 		Migrate: func(tx migrator.DB) error {
-			logging.Debugf("migrating orgs")
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureDebug("migrating orgs")
 
 			stmt := `
 ALTER TABLE IF EXISTS access_keys ADD COLUMN IF NOT EXISTS organization_id bigint;

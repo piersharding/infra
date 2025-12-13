@@ -52,7 +52,8 @@ func (l *Listener) WaitForNotification(ctx context.Context) error {
 
 func (l *Listener) Release(ctx context.Context) error {
 	var errs []error
-	logging.Debugf("unlisten *")
+	secureLogger := logging.SecureLogger(logging.L)
+	secureLogger.SecureDebug("unlisten *")
 	if _, err := l.pgxConn.Exec(ctx, `UNLISTEN *`); err != nil {
 		errs = append(errs, err)
 	}
@@ -102,7 +103,8 @@ func ListenForNotify(ctx context.Context, db *DB, opts ListenForNotifyOptions) (
 		channel = fmt.Sprintf("credans_%s_%s", opts.OrgID.String(), opts.DestinationCredentialsByID.String())
 	}
 
-	logging.Debugf("listing for notify on %s", channel)
+	secureLogger := logging.SecureLogger(logging.L)
+	secureLogger.SecureDebug(fmt.Sprintf("listing for notify on %s", channel))
 	_, err = pgxConn.Exec(ctx, "SELECT listen_on_chan($1)", channel)
 	if err != nil {
 		if err := pgxstdlib.ReleaseConn(sqlDB, pgxConn); err != nil {

@@ -261,8 +261,9 @@ func (s *Server) Run(ctx context.Context) error {
 		group.Go(s.routines[i].run)
 	}
 
-	logging.Infof("starting infra server (%s) - http:%s https:%s metrics:%s",
-		internal.FullVersion(), s.Addrs.HTTP, s.Addrs.HTTPS, s.Addrs.Metrics)
+	secureLogger := logging.SecureLogger(logging.L)
+	secureLogger.SecureInfo(fmt.Sprintf("starting infra server (%s) - http:%s https:%s metrics:%s",
+		internal.FullVersion(), s.Addrs.HTTP, s.Addrs.HTTPS, s.Addrs.Metrics))
 
 	<-ctx.Done()
 	for i := range s.routines {
@@ -273,7 +274,8 @@ func (s *Server) Run(ctx context.Context) error {
 	s.tel.Close()
 
 	if err := s.db.Close(); err != nil {
-		logging.L.Warn().Err(err).Msg("failed to close database connection")
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureWarnError("failed to close database connection", err)
 	}
 
 	if errors.Is(err, context.Canceled) {
@@ -375,7 +377,8 @@ func (s *Server) setupServer(server *http.Server) (net.Addr, error) {
 	if err != nil {
 		return nil, err
 	}
-	logging.Infof("listening on %s", l.Addr().String())
+	secureLogger := logging.SecureLogger(logging.L)
+	secureLogger.SecureInfo(fmt.Sprintf("listening on %s", l.Addr().String()))
 
 	s.routines = append(s.routines, routine{
 		run: func() error {
@@ -477,7 +480,8 @@ func (s *Server) syncIdentityInfo(ctx context.Context, tx *data.Transaction, ide
 
 		if provider.Kind == models.ProviderKindInfra {
 			// no external verification needed
-			logging.L.Trace().Msg("skipped verifying identity within infra provider, not required")
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureTrace("skipped verifying identity within infra provider, not required")
 			return nil
 		}
 	}
@@ -501,14 +505,17 @@ func (s *Server) syncIdentityInfo(ctx context.Context, tx *data.Transaction, ide
 				return err
 			}
 
-			logging.L.Info().Msg("user session expired, pruning keys created for this session")
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureInfo("user session expired, pruning keys created for this session")
 
 			if nestedErr := data.DeleteAccessKeys(tx, data.DeleteAccessKeysOptions{ByIssuedForID: providerUser.IdentityID, ByProviderID: providerUser.ProviderID}); nestedErr != nil {
-				logging.Errorf("failed to revoke invalid user session: %s", nestedErr)
+				secureLogger := logging.SecureLogger(logging.L)
+				secureLogger.SecureError("failed to revoke invalid user session", nestedErr)
 			}
 
 			if nestedErr := data.DeleteProviderUsers(tx, data.DeleteProviderUsersOptions{ByIdentityID: providerUser.IdentityID, ByProviderID: providerUser.ProviderID}); nestedErr != nil {
-				logging.Errorf("failed to delete provider user: %s", nestedErr)
+				secureLogger := logging.SecureLogger(logging.L)
+				secureLogger.SecureError("failed to delete provider user", nestedErr)
 			}
 
 			return fmt.Errorf("%w: %s", ErrSyncFailed, err)
