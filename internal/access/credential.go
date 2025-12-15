@@ -151,11 +151,28 @@ func UpdateCredential(rCtx RequestContext, user *models.Identity, oldPassword, n
 	return nil
 }
 
+// GenerateFromPassword validates a password against security requirements and
+// generates a bcrypt hash if valid. Uses the consolidated password validation
+// which includes:
+// - Minimum length of 8 characters
+// - Embedded common passwords list check
+// - Optional external bad passwords file (for backwards compatibility)
 func GenerateFromPassword(password string) ([]byte, error) {
-	if len(password) < 8 {
-		return nil, validate.Error{"password": []string{"8 characters"}}
+	// First, validate using the consolidated password validation
+	// Use relaxed config since we're keeping backwards compatibility with existing
+	// password requirements (only length check was previously enforced)
+	config := validate.RelaxedPasswordConfig()
+	result := validate.ValidatePassword(password, config)
+
+	if !result.Valid {
+		if len(result.Errors) > 0 {
+			return nil, validate.Error{"password": result.Errors}
+		}
+		return nil, validate.Error{"password": []string{"invalid password"}}
 	}
 
+	// Also check the external bad passwords file for backwards compatibility
+	// This allows deployments to use their own custom bad passwords list
 	if err := checkBadPasswords(password); err != nil {
 		return nil, err
 	}
@@ -163,7 +180,9 @@ func GenerateFromPassword(password string) ([]byte, error) {
 	return bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 }
 
-// checkBadPasswords checks if the password is a known bad password, i.e. a widely reused password.
+// checkBadPasswords checks if the password is in an external bad passwords file.
+// This is kept for backwards compatibility with existing deployments that use the
+// INFRA_SERVER_BAD_PASSWORDS_FILE environment variable.
 func checkBadPasswords(password string) error {
 	badPasswordsFile := os.Getenv("INFRA_SERVER_BAD_PASSWORDS_FILE")
 	if badPasswordsFile == "" {
@@ -174,6 +193,7 @@ func checkBadPasswords(password string) error {
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 
 	scan := bufio.NewScanner(file)
 	scan.Split(bufio.ScanLines)
@@ -183,9 +203,5 @@ func checkBadPasswords(password string) error {
 		}
 	}
 
-	if err := file.Close(); err != nil {
-		return err
-	}
-
-	return nil
+	return scan.Err()
 }

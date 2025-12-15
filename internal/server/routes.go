@@ -50,6 +50,13 @@ func (s *Server) GenerateRoutes() Routes {
 	// This group of middleware will apply to everything, including the UI
 	router.Use(loggingMiddleware(s.options.EnableLogSampling))
 
+	// Apply security headers middleware globally
+	// This sets important HTTP security headers like HSTS, CSP, X-Frame-Options, etc.
+	securityHeadersConfig := s.options.SecurityHeaders
+	if securityHeadersConfig.Enabled {
+		router.Use(SecurityHeadersMiddleware(securityHeadersConfig))
+	}
+
 	// This group of middleware only applies to non-ui routes
 	apiGroup := router.Group("/", metrics.Middleware(s.metricsRegistry))
 
@@ -115,12 +122,9 @@ func (s *Server) GenerateRoutes() Routes {
 	add(a, authn, http.MethodPatch, "/api/scim/v2/Users/:id", patchProviderUserRoute)
 	add(a, authn, http.MethodDelete, "/api/scim/v2/Users/:id", deleteProviderUserRoute)
 
-	// Debug endpoints - only register in non-production environments when explicitly enabled
+	// Debug endpoints - only register when explicitly enabled and safe to do so
 	// These endpoints can expose sensitive memory information and should not be available in production
-	if s.options.EnableDebug {
-		add(a, authn, http.MethodGet, "/api/debug/pprof/*profile", pprofRoute)
-		logging.L.Warn().Msg("debug endpoints enabled - this should not be enabled in production")
-	}
+	RegisterDebugRoutes(a, authn, s.options.Debug)
 
 	// no auth required, org not required
 	noAuthnNoOrg := &routeGroup{RouterGroup: apiGroup.Group("/"), authenticationOptional: true, organizationOptional: true}

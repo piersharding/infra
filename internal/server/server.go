@@ -51,12 +51,16 @@ type Options struct {
 	// grouped by the request path.
 	EnableLogSampling bool
 
-	// EnableDebug enables debug endpoints like pprof. This should be false
-	// in production environments as pprof can expose sensitive memory information.
-	EnableDebug bool
+	// Debug contains configuration for debug endpoints like pprof.
+	// Debug endpoints should be disabled in production environments as they
+	// can expose sensitive memory information.
+	Debug DebugConfig
 
 	// CSRF contains configuration for Cross-Site Request Forgery protection.
 	CSRF CSRFConfig
+
+	// SecurityHeaders contains configuration for HTTP security headers middleware.
+	SecurityHeaders SecurityHeadersConfig
 
 	SessionDuration          time.Duration // the lifetime of the access key infra issues on login
 	SessionInactivityTimeout time.Duration // access keys issued on login must be used within this window of time, or they become invalid
@@ -132,6 +136,20 @@ type TLSOptions struct {
 	// certificate will be requested from Let's Encrypt, which will be cached
 	// in the TLSCache.
 	ACME bool
+
+	// ACMEAllowedHosts is a whitelist of hostnames that are allowed to request
+	// certificates via ACME. This is critical for security - without it, attackers
+	// could exhaust Let's Encrypt rate limits by requesting certificates for
+	// arbitrary domains. Supports exact matches and wildcard patterns (e.g., "*.example.com").
+	ACMEAllowedHosts []string
+
+	// ACMEEmail is the contact email for Let's Encrypt notifications about
+	// certificate expiration and other important updates.
+	ACMEEmail string
+
+	// ACMECacheDir is the directory to cache ACME certificates. If not set,
+	// the TLSCache option from the main server options will be used.
+	ACMECacheDir string
 }
 
 type APIOptions struct {

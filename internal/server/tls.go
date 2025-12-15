@@ -7,6 +7,8 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
+	"regexp"
+	"strings"
 	"sync"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -36,15 +38,122 @@ func (m MapCache) Delete(_ context.Context, name string) error {
 	return nil
 }
 
+// ACMEOptions contains configuration for ACME certificate management
+type ACMEOptions struct {
+	// AllowedHosts is a list of hostnames that are allowed to request certificates.
+	// Supports exact matches and wildcard patterns (e.g., "*.example.com").
+	// If empty, all hosts are rejected for security.
+	AllowedHosts []string
+
+	// Email is the contact email for Let's Encrypt notifications
+	Email string
+
+	// CacheDir is the directory to cache certificates
+	CacheDir string
+}
+
+// hostPolicy creates a HostPolicy function that validates certificate requests
+// against a whitelist of allowed hostnames. This prevents DoS attacks where
+// attackers could exhaust the certificate rate limit by requesting certificates
+// for arbitrary domains.
+func hostPolicy(allowedHosts []string) autocert.HostPolicy {
+	return func(ctx context.Context, host string) error {
+		// If no allowed hosts are configured, reject all requests for security
+		if len(allowedHosts) == 0 {
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureWarn("ACME certificate request rejected: no allowed hosts configured", map[string]interface{}{
+				"requested_host": host,
+			})
+			return fmt.Errorf("ACME host policy: no allowed hosts configured, rejecting %q", host)
+		}
+
+		// Normalize the host (lowercase, remove port if present)
+		host = strings.ToLower(host)
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+
+		// Validate the hostname format
+		if !isValidHostname(host) {
+			secureLogger := logging.SecureLogger(logging.L)
+			secureLogger.SecureWarn("ACME certificate request rejected: invalid hostname format", map[string]interface{}{
+				"requested_host": host,
+			})
+			return fmt.Errorf("ACME host policy: invalid hostname format %q", host)
+		}
+
+		for _, allowed := range allowedHosts {
+			allowed = strings.ToLower(allowed)
+
+			// Check for exact match
+			if allowed == host {
+				return nil
+			}
+
+			// Check for wildcard match (e.g., "*.example.com")
+			if strings.HasPrefix(allowed, "*.") {
+				suffix := allowed[1:] // Remove the "*" but keep the "."
+				if strings.HasSuffix(host, suffix) && strings.Count(host, ".") == strings.Count(suffix, ".") {
+					// Ensure it's a direct subdomain match, not a deeper nested subdomain
+					return nil
+				}
+			}
+		}
+
+		secureLogger := logging.SecureLogger(logging.L)
+		secureLogger.SecureWarn("ACME certificate request rejected: host not in allowed list", map[string]interface{}{
+			"requested_host": host,
+			"allowed_hosts":  allowedHosts,
+		})
+		return fmt.Errorf("ACME host policy: host %q is not in the allowed hosts list", host)
+	}
+}
+
+// isValidHostname validates that a hostname is well-formed
+var hostnameRegex = regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z]{2,}$`)
+
+func isValidHostname(host string) bool {
+	if len(host) == 0 || len(host) > 253 {
+		return false
+	}
+	// Allow IP addresses
+	if net.ParseIP(host) != nil {
+		return true
+	}
+	return hostnameRegex.MatchString(host)
+}
+
 func tlsConfigFromOptions(opts TLSOptions) (*tls.Config, error) {
-	// TODO: how can we test this?
 	if opts.ACME {
+		// Extract allowed hosts from the ACME configuration
+		allowedHosts := opts.ACMEAllowedHosts
+
+		// If no allowed hosts are explicitly configured, we should fail secure
+		// This prevents misconfiguration from exposing the server to DoS attacks
+		if len(allowedHosts) == 0 {
+			logging.L.Warn().Msg("ACME enabled but no allowed hosts configured - this is a security risk. " +
+				"Configure tls.acme-allowed-hosts to specify which domains can request certificates.")
+		}
+
 		manager := &autocert.Manager{
 			Prompt: autocert.AcceptTOS,
-			// TODO: according to the docs HostPolicy should be set to prevent
-			// a DoS attack on certificate requests.
+			// HostPolicy is critical for security - it prevents attackers from
+			// exhausting Let's Encrypt rate limits by requesting certificates
+			// for arbitrary domains they control.
 			// See https://github.com/infrahq/infra/issues/2484
+			HostPolicy: hostPolicy(allowedHosts),
 		}
+
+		// Set email for Let's Encrypt notifications if provided
+		if opts.ACMEEmail != "" {
+			manager.Email = opts.ACMEEmail
+		}
+
+		// Set cache directory if provided
+		if opts.ACMECacheDir != "" {
+			manager.Cache = autocert.DirCache(opts.ACMECacheDir)
+		}
+
 		tlsConfig := manager.TLSConfig()
 		tlsConfig.MinVersion = tls.VersionTLS12
 		return tlsConfig, nil
