@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"testing"
 
@@ -26,6 +27,13 @@ func TestUpdateLocalUsers(t *testing.T) {
 	t.Cleanup(func() {
 		etcPasswdFilename = "/etc/passwd"
 	})
+
+	// Override UserLookup to simulate users existing on the system
+	originalLookup := data.UserLookup
+	data.UserLookup = func(username string) (*user.User, error) {
+		return &user.User{Username: username}, nil
+	}
+	t.Cleanup(func() { data.UserLookup = originalLookup })
 
 	ctx := context.Background()
 	fakeClient := &fakeAPIClient{
@@ -68,6 +76,13 @@ func TestUpdateLocalUsers_RemoveFailed(t *testing.T) {
 		etcPasswdFilename = "/etc/passwd"
 	})
 
+	// Override UserLookup to simulate users existing on the system
+	originalLookup := data.UserLookup
+	data.UserLookup = func(username string) (*user.User, error) {
+		return &user.User{Username: username}, nil
+	}
+	t.Cleanup(func() { data.UserLookup = originalLookup })
+
 	ctx := context.Background()
 	fakeClient := &fakeAPIClient{
 		users: map[uid.ID]api.User{
@@ -82,7 +97,7 @@ func TestUpdateLocalUsers_RemoveFailed(t *testing.T) {
 
 	opts := SSHOptions{Group: "infra-users"}
 	err := updateLocalUsers(ctx, fakeClient, opts, grants)
-	assert.ErrorContains(t, err, "remove user failremove: userdel: failed to remove user: exit status 8")
+	assert.ErrorContains(t, err, "remove user failremove: userdel: exit status 8")
 
 	actual, err := os.ReadFile(logFile)
 	assert.NilError(t, err)

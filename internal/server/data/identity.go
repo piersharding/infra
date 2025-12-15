@@ -658,7 +658,8 @@ func UpdateIdentityLastSeenAt(tx WriteTxn, user *models.Identity) error {
 	}
 
 	// Use database-level advisory lock to prevent race conditions
-	lockKey := fmt.Sprintf("user_last_seen_%d", user.ID)
+	// pg_advisory_lock requires a bigint, so we use the user ID directly
+	lockKey := int64(user.ID)
 	_, err := tx.Exec("SELECT pg_advisory_lock($1)", lockKey)
 	if err != nil {
 		return fmt.Errorf("failed to acquire advisory lock: %w", err)
@@ -668,7 +669,11 @@ func UpdateIdentityLastSeenAt(tx WriteTxn, user *models.Identity) error {
 	}()
 
 	// Re-read the user to ensure we have the latest data
-	latestUser, err := GetIdentity(tx, GetIdentityOptions{ByID: user.ID})
+	// Must specify FromOrganization since tx may not have organization ID set
+	latestUser, err := GetIdentity(tx, GetIdentityOptions{
+		ByID:             user.ID,
+		FromOrganization: user.OrganizationID,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to re-read user: %w", err)
 	}

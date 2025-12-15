@@ -42,7 +42,7 @@ func readKeysConfig(infraSSHDir string) (*keysConfig, error) {
 
 func writeKeysConfig(infraSSHDir string, cfg *keysConfig) error {
 	filename := filepath.Join(infraSSHDir, "keys.json")
-	fh, err := os.Create(filename)
+	fh, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}

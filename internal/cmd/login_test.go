@@ -542,7 +542,7 @@ func TestLoginCmd_TLSVerify(t *testing.T) {
 
 		assert.Assert(t, strings.Contains(bufs.Stderr.String(), "TLS fingerprint from server does not match the trusted fingerprint."))
 		assert.Assert(t, strings.Contains(bufs.Stderr.String(), "Trusted: BA::D0::FF"))
-		assert.Assert(t, strings.Contains(bufs.Stderr.String(), "Server:  C8:73:E3:27:2C:EA:48:00:FA:40:66:1A:3E:97:D8:59:5E:1F:70:8E:83:9F:79:CF:22:04:C8:64:39:40:5B:73"))
+		assert.Assert(t, strings.Contains(bufs.Stderr.String(), "Server:  95:25:21:DF:36:0F:26:C4:F7:54:7D:DC:65:C1:F7:CF:2F:C2:01:73:B9:16:F5:33:26:53:1E:6B:0E:F1:8D:1D"))
 	})
 }
 

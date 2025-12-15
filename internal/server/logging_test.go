@@ -15,7 +15,6 @@ import (
 	"github.com/infrahq/infra/internal/access"
 	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/internal/server/models"
-	"github.com/infrahq/infra/uid"
 )
 
 func TestLoggingMiddleware(t *testing.T) {
@@ -116,8 +115,8 @@ func TestLoggingMiddleware(t *testing.T) {
 				Path:       "/authned",
 				StatusCode: 200,
 				Level:      "info",
-				UserID:     uid.ID(12345),
-				OrgID:      uid.ID(2323),
+				UserID:     "user_4ER",
+				OrgID:      "org_G4",
 			},
 		}
 		assert.DeepEqual(t, actual, expected)
@@ -144,6 +143,6 @@ type logEntry struct {
 	Path       string `json:"path"`
 	StatusCode int    `json:"statusCode"`
 	Level      string `json:"level"`
-	UserID     uid.ID `json:"userID"`
-	OrgID      uid.ID `json:"orgID"`
+	UserID     string `json:"userID"`
+	OrgID      string `json:"orgID"`
 }

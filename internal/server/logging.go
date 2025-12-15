@@ -97,12 +97,20 @@ func sanitizeUserIDForLogging(userID uid.ID) string {
 	if userID == 0 {
 		return "unknown"
 	}
-	return fmt.Sprintf("user_%s", userID.String()[:8])
+	idStr := userID.String()
+	if len(idStr) > 8 {
+		idStr = idStr[:8]
+	}
+	return fmt.Sprintf("user_%s", idStr)
 }
 
 func sanitizeOrgIDForLogging(orgID uid.ID) string {
 	if orgID == 0 {
 		return "unknown"
 	}
-	return fmt.Sprintf("org_%s", orgID.String()[:8])
+	idStr := orgID.String()
+	if len(idStr) > 8 {
+		idStr = idStr[:8]
+	}
+	return fmt.Sprintf("org_%s", idStr)
 }

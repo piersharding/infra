@@ -16,6 +16,9 @@ import (
 	"github.com/infrahq/infra/internal/logging"
 )
 
+// UserLookup is a variable that can be overridden in tests to mock user.Lookup
+var UserLookup = user.Lookup
+
 type LocalUser struct {
 	Username string
 	UID      string
@@ -288,8 +291,9 @@ func RemoveUser(localUser LocalUser) error {
 	}
 
 	// Try to use native Go user package first
-	if _, err := user.Lookup(localUser.Username); err != nil {
-		if errors.Is(err, user.UnknownUserError(localUser.Username)) {
+	if _, err := UserLookup(localUser.Username); err != nil {
+		var unknownUserErr user.UnknownUserError
+		if errors.As(err, &unknownUserErr) {
 			logging.L.Info().
 				Str("operation", "remove_user").
 				Str("username", sanitizeUsernameForLogging(localUser.Username)).

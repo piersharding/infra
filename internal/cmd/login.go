@@ -132,6 +132,16 @@ func login(cli *CLI, options loginCmdOptions) error {
 		}
 	}
 
+	// Early validation for non-interactive mode to fail fast without network calls
+	if options.NonInteractive {
+		if options.AccessKey == "" && options.User == "" {
+			return Error{Message: "Non-interactive login requires setting either the INFRA_ACCESS_KEY or both the INFRA_USER and INFRA_PASSWORD environment variables"}
+		}
+		if options.User != "" && options.Password == "" {
+			return Error{Message: "Non-interactive login requires setting the INFRA_PASSWORD environment variable"}
+		}
+	}
+
 	lc, err := newLoginClient(cli, options)
 	if err != nil {
 		return err

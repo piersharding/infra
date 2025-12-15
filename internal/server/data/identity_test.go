@@ -389,8 +389,7 @@ func TestListIdentities(t *testing.T) {
 		t.Run("filter by name no matches", func(t *testing.T) {
 			identities, err := ListIdentities(db, ListIdentityOptions{ByName: "xyz"})
 			assert.NilError(t, err)
-			var expected []models.Identity
-			assert.DeepEqual(t, identities, expected)
+			assert.Equal(t, len(identities), 0)
 		})
 
 		t.Run("filter by not name", func(t *testing.T) {
