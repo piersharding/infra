@@ -15,6 +15,37 @@ import (
 	"github.com/infrahq/infra/internal/server/models"
 )
 
+// TestDebugEndpointsDisabledByDefault verifies that pprof endpoints are not
+// registered when EnableDebug is false (the default production setting)
+func TestDebugEndpointsDisabledByDefault(t *testing.T) {
+	// Setup server with EnableDebug = false (default)
+	s := setupServer(t, func(t *testing.T, opts *Options) {
+		opts.EnableDebug = false
+	})
+	routes := s.GenerateRoutes()
+
+	// Create a request with valid authentication
+	key, user := createAccessKey(t, s.DB(), "admin@example.com")
+	err := data.CreateGrant(s.DB(), &models.Grant{
+		Subject:   models.NewSubjectForUser(user.ID),
+		Privilege: models.InfraSupportAdminRole,
+		Resource:  access.ResourceInfraAPI,
+		CreatedBy: user.ID,
+	})
+	assert.NilError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/debug/pprof/heap?debug=1", nil)
+	req.Header.Add("Infra-Version", apiVersionLatest)
+	req.Header.Add("Authorization", "Bearer "+key)
+
+	resp := httptest.NewRecorder()
+	routes.ServeHTTP(resp, req)
+
+	// Should return 404 because the route is not registered
+	assert.Equal(t, http.StatusNotFound, resp.Code,
+		"pprof endpoints should not be accessible when EnableDebug is false")
+}
+
 func TestAPI_PProfHandler(t *testing.T) {
 	type testCase struct {
 		name         string
@@ -23,7 +54,10 @@ func TestAPI_PProfHandler(t *testing.T) {
 		expectedResp func(t *testing.T, resp *httptest.ResponseRecorder)
 	}
 
-	s := setupServer(t)
+	// Enable debug mode to register pprof routes
+	s := setupServer(t, func(t *testing.T, opts *Options) {
+		opts.EnableDebug = true
+	})
 	routes := s.GenerateRoutes()
 
 	run := func(t *testing.T, tc testCase) {

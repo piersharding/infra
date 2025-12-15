@@ -3,6 +3,14 @@
 .test
 .vscode
 PrivateRules.mak
+/.bash_history
+/.config/
+/.local/
+/.npm/
+/crush.sh
+/.cache/
+/go/
+/test_output.log
 
 # infra binary
 dist/
