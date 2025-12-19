@@ -1,4 +1,4 @@
-import React, { Fragment } from 'react'
+import React from 'react'
 import { Transition as HeadlessTransition } from '@headlessui/react'
 
 // In tests we want to avoid animation-related async updates (timers, RAF, etc.)
@@ -9,13 +9,6 @@ const transitionsDisabled =
   process.env &&
   (process.env.DISABLE_HEADLESSUI_TRANSITIONS === '1' ||
     process.env.DISABLE_HEADLESSUI_TRANSITIONS === 'true')
-
-function asComponent(as) {
-  // Headless UI defaults most Transition components to Fragment.
-  // When `as` is Fragment or undefined, we can safely just return children.
-  if (!as || as === Fragment) return null
-  return as
-}
 
 /**
  * `Transition` wrapper that behaves like `@headlessui/react` Transition, but can

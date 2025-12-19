@@ -62,7 +62,7 @@ release-artefacts: ## build the release artefacts and publish ti gitlab
 	RELEASE_NAME=v$(TAG) GITLAB_TOKEN=$(GITLAB_TOKEN) goreleaser release --verbose --clean --skip announce,validate
 
 docker/%:
-	docker buildx build $(DOCKER_CONTEXT) --load -t infrahq/$*:dev
+	docker buildx build $(DOCKER_CONTEXT) --load -t registry.gitlab.com/ska-telescope/external/infra/$*:dev
 
 docker-build: fmt vet
 	docker buildx build $(DOCKER_CONTEXT) --build-arg BUILDVERSION=v$(TAG) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
@@ -91,34 +91,49 @@ docker/ui: DOCKER_CONTEXT=ui
 dev: dev/server
 
 dev/context:
-	kubectl config use-context docker-desktop
+	kubectl config use-context minikube
 
 helm/update:
 	helm repo update infrahq
 
+INFRA_ACCESS_KEY ?= 06e294c1bb.f636105ae3142c1c896fe1f9
+INFRA_PASSWORD ?= Passw0rd1!Thing
 dev/server: dev/context docker/infra docker/ui helm/update
-	helm upgrade --install --wait \
+	minikube image load $(DOCKER_REGISTRY)/infra:dev
+	minikube image load $(DOCKER_REGISTRY)/ui:dev
+	kubectl create ns infra || true
+	kubectl -n infra create secret generic infra-server-access-key --from-literal=access-key=$(INFRA_ACCESS_KEY) || true
+	kubectl -n infra create secret generic infra-server-initial-admin-secret --from-literal=password=$(INFRA_PASSWORD) || true
+
+	helm upgrade -n infra --install --wait \
+    	--set-string config.admin.enable=true \
+    	--set-string config.admin.accessKeySecret=infra-server-access-key \
+	    --set-string server.service.type=LoadBalancer \
 		--set-string server.image.pullPolicy=Never \
+		--set-string server.image.repository=$(DOCKER_REGISTRY)/infra \
 		--set-string server.image.tag=dev \
-		--set-string server.podAnnotations.checksum=$$(docker images -q infrahq/infra:dev) \
+		--set-string server.podAnnotations.checksum=$$(docker images -q $(DOCKER_REGISTRY)/infra/infra:dev) \
+	    --set-string ui.service.type=LoadBalancer \
 		--set-string ui.image.pullPolicy=Never \
+		--set-string ui.image.repository=$(DOCKER_REGISTRY)/ui \
 		--set-string ui.image.tag=dev \
-		--set-string ui.podAnnotations.checksum=$$(docker images -q infrahq/ui:dev) \
+		--set-string ui.podAnnotations.checksum=$$(docker images -q $(DOCKER_REGISTRY)/infra/ui:dev) \
 		infra-server infrahq/infra-server \
 		$(flags)
 
 dev/connector: dev/context docker/infra
-	helm upgrade --install --wait \
+	helm upgrade -n infra --install --wait \
 		--set-string connector.image.pullPolicy=Never \
+		--set-string connector.image.repository=$(DOCKER_REGISTRY)/infra \
 		--set-string connector.image.tag=dev \
-		--set-string connector.podAnnotations.checksum=$$(docker images -q infrahq/infra:dev) \
+		--set-string connector.podAnnotations.checksum=$$(docker images -q $(DOCKER_REGISTRY)/infra:dev) \
 		infra infrahq/infra \
 		$(flags)
 
 dev/clean:
-	kubectl config use-context docker-desktop
-	helm uninstall infra-server || true
-	helm uninstall infra || true
+	kubectl config use-context minikube
+	helm -n infra uninstall infra-server || true
+	helm -n infra uninstall infra || true
 
 postgres:
 	docker run -d --name=postgres-dev --rm \

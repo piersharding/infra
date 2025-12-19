@@ -13,7 +13,7 @@ import Loader from '../../../components/loader'
 import RemoveButton from '../../../components/remove-button'
 import GrantForm from '../../../components/grant-form'
 import { useUser } from '../../../lib/hooks'
-import { sortByPrivilege, sortByRole, sortBySubject } from '../../../lib/grants'
+import { sortByPrivilege } from '../../../lib/grants'
 
 export default function UserDetail() {
   const router = useRouter()
@@ -21,9 +21,7 @@ export default function UserDetail() {
   const [selectedResources, setSelectedResources] = useState([])
 
   const { user: currentUser, isAdmin, isAdminLoading } = useUser()
-  const { data: user, mutate: mutateUser } = useSWR(
-    userId ? `/api/users/${userId}` : null
-  )
+  const { data: user } = useSWR(userId ? `/api/users/${userId}` : null)
   const { data: { items: grants } = {}, mutate } = useSWR(
     userId ? `/api/grants?user=${userId}&showInherited=1&limit=1000` : null
   )
@@ -39,15 +37,12 @@ export default function UserDetail() {
   const destinationRolesMap = useMemo(() => {
     const map = new Map()
     destinations?.forEach(d => {
-      map.set(
-        d.name,
-        d.roles && d.roles.length > 0 ? d.roles : ['connect']
-      )
+      map.set(d.name, d.roles && d.roles.length > 0 ? d.roles : ['connect'])
     })
     return map
   }, [destinations])
 
-const grantsList = useMemo(() => {
+  const grantsList = useMemo(() => {
     const entriesMap = new Map()
     grants?.forEach(g => {
       const resource = g.resource
@@ -105,7 +100,9 @@ const grantsList = useMemo(() => {
           <Link href='/users' className='text-gray-500 hover:text-gray-700'>
             <ChevronLeftIcon className='h-4 w-4' />
           </Link>
-          <h1 className='py-1 font-display text-xl font-medium'>{user?.name}</h1>
+          <h1 className='py-1 font-display text-xl font-medium'>
+            {user?.name}
+          </h1>
         </div>
         <div className='text-xs text-gray-500'>
           Created {user?.created ? dayjs(user.created).fromNow() : '-'} • Last
@@ -137,7 +134,11 @@ const grantsList = useMemo(() => {
             <div key={kind} className='mt-4'>
               <div className='mb-2 flex items-center space-x-2 text-xs font-semibold text-gray-700'>
                 {kind === 'kubernetes' ? (
-                  <img alt='kubernetes icon' className='h-4' src={`/kubernetes.svg`} />
+                  <img
+                    alt='kubernetes icon'
+                    className='h-4'
+                    src={`/kubernetes.svg`}
+                  />
                 ) : kind === 'ssh' ? (
                   <CommandLineIcon className='h-4 w-4 text-gray-800' />
                 ) : kind === 'infra' ? (
@@ -148,41 +149,52 @@ const grantsList = useMemo(() => {
                 <span className='uppercase'>{kind}</span>
               </div>
               <div className='space-y-2'>
-                {rows.map(({ resource, privileges, hasGroupGrant, hasUserGrant, userGrantIds, groupNames }) => (
-                  <div
-                    key={`${kind}-${resource}`}
-                    className='flex items-center justify-between rounded-md border border-gray-200 px-3 py-2'
-                  >
-                    <div className='flex flex-col'>
-                      <span className='text-xs font-medium text-gray-800'>
-                        {resource || 'cluster'}
-                      </span>
-                      <span className='text-2xs text-gray-500'>
-                        {privileges.sort(sortByPrivilege).join(', ')}
-                        {hasGroupGrant && (
-                          <span className='ml-1 italic text-gray-500'>
-                            (inherited from {groupNames.join(', ')})
-                          </span>
-                        )}
-                      </span>
+                {rows.map(
+                  ({
+                    resource,
+                    privileges,
+                    hasGroupGrant,
+                    hasUserGrant,
+                    userGrantIds,
+                    groupNames,
+                  }) => (
+                    <div
+                      key={`${kind}-${resource}`}
+                      className='flex items-center justify-between rounded-md border border-gray-200 px-3 py-2'
+                    >
+                      <div className='flex flex-col'>
+                        <span className='text-xs font-medium text-gray-800'>
+                          {resource || 'cluster'}
+                        </span>
+                        <span className='text-2xs text-gray-500'>
+                          {privileges.sort(sortByPrivilege).join(', ')}
+                          {hasGroupGrant && (
+                            <span className='ml-1 italic text-gray-500'>
+                              (inherited from {groupNames.join(', ')})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      {isAdmin && hasUserGrant && (
+                        <RemoveButton
+                          onClick={async () => {
+                            await fetch('/api/grants', {
+                              method: 'PATCH',
+                              body: JSON.stringify({
+                                grantsToRemove: userGrantIds.map(id => ({
+                                  id,
+                                })),
+                              }),
+                            })
+                            mutate()
+                          }}
+                        >
+                          <TrashIcon className='mr-2 h-4 w-4' /> Remove
+                        </RemoveButton>
+                      )}
                     </div>
-                    {isAdmin && hasUserGrant && (
-                      <RemoveButton
-                        onClick={async () => {
-                          await fetch('/api/grants', {
-                            method: 'PATCH',
-                            body: JSON.stringify({
-                              grantsToRemove: userGrantIds.map(id => ({ id })),
-                            }),
-                          })
-                          mutate()
-                        }}
-                      >
-                        <TrashIcon className='mr-2 h-4 w-4' /> Remove
-                      </RemoveButton>
-                    )}
-                  </div>
-                ))}
+                  )
+                )}
               </div>
             </div>
           )
@@ -194,7 +206,9 @@ const grantsList = useMemo(() => {
           <h3 className='text-sm font-medium text-gray-800'>Add grant</h3>
           <div className='mt-3 flex flex-col space-y-3'>
             <GrantForm
-              roles={destinationRolesMap.get(selectedResources[0]) || ['connect']}
+              roles={
+                destinationRolesMap.get(selectedResources[0]) || ['connect']
+              }
               selectedResources={selectedResources}
               multiselect={false}
               grants={grants}

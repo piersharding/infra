@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useCallback } from 'react'
 
-import Transition from '@/components/ui/transition'
+import Transition from './ui/transition'
 import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/outline'
 
 export default function Notification({
