@@ -1,25 +1,43 @@
+---
+version: 0.2
 ui:
   proxyUrl: http://localhost:3000
-
 tls:
   ca: internal/server/testdata/pki/ca.crt
   caPrivateKey: internal/server/testdata/pki/ca.key
 
 dbHost: localhost
-dbName: postgres
-dbPort: 15432
-dbUsername: postgres
-dbPassword: password123
+dbName: infra
+dbPort: 5432
+dbUsername: infra
+dbPassword: infra
+# dbEncryptionKey: internal/server/testdata/encryption-key/key
+
+# admin:
+#   accessKeySecret: infra-admin-access-key
+#   enable: true
+#   enabled: true
 
 # enableSignup: true
+#
 baseDomain: localhost
 
+enableTelemetry: true
+logLevel: debug
+sessionDuration: 720h0m0s
+sessionExtensionDeadline: 72h0m0s
+
 addr:
-  http: :10000
-  https: :9443   # or whatever you prefer
+  http: :8080
+  https: :8443 # or whatever you prefer
   metrics: :9090
 
 users:
   - infraRole: admin
     name: dev@local
-    password: "password"
+    password: "password123!This"
+# users:
+#   - accessKey: file:internal/server/testdata/initial-admin-access-key-secret/access-key
+#     infraRole: admin
+#     name: admin@local
+#     password: file:internal/server/testdata/initial-admin-password-secret/password

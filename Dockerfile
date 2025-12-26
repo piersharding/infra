@@ -37,7 +37,10 @@ EXPOSE 80
 EXPOSE 443
 ARG USER=infra
 ARG GROUP=infra
+RUN mkdir -p /home/infra/.infra
 RUN addgroup -g 1000 $GROUP && adduser -u 1000 -DG $GROUP $USER
+RUN chown -R $USER:$GROUP /home/infra
 USER $USER:$GROUP
+WORKDIR /home/infra
 ENTRYPOINT ["/bin/infra"]
 CMD ["server"]

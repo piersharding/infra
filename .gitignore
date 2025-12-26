@@ -22,3 +22,8 @@ SECURITY_AUDIT_REPORT.md
 package-files/
 mytools/
 bin/
+
+internal/server/testdata/encryption-key/
+internal/server/testdata/initial-admin-access-key-secret/
+internal/server/testdata/initial-admin-password-secret/
+internal/server/testdata/pki/ca-public.pem
