@@ -16,8 +16,7 @@ REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-# TAG ?= 0.21.6
-TAG ?= dev
+TAG ?= 0.21.7
 GITLAB_TOKEN ?=
 
 LINT_ARGS ?= --fix

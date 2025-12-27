@@ -6,7 +6,7 @@ import (
 
 var (
 	Branch  = "main"
-	Version = "0.21.6"
+	Version = "0.21.7"
 	Commit  = ""
 	Date    = ""
 )
