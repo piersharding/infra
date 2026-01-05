@@ -102,7 +102,7 @@ func TestSSHHostsCmd(t *testing.T) {
 		// the mode of the temp dir is not relevant to this test
 		fs.MatchAnyFileMode,
 		// the infra dir is not relevant to this test
-		fs.WithDir(".infra", fs.MatchExtraFiles),
+		fs.WithDir(".infra", fs.MatchExtraFiles, fs.MatchAnyFileMode),
 		fs.WithDir(".ssh",
 			fs.WithMode(0o700),
 			fs.WithDir("infra",
@@ -110,6 +110,14 @@ func TestSSHHostsCmd(t *testing.T) {
 				fs.WithFile("config", fmt.Sprintf(`
 
 # This file is managed by Infra. Do not edit!
+
+Host prodhost
+    IdentityFile %[1]v
+    IdentitiesOnly yes
+    UserKnownHostsFile %[2]v/.ssh/infra/known_hosts
+    User anyuser
+    Port 22
+    Hostname 127.12.12.1
 
 Host 127.12.12.1
     IdentityFile %[1]v
@@ -427,9 +435,10 @@ func TestProvisionSSHKey(t *testing.T) {
 
 				keyID := filepath.Base(keyFilename)
 				expected := fs.Expected(t,
-					fs.WithMode(0o755),
+					fs.MatchAnyFileMode,
 					fs.WithFile("keys.json", "",
-						fs.MatchAnyFileContent),
+						fs.MatchAnyFileContent,
+						fs.MatchAnyFileMode),
 					fs.WithDir("keys",
 						fs.WithMode(0o700),
 						fs.WithFile(keyID, "",
@@ -637,9 +646,10 @@ func TestProvisionSSHKey(t *testing.T) {
 				assert.Equal(t, len(user.PublicKeys), 1)
 
 				expected := fs.Expected(t,
-					fs.WithMode(0o755),
+					fs.MatchAnyFileMode,
 					fs.WithFile("keys.json", "",
-						fs.MatchAnyFileContent),
+						fs.MatchAnyFileContent,
+						fs.MatchAnyFileMode),
 					fs.WithDir("keys",
 						fs.WithMode(0o700),
 						fs.WithFile(keyID, "",

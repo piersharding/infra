@@ -11,6 +11,15 @@ type Redis struct {
 	client *redis.Client
 }
 
+// Client returns the underlying Redis client
+// This is useful for components that need direct access to Redis operations
+func (r *Redis) Client() *redis.Client {
+	if r == nil {
+		return nil
+	}
+	return r.client
+}
+
 type Options struct {
 	Host     string
 	Port     int

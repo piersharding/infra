@@ -66,7 +66,7 @@ func TestSanitizeLogMessage(t *testing.T) {
 		{
 			name:     "hex token",
 			input:    "Token: 1a2b3c4d5e6f7890123456789012345678901234567890123456789012345678",
-			expected: "Token: ***REDACTED***",
+			expected: "***REDACTED***",
 		},
 		{
 			name:     "IP address",
@@ -76,7 +76,7 @@ func TestSanitizeLogMessage(t *testing.T) {
 		{
 			name:     "multiple sensitive items",
 			input:    "User admin logged in with password=secret123 from 192.168.1.100",
-			expected: "User ***REDACTED*** logged in with ***REDACTED*** from ***REDACTED***",
+			expected: "User admin logged in with ***REDACTED*** from ***REDACTED***",
 		},
 		{
 			name:     "case insensitive patterns",

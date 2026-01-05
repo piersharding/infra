@@ -1,6 +1,7 @@
 import { Fragment, useRef } from 'react'
 
-import { Dialog, Transition } from '@headlessui/react'
+import { Dialog } from '@headlessui/react'
+import Transition from './ui/transition'
 import { TrashIcon } from '@heroicons/react/24/outline'
 
 export default function DeleteModal({
@@ -20,6 +21,7 @@ export default function DeleteModal({
       <Dialog
         as='div'
         className='relative z-50'
+        open={open}
         initialFocus={deleteButtonRef}
         onClose={() => {
           onCancel()

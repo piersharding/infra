@@ -14,6 +14,7 @@ func TestValidateUsername(t *testing.T) {
 		name     string
 		username string
 		wantErr  bool
+		errMsg   string
 	}{
 		{
 			name:     "valid username - letters only",
@@ -41,29 +42,33 @@ func TestValidateUsername(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:     "valid username - exactly 32 chars",
-			username: "12345678901234567890123456789012",
+			name:     "valid username - mixed case with numbers",
+			username: "User123Name",
 			wantErr:  false,
 		},
 		{
 			name:     "invalid username - too short",
 			username: "",
 			wantErr:  true,
+			errMsg:   "invalid username format",
 		},
 		{
 			name:     "invalid username - too long",
 			username: "123456789012345678901234567890123",
 			wantErr:  true,
+			errMsg:   "invalid username format",
 		},
 		{
 			name:     "invalid username - special characters",
 			username: "user@domain",
 			wantErr:  true,
+			errMsg:   "invalid username format",
 		},
 		{
 			name:     "invalid username - spaces",
 			username: "user name",
 			wantErr:  true,
+			errMsg:   "invalid username format",
 		},
 		{
 			name:     "valid username - uppercase letters",
@@ -74,6 +79,7 @@ func TestValidateUsername(t *testing.T) {
 			name:     "invalid username - special symbols",
 			username: "user$",
 			wantErr:  true,
+			errMsg:   "invalid username format",
 		},
 	}
 
@@ -82,10 +88,268 @@ func TestValidateUsername(t *testing.T) {
 			err := validateUsername(tt.username)
 			if tt.wantErr {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "invalid username format")
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestValidateUsernameStrict(t *testing.T) {
+	tests := []struct {
+		name     string
+		username string
+		wantErr  bool
+		errMsg   string
+	}{
+		// Valid usernames
+		{
+			name:     "valid username - letters only",
+			username: "alice",
+			wantErr:  false,
+		},
+		{
+			name:     "valid username - alphanumeric",
+			username: "user123",
+			wantErr:  false,
+		},
+		{
+			name:     "valid username - with underscore",
+			username: "user_name",
+			wantErr:  false,
+		},
+		{
+			name:     "valid username - letters and numbers mixed",
+			username: "a1b2c3",
+			wantErr:  false,
+		},
+		{
+			name:     "valid username - single letter followed by numbers",
+			username: "u12345",
+			wantErr:  false,
+		},
+
+		// Reserved usernames
+		{
+			name:     "reserved username - root",
+			username: "root",
+			wantErr:  true,
+			errMsg:   "reserved for system use",
+		},
+		{
+			name:     "reserved username - admin",
+			username: "admin",
+			wantErr:  true,
+			errMsg:   "reserved for system use",
+		},
+		{
+			name:     "reserved username - ROOT (case insensitive)",
+			username: "ROOT",
+			wantErr:  true,
+			errMsg:   "reserved for system use",
+		},
+		{
+			name:     "reserved username - daemon",
+			username: "daemon",
+			wantErr:  true,
+			errMsg:   "reserved for system use",
+		},
+		{
+			name:     "reserved username - nobody",
+			username: "nobody",
+			wantErr:  true,
+			errMsg:   "reserved for system use",
+		},
+		{
+			name:     "reserved username - sshd",
+			username: "sshd",
+			wantErr:  true,
+			errMsg:   "reserved for system use",
+		},
+		{
+			name:     "reserved username - mysql",
+			username: "mysql",
+			wantErr:  true,
+			errMsg:   "reserved for system use",
+		},
+		{
+			name:     "reserved username - postgres",
+			username: "postgres",
+			wantErr:  true,
+			errMsg:   "reserved for system use",
+		},
+		{
+			name:     "reserved username - nginx",
+			username: "nginx",
+			wantErr:  true,
+			errMsg:   "reserved for system use",
+		},
+
+		// Numeric-only usernames (could conflict with UIDs)
+		{
+			name:     "numeric only - single digit",
+			username: "1",
+			wantErr:  true,
+			errMsg:   "cannot be numeric only",
+		},
+		{
+			name:     "numeric only - multiple digits",
+			username: "12345",
+			wantErr:  true,
+			errMsg:   "cannot be numeric only",
+		},
+		{
+			name:     "numeric only - exactly 32 digits",
+			username: "12345678901234567890123456789012",
+			wantErr:  true,
+			errMsg:   "cannot be numeric only",
+		},
+
+		// Usernames starting with hyphen (could be interpreted as command flag)
+		{
+			name:     "starts with hyphen",
+			username: "-user",
+			wantErr:  true,
+			errMsg:   "cannot start with a hyphen",
+		},
+		{
+			name:     "starts with hyphen - dash only",
+			username: "-",
+			wantErr:  true,
+			errMsg:   "cannot start with a hyphen",
+		},
+
+		// Usernames starting with dot (hidden files/directories)
+		{
+			name:     "starts with dot",
+			username: ".hidden",
+			wantErr:  true,
+			errMsg:   "cannot start with a dot",
+		},
+
+		// Empty and whitespace
+		{
+			name:     "empty username",
+			username: "",
+			wantErr:  true,
+			errMsg:   "invalid username format",
+		},
+
+		// Too long
+		{
+			name:     "too long - 33 chars",
+			username: "123456789012345678901234567890123",
+			wantErr:  true,
+			errMsg:   "invalid username format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateUsernameStrict(tt.username)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateUsernameStrict_CommandInjectionPrevention(t *testing.T) {
+	// These test cases specifically verify that potential command injection
+	// patterns are properly rejected
+	injectionAttempts := []struct {
+		name     string
+		username string
+		errMsg   string
+	}{
+		// Note: Most of these will be caught by the regex first,
+		// but we test them anyway to ensure defense in depth
+		{
+			name:     "path traversal attempt",
+			username: "user/../etc",
+		},
+		{
+			name:     "shell variable injection",
+			username: "user$HOME",
+		},
+		{
+			name:     "command substitution backtick",
+			username: "user`id`",
+		},
+		{
+			name:     "command separator",
+			username: "user;id",
+		},
+		{
+			name:     "pipe injection",
+			username: "user|cat",
+		},
+		{
+			name:     "background execution",
+			username: "user&",
+		},
+		{
+			name:     "redirect output",
+			username: "user>file",
+		},
+		{
+			name:     "redirect input",
+			username: "user<file",
+		},
+		{
+			name:     "subshell",
+			username: "user()",
+		},
+		{
+			name:     "glob wildcard star",
+			username: "user*",
+		},
+		{
+			name:     "glob wildcard question",
+			username: "user?",
+		},
+		{
+			name:     "home directory expansion",
+			username: "~user",
+		},
+		{
+			name:     "newline injection",
+			username: "user\nid",
+		},
+		{
+			name:     "null byte injection",
+			username: "user\x00id",
+		},
+	}
+
+	for _, tt := range injectionAttempts {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateUsernameStrict(tt.username)
+			assert.Error(t, err, "username %q should be rejected", tt.username)
+		})
+	}
+}
+
+func TestReservedUsernames(t *testing.T) {
+	// Verify that the reserved usernames list includes critical system accounts
+	criticalUsernames := []string{
+		"root", "admin", "daemon", "bin", "sys", "nobody",
+		"sshd", "mysql", "postgres", "nginx", "apache",
+	}
+
+	for _, username := range criticalUsernames {
+		t.Run(username, func(t *testing.T) {
+			err := validateUsernameStrict(username)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "reserved for system use")
 		})
 	}
 }

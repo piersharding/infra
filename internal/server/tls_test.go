@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"net"
@@ -13,6 +14,162 @@ import (
 
 	"github.com/infrahq/infra/internal/cmd/types"
 )
+
+// TestACMEHostPolicy tests the ACME HostPolicy function to ensure it properly
+// validates certificate requests against the allowed hosts whitelist.
+// This is critical for preventing DoS attacks on Let's Encrypt rate limits.
+func TestACMEHostPolicy(t *testing.T) {
+	testCases := []struct {
+		name         string
+		allowedHosts []string
+		requestHost  string
+		expectError  bool
+		errorMsg     string
+	}{
+		{
+			name:         "no allowed hosts configured - reject all",
+			allowedHosts: nil,
+			requestHost:  "example.com",
+			expectError:  true,
+			errorMsg:     "no allowed hosts configured",
+		},
+		{
+			name:         "empty allowed hosts - reject all",
+			allowedHosts: []string{},
+			requestHost:  "example.com",
+			expectError:  true,
+			errorMsg:     "no allowed hosts configured",
+		},
+		{
+			name:         "exact match allowed",
+			allowedHosts: []string{"example.com"},
+			requestHost:  "example.com",
+			expectError:  false,
+		},
+		{
+			name:         "exact match case insensitive",
+			allowedHosts: []string{"Example.COM"},
+			requestHost:  "example.com",
+			expectError:  false,
+		},
+		{
+			name:         "host not in allowed list",
+			allowedHosts: []string{"example.com"},
+			requestHost:  "attacker.com",
+			expectError:  true,
+			errorMsg:     "not in the allowed hosts list",
+		},
+		{
+			name:         "wildcard match - direct subdomain",
+			allowedHosts: []string{"*.example.com"},
+			requestHost:  "api.example.com",
+			expectError:  false,
+		},
+		{
+			name:         "wildcard match - case insensitive",
+			allowedHosts: []string{"*.Example.COM"},
+			requestHost:  "API.example.com",
+			expectError:  false,
+		},
+		{
+			name:         "wildcard does not match base domain",
+			allowedHosts: []string{"*.example.com"},
+			requestHost:  "example.com",
+			expectError:  true,
+			errorMsg:     "not in the allowed hosts list",
+		},
+		{
+			name:         "wildcard does not match nested subdomain",
+			allowedHosts: []string{"*.example.com"},
+			requestHost:  "deep.api.example.com",
+			expectError:  true,
+			errorMsg:     "not in the allowed hosts list",
+		},
+		{
+			name:         "multiple allowed hosts - match first",
+			allowedHosts: []string{"example.com", "example.org"},
+			requestHost:  "example.com",
+			expectError:  false,
+		},
+		{
+			name:         "multiple allowed hosts - match second",
+			allowedHosts: []string{"example.com", "example.org"},
+			requestHost:  "example.org",
+			expectError:  false,
+		},
+		{
+			name:         "host with port - port stripped",
+			allowedHosts: []string{"example.com"},
+			requestHost:  "example.com:443",
+			expectError:  false,
+		},
+		{
+			name:         "invalid hostname format rejected",
+			allowedHosts: []string{"example.com"},
+			requestHost:  "not a valid hostname!",
+			expectError:  true,
+			errorMsg:     "invalid hostname format",
+		},
+		{
+			name:         "IP address allowed when in list",
+			allowedHosts: []string{"192.168.1.1"},
+			requestHost:  "192.168.1.1",
+			expectError:  false,
+		},
+		{
+			name:         "empty host rejected",
+			allowedHosts: []string{"example.com"},
+			requestHost:  "",
+			expectError:  true,
+			errorMsg:     "invalid hostname format",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			policy := hostPolicy(tc.allowedHosts)
+			err := policy(context.Background(), tc.requestHost)
+
+			if tc.expectError {
+				assert.Assert(t, err != nil, "expected error but got nil")
+				if tc.errorMsg != "" {
+					assert.ErrorContains(t, err, tc.errorMsg)
+				}
+			} else {
+				assert.NilError(t, err)
+			}
+		})
+	}
+}
+
+// TestIsValidHostname tests the hostname validation function
+func TestIsValidHostname(t *testing.T) {
+	testCases := []struct {
+		name     string
+		hostname string
+		valid    bool
+	}{
+		{"valid domain", "example.com", true},
+		{"valid subdomain", "api.example.com", true},
+		{"valid with numbers", "api123.example.com", true},
+		{"valid with hyphens", "my-api.example.com", true},
+		{"valid IP v4", "192.168.1.1", true},
+		{"valid IP v6", "::1", true},
+		{"empty string", "", false},
+		{"too long", string(make([]byte, 254)), false},
+		{"invalid characters", "exam ple.com", false},
+		{"starts with hyphen", "-example.com", false},
+		{"ends with hyphen", "example-.com", false},
+		{"single char TLD", "example.c", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isValidHostname(tc.hostname)
+			assert.Equal(t, result, tc.valid)
+		})
+	}
+}
 
 func TestTLSConfigFromOptions(t *testing.T) {
 	ca := golden.Get(t, "pki/ca.crt")

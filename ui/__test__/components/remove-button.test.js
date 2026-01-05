@@ -3,9 +3,9 @@ import { render, screen, fireEvent } from '@testing-library/react'
 
 import RemoveButton from '../../components/remove-button'
 
-jest.mock('@headlessui/react', () => ({
-  ...jest.requireActual('@headlessui/react'),
-}))
+// NOTE: Do not mock `@headlessui/react` here.
+// Transitions are controlled via our wrapper (`components/ui/transition`) in the app code.
+// Mocking Headless UI at the package level can break `Dialog` semantics in tests.
 
 global.IntersectionObserver = jest.fn(() => ({
   observe: () => {},

@@ -12,8 +12,9 @@ import {
   AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline'
 import { CommandLineIcon } from '@heroicons/react/24/solid'
-import { Dialog, Transition, Combobox, Listbox } from '@headlessui/react'
+import { Dialog, Combobox, Listbox } from '@headlessui/react'
 
+import Transition from '../../components/ui/transition'
 import { useUser } from '../../lib/hooks'
 import { descriptions, sortByRole } from '../../lib/grants'
 

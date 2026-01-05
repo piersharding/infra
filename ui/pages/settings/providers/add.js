@@ -5,9 +5,10 @@ import Link from 'next/link'
 
 import { useSWRConfig } from 'swr'
 import Tippy from '@tippyjs/react'
-import { Transition, Dialog } from '@headlessui/react'
+import { Dialog } from '@headlessui/react'
 import { XMarkIcon, InformationCircleIcon } from '@heroicons/react/24/outline'
 
+import Transition from '../../../components/ui/transition'
 import { providers } from '../../../lib/providers'
 
 import Dashboard from '../../../components/layouts/dashboard'

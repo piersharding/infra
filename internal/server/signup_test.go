@@ -421,7 +421,7 @@ func TestAPI_SignupUserPass(t *testing.T) {
 
 				expected := []api.FieldError{
 					{FieldName: "password", Errors: []string{
-						"8 characters",
+						"must be at least 8 characters",
 					}},
 				}
 				assert.DeepEqual(t, respBody.FieldErrors, expected)
@@ -559,7 +559,7 @@ func TestAPI_SignupUserPass(t *testing.T) {
 				return api.SignupRequest{
 					User: &api.SignupUser{
 						UserName: "admin@example.com",
-						Password: "password",
+						Password: "myuniquepassword123",
 					},
 					OrgName:   "acme",
 					Subdomain: "acme-co",

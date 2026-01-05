@@ -1,0 +1,34 @@
+---
+version: 0.2
+addr:
+  http: :8080
+  https: :8443
+  metrics: :9090
+admin:
+  # accessKeySecret: infra-admin-access-key
+  enable: true
+  enabled: true
+# dbEncryptionKey: /home/infra/internal/server/testdata/encryption-key/key
+dbHost: localhost
+dbName: infra
+dbParameters:
+dbPassword: infra
+dbPort: 5432
+dbUsername: infra
+enableTelemetry: true
+logLevel: debug
+sessionDuration: 720h0m0s
+sessionExtensionDeadline: 72h0m0s
+tls:
+  ca: /home/infra/internal/server/testdata/pki/ca.crt
+  caPrivateKey: /home/infra/internal/server/testdata/pki/ca.key
+ui:
+  proxyURL: http://localhost:3000
+users:
+  - accessKey: file:/home/infra/internal/server/testdata/initial-admin-access-key-secret/access-key
+    infraRole: admin
+    name: admin@local
+    password: file:/home/infra/internal/server/testdata/initial-admin-password-secret/password
+  - infraRole: admin
+    name: dev@local
+    password: "password123!This"

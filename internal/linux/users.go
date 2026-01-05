@@ -10,10 +10,14 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/internal/logging"
 )
+
+// UserLookup is a variable that can be overridden in tests to mock user.Lookup
+var UserLookup = user.Lookup
 
 type LocalUser struct {
 	Username string
@@ -27,10 +31,112 @@ const sentinelManagedByInfra = "managed by infra"
 
 var ValidUsernameRegex = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,32}$`)
 
+// reservedUsernames contains system usernames that should not be created or modified
+// These are common reserved usernames on Linux/Unix systems that could be security risks
+var reservedUsernames = []string{
+	"root", "admin", "administrator", "daemon", "bin", "sys", "sync",
+	"games", "man", "lp", "mail", "news", "uucp", "proxy", "www-data",
+	"backup", "list", "irc", "gnats", "nobody", "systemd-network",
+	"systemd-resolve", "messagebus", "syslog", "pulse", "avahi",
+	"colord", "geoclue", "gnome-initial-setup", "gdm", "sssd",
+	"chrony", "sshd", "ntp", "postfix", "dovecot", "mysql", "postgres",
+	"redis", "mongodb", "nginx", "apache", "http", "ftp", "git",
+	"docker", "libvirt", "qemu", "kvm", "polkitd", "rtkit", "cups",
+	"lightdm", "dnsmasq", "tcpdump", "tss", "usbmux", "kernoops",
+	"avahi-autoipd", "speech-dispatcher", "whoopsie", "hplip",
+}
+
+// dangerousPatterns contains patterns that could be used for path traversal or shell injection
+var dangerousPatterns = []string{
+	"..",   // path traversal
+	"./",   // relative path
+	"/",    // absolute path
+	"\\",   // windows path separator
+	"$",    // shell variable
+	"`",    // command substitution
+	";",    // command separator
+	"|",    // pipe
+	"&",    // background/and
+	">",    // redirect
+	"<",    // redirect
+	"(",    // subshell
+	")",    // subshell
+	"{",    // brace expansion
+	"}",    // brace expansion
+	"[",    // glob
+	"]",    // glob
+	"*",    // glob
+	"?",    // glob
+	"!",    // history expansion
+	"~",    // home directory
+	"\n",   // newline
+	"\r",   // carriage return
+	"\t",   // tab
+	"\x00", // null byte
+}
+
 func validateUsername(username string) error {
+	return validateUsernameStrict(username)
+}
+
+// validateUsernameStrict performs comprehensive validation of usernames to prevent
+// command injection and other security issues when executing system commands.
+// This function implements defense-in-depth by checking multiple security constraints.
+func validateUsernameStrict(username string) error {
+	// Basic format validation with regex
 	if !ValidUsernameRegex.MatchString(username) {
 		return fmt.Errorf("invalid username format: must be 1-32 characters and contain only letters, numbers, dots, underscores, or hyphens")
 	}
+
+	// Check for empty or whitespace-only username
+	if strings.TrimSpace(username) == "" {
+		return fmt.Errorf("username cannot be empty or whitespace only")
+	}
+
+	// Username must not start with a hyphen (could be interpreted as command flag)
+	if strings.HasPrefix(username, "-") {
+		return fmt.Errorf("username cannot start with a hyphen")
+	}
+
+	// Username must not start with a dot (hidden files/directories)
+	if strings.HasPrefix(username, ".") {
+		return fmt.Errorf("username cannot start with a dot")
+	}
+
+	// Check for dangerous patterns that could enable shell injection or path traversal
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(username, pattern) {
+			return fmt.Errorf("username contains potentially dangerous pattern")
+		}
+	}
+
+	// Check against reserved system usernames (case-insensitive)
+	usernameLower := strings.ToLower(username)
+	for _, reserved := range reservedUsernames {
+		if usernameLower == reserved {
+			return fmt.Errorf("username is reserved for system use")
+		}
+	}
+
+	// Ensure all characters are printable ASCII (defense against encoding attacks)
+	for _, r := range username {
+		if r > unicode.MaxASCII || !unicode.IsPrint(r) {
+			return fmt.Errorf("username contains non-printable or non-ASCII characters")
+		}
+	}
+
+	// Check for numeric-only usernames (could conflict with UIDs)
+	allDigits := true
+	for _, r := range username {
+		if r < '0' || r > '9' {
+			allDigits = false
+			break
+		}
+	}
+	if allDigits {
+		return fmt.Errorf("username cannot be numeric only (could conflict with UIDs)")
+	}
+
 	return nil
 }
 
@@ -185,8 +291,9 @@ func RemoveUser(localUser LocalUser) error {
 	}
 
 	// Try to use native Go user package first
-	if _, err := user.Lookup(localUser.Username); err != nil {
-		if errors.Is(err, user.UnknownUserError(localUser.Username)) {
+	if _, err := UserLookup(localUser.Username); err != nil {
+		var unknownUserErr user.UnknownUserError
+		if errors.As(err, &unknownUserErr) {
 			logging.L.Info().
 				Str("operation", "remove_user").
 				Str("username", sanitizeUsernameForLogging(localUser.Username)).

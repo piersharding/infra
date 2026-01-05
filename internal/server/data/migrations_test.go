@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -1407,7 +1408,23 @@ func dumpSchema(t *testing.T, conn string, args ...string) string {
 	cmd.Stderr = os.Stderr
 
 	assert.NilError(t, cmd.Run())
-	return out.String()
+	return filterPgDumpOutput(out.String())
+}
+
+// filterPgDumpOutput removes pg_dump 17+ specific tokens that change between runs.
+// PostgreSQL 17 introduced \restrict and \unrestrict commands in pg_dump output
+// which contain random tokens that differ between dumps.
+func filterPgDumpOutput(output string) string {
+	lines := strings.Split(output, "\n")
+	var filtered []string
+	for _, line := range lines {
+		// Skip \restrict and \unrestrict lines (PostgreSQL 17+)
+		if strings.HasPrefix(line, "\\restrict ") || strings.HasPrefix(line, "\\unrestrict ") {
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	return strings.Join(filtered, "\n")
 }
 
 func writeSchema(t *testing.T, raw string) {

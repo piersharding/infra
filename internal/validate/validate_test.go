@@ -549,6 +549,33 @@ func TestSecureUsernameRule(t *testing.T) {
 	}
 }
 
+// TestPasswordValidation tests the new password validation directly
+func TestPasswordValidation(t *testing.T) {
+	// Test common password detection with relaxed config (no complexity requirements)
+	// This tests the common password check in isolation
+	relaxedConfig := RelaxedPasswordConfig()
+
+	result := ValidatePassword("password", relaxedConfig)
+	t.Logf("password (relaxed): Valid=%v, Errors=%v", result.Valid, result.Errors)
+	assert.Assert(t, !result.Valid, "Common password 'password' should be rejected")
+	assert.Assert(t, len(result.Errors) > 0, "Should have at least one error")
+	assert.Assert(t, strings.Contains(result.Errors[0], "commonly used password"), "Error should mention common password")
+
+	result2 := ValidatePassword("qwerty123", relaxedConfig)
+	t.Logf("qwerty123 (relaxed): Valid=%v, Errors=%v", result2.Valid, result2.Errors)
+	assert.Assert(t, !result2.Valid, "Common password 'qwerty123' should be rejected")
+
+	// Test a password that meets all requirements with default config
+	result3 := ValidatePassword("MyStr0ngP@ssw0rd", DefaultPasswordConfig())
+	t.Logf("MyStr0ngP@ssw0rd: Valid=%v, Errors=%v", result3.Valid, result3.Errors)
+	assert.Assert(t, result3.Valid, "Strong password should be valid")
+
+	// Test that complexity requirements are enforced with default config
+	result4 := ValidatePassword("password", DefaultPasswordConfig())
+	t.Logf("password (default): Valid=%v, Errors=%v", result4.Valid, result4.Errors)
+	assert.Assert(t, !result4.Valid, "Simple password should fail default config")
+}
+
 // TestSecurePasswordRule tests the enhanced password validation
 func TestSecurePasswordRule(t *testing.T) {
 	tests := []struct {
@@ -564,9 +591,8 @@ func TestSecurePasswordRule(t *testing.T) {
 		},
 		{
 			name:    "valid password - minimum length",
-			value:   "12345678",
-			wantErr: true,
-			errMsg:  "must contain at least one uppercase letter",
+			value:   "Aa1!5678",
+			wantErr: false,
 		},
 		{
 			name:    "valid password - with special chars",
@@ -581,27 +607,27 @@ func TestSecurePasswordRule(t *testing.T) {
 		},
 		{
 			name:    "password without uppercase",
-			value:   "mypassword123",
+			value:   "mypassword123!",
 			wantErr: true,
-			errMsg:  "must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+			errMsg:  "must contain at least one uppercase letter",
 		},
 		{
 			name:    "password without lowercase",
-			value:   "MYPASSWORD123",
+			value:   "MYPASSWORD123!",
 			wantErr: true,
-			errMsg:  "must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+			errMsg:  "must contain at least one lowercase letter",
 		},
 		{
 			name:    "password without numbers",
-			value:   "MyPassword!",
+			value:   "MyPassword!!",
 			wantErr: true,
-			errMsg:  "must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+			errMsg:  "must contain at least one number",
 		},
 		{
 			name:    "password without special characters",
 			value:   "MyPassword123",
 			wantErr: true,
-			errMsg:  "must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+			errMsg:  "must contain at least one special character",
 		},
 		{
 			name:    "empty password - valid for optional",
@@ -610,9 +636,9 @@ func TestSecurePasswordRule(t *testing.T) {
 		},
 		{
 			name:    "password exceeding max length",
-			value:   "ThisIsAVeryLongPasswordThatExceedsTheMaximumLengthAllowedByTheSystemAndShouldFailValidation",
+			value:   "ThisIsAVeryLongPasswordThatExceedsTheMaximumLengthAllowedByTheSystemAndShouldFailValidation1234567890!@#$%^&*()ThisIsAVeryLongPasswordThatExceeds",
 			wantErr: true,
-			errMsg:  "must contain at least one uppercase letter, one lowercase letter, one number, and one special character",
+			errMsg:  "must not exceed 128 characters",
 		},
 	}
 
