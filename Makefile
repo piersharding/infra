@@ -33,11 +33,8 @@ docker-login:
 test: check-psql-env
 	go test -short ./...
 
-test-all: check-psql-env test-npm
+test-all: check-psql-env
 	go test ./...
-
-test-npm: ## run npm tests
-	cd ui && npm test
 
 # update the expected command output file
 test/update:

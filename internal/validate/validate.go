@@ -439,10 +439,22 @@ func (r PasswordValidationRule) Validate() *Failure {
 		return nil // Let Required rule handle this
 	}
 
-	// Use the consolidated password validation with default config
-	result := ValidatePassword(r.value, DefaultPasswordConfig())
-	if !result.Valid && len(result.Errors) > 0 {
-		return Fail(r.name, result.Errors[0])
+	if len(r.value) < 8 {
+		return Fail(r.name, "must be at least 8 characters")
+	}
+
+	if len(r.value) > 128 {
+		return Fail(r.name, "must not exceed 128 characters")
+	}
+
+	// Basic complexity requirements
+	hasUpper := regexp.MustCompile(`[A-Z]`).MatchString(r.value)
+	hasLower := regexp.MustCompile(`[a-z]`).MatchString(r.value)
+	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(r.value)
+	hasSpecial := regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`).MatchString(r.value)
+
+	if !(hasUpper && hasLower && hasNumber && hasSpecial) {
+		return Fail(r.name, "must contain at least one uppercase letter, one lowercase letter, one number, and one special character")
 	}
 
 	return nil

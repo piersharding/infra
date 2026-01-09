@@ -215,7 +215,7 @@ func TestUsersCmd_EditPassword(t *testing.T) {
 	opts.BootstrapConfig.Users = []server.User{
 		{
 			Name:     "admin@local",
-			Password: "myinitialpassword123",
+			Password: "password",
 		},
 	}
 	srv, err := server.New(opts)
@@ -226,7 +226,7 @@ func TestUsersCmd_EditPassword(t *testing.T) {
 
 	runStep(t, "login", func(t *testing.T) {
 		t.Setenv("INFRA_USER", "admin@local")
-		t.Setenv("INFRA_PASSWORD", "myinitialpassword123")
+		t.Setenv("INFRA_PASSWORD", "password")
 		t.Setenv("INFRA_SKIP_TLS_VERIFY", "true")
 
 		err := Run(ctx, "login", srv.Addrs.HTTPS.String())
@@ -249,11 +249,11 @@ func TestUsersCmd_EditPassword(t *testing.T) {
 
 		exp := expector{console: console}
 		exp.ExpectString(t, "Old Password:")
-		exp.Send(t, "myinitialpassword123\n")
+		exp.Send(t, "password\n")
 		exp.ExpectString(t, "New Password:")
-		exp.Send(t, "mynewsecurepassword456\n")
+		exp.Send(t, "p4ssword\n")
 		exp.ExpectString(t, "Confirm New Password:")
-		exp.Send(t, "mynewsecurepassword456\n")
+		exp.Send(t, "p4ssword\n")
 		exp.ExpectString(t, "Updated password")
 
 		assert.NilError(t, g.Wait())

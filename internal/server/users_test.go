@@ -1049,7 +1049,7 @@ func TestAPI_UpdateUser(t *testing.T) {
 			err := json.Unmarshal(response.Body.Bytes(), &body)
 			assert.NilError(t, err)
 
-			expected := []api.FieldError{{FieldName: "password", Errors: []string{"must be at least 8 characters"}}}
+			expected := []api.FieldError{{FieldName: "password", Errors: []string{"8 characters"}}}
 			assert.DeepEqual(t, body.FieldErrors, expected)
 		})
 

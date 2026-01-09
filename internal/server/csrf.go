@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -46,10 +47,6 @@ type CSRFConfig struct {
 
 	// TrustedOrigins are origins that are allowed to make cross-origin requests
 	TrustedOrigins []string
-
-	// StoreConfig holds configuration for the CSRF token store
-	// If not set, defaults to in-memory storage
-	StoreConfig CSRFStoreConfig
 }
 
 // DefaultCSRFConfig returns the default CSRF configuration
@@ -73,15 +70,63 @@ func DefaultCSRFConfig() CSRFConfig {
 			"/api/scim/",
 		},
 		TrustedOrigins: []string{},
-		StoreConfig:    DefaultCSRFStoreConfig(),
 	}
 }
 
-// csrfMiddlewareState holds the state for the CSRF middleware
-type csrfMiddlewareState struct {
-	config CSRFConfig
-	store  CSRFTokenStore
+// csrfTokenStore provides thread-safe storage for CSRF tokens
+// In production, consider using Redis for distributed deployments
+type csrfTokenStore struct {
+	mu     sync.RWMutex
+	tokens map[string]time.Time
 }
+
+func newCSRFTokenStore() *csrfTokenStore {
+	store := &csrfTokenStore{
+		tokens: make(map[string]time.Time),
+	}
+	// Start background cleanup goroutine
+	go store.cleanup()
+	return store
+}
+
+func (s *csrfTokenStore) add(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tokens[token] = time.Now().Add(csrfTokenExpiry)
+}
+
+func (s *csrfTokenStore) validate(token string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	expiry, exists := s.tokens[token]
+	if !exists {
+		return false
+	}
+	return time.Now().Before(expiry)
+}
+
+func (s *csrfTokenStore) remove(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.tokens, token)
+}
+
+func (s *csrfTokenStore) cleanup() {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.mu.Lock()
+		now := time.Now()
+		for token, expiry := range s.tokens {
+			if now.After(expiry) {
+				delete(s.tokens, token)
+			}
+		}
+		s.mu.Unlock()
+	}
+}
+
+var globalCSRFStore = newCSRFTokenStore()
 
 // generateCSRFToken creates a new cryptographically secure CSRF token
 func generateCSRFToken() (string, error) {
@@ -93,25 +138,7 @@ func generateCSRFToken() (string, error) {
 }
 
 // CSRFMiddleware returns a Gin middleware that provides CSRF protection
-// This uses the default in-memory token store
 func CSRFMiddleware(config CSRFConfig) gin.HandlerFunc {
-	store, err := NewCSRFTokenStore(config.StoreConfig)
-	if err != nil {
-		logging.L.Error().Err(err).Msg("failed to create CSRF token store, falling back to memory store")
-		store = newMemoryCSRFStore(csrfTokenExpiry)
-	}
-
-	return CSRFMiddlewareWithStore(config, store)
-}
-
-// CSRFMiddlewareWithStore returns a Gin middleware that provides CSRF protection
-// with a custom token store (useful for Redis-backed distributed storage)
-func CSRFMiddlewareWithStore(config CSRFConfig, store CSRFTokenStore) gin.HandlerFunc {
-	state := &csrfMiddlewareState{
-		config: config,
-		store:  store,
-	}
-
 	return func(c *gin.Context) {
 		if !config.Enabled {
 			c.Next()
@@ -121,7 +148,7 @@ func CSRFMiddlewareWithStore(config CSRFConfig, store CSRFTokenStore) gin.Handle
 		// Skip CSRF for safe methods (GET, HEAD, OPTIONS, TRACE)
 		if isSafeMethod(c.Request.Method) {
 			// For safe methods, ensure a CSRF token is set in the cookie for subsequent requests
-			state.ensureCSRFToken(c)
+			ensureCSRFToken(c, config)
 			c.Next()
 			return
 		}
@@ -147,7 +174,7 @@ func CSRFMiddlewareWithStore(config CSRFConfig, store CSRFTokenStore) gin.Handle
 		}
 
 		// Validate CSRF token
-		if !state.validateCSRFToken(c) {
+		if !validateCSRFToken(c) {
 			secureLogger := logging.SecureLogger(logging.L)
 			secureLogger.SecureWarn("CSRF token validation failed", nil)
 			sendCSRFError(c, "CSRF token validation failed")
@@ -159,7 +186,7 @@ func CSRFMiddlewareWithStore(config CSRFConfig, store CSRFTokenStore) gin.Handle
 }
 
 // ensureCSRFToken ensures a CSRF token cookie is set
-func (s *csrfMiddlewareState) ensureCSRFToken(c *gin.Context) {
+func ensureCSRFToken(c *gin.Context, config CSRFConfig) {
 	// Check if token already exists
 	if _, err := c.Cookie(csrfCookieName); err == nil {
 		return
@@ -171,21 +198,18 @@ func (s *csrfMiddlewareState) ensureCSRFToken(c *gin.Context) {
 		return
 	}
 
-	if err := s.store.Add(token); err != nil {
-		logging.L.Error().Err(err).Msg("failed to store CSRF token")
-		return
-	}
+	globalCSRFStore.add(token)
 
 	// Set the cookie
 	maxAge := int(csrfTokenExpiry.Seconds())
-	c.SetSameSite(s.config.SameSite)
+	c.SetSameSite(config.SameSite)
 	c.SetCookie(
 		csrfCookieName,
 		token,
 		maxAge,
 		"/",
 		"",
-		s.config.Secure,
+		config.Secure,
 		false, // httpOnly must be false so JavaScript can read it
 	)
 
@@ -194,7 +218,7 @@ func (s *csrfMiddlewareState) ensureCSRFToken(c *gin.Context) {
 }
 
 // validateCSRFToken validates the CSRF token from the request
-func (s *csrfMiddlewareState) validateCSRFToken(c *gin.Context) bool {
+func validateCSRFToken(c *gin.Context) bool {
 	// Get token from cookie
 	cookieToken, err := c.Cookie(csrfCookieName)
 	if err != nil || cookieToken == "" {
@@ -213,7 +237,7 @@ func (s *csrfMiddlewareState) validateCSRFToken(c *gin.Context) bool {
 	}
 
 	// Validate token exists in store and hasn't expired
-	if !s.store.Validate(cookieToken) {
+	if !globalCSRFStore.validate(cookieToken) {
 		return false
 	}
 
@@ -323,12 +347,11 @@ func GetCSRFToken(c *gin.Context) string {
 
 // RefreshCSRFToken generates a new CSRF token and updates the cookie
 // This should be called after sensitive operations like login
-// It requires a CSRFTokenStore to manage token lifecycle
-func RefreshCSRFToken(c *gin.Context, config CSRFConfig, store CSRFTokenStore) (string, error) {
+func RefreshCSRFToken(c *gin.Context, config CSRFConfig) (string, error) {
 	// Remove old token
 	oldToken, _ := c.Cookie(csrfCookieName)
-	if oldToken != "" && store != nil {
-		_ = store.Remove(oldToken)
+	if oldToken != "" {
+		globalCSRFStore.remove(oldToken)
 	}
 
 	// Generate new token
@@ -337,11 +360,7 @@ func RefreshCSRFToken(c *gin.Context, config CSRFConfig, store CSRFTokenStore) (
 		return "", err
 	}
 
-	if store != nil {
-		if err := store.Add(token); err != nil {
-			return "", fmt.Errorf("failed to store new CSRF token: %w", err)
-		}
-	}
+	globalCSRFStore.add(token)
 
 	// Set the new cookie
 	maxAge := int(csrfTokenExpiry.Seconds())
