@@ -94,7 +94,7 @@ export default function Dashboard({ children }) {
           : `/login?next=${encodeURIComponent(router.asPath)}`
       )
     }
-  }, [loading])
+  }, [loading, user])
 
   if (loading || !user || isAdminLoading) {
     return null

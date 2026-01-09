@@ -16,7 +16,7 @@ REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.7
+TAG ?= 0.21.8
 GITLAB_TOKEN ?=
 
 LINT_ARGS ?= --fix
@@ -194,9 +194,10 @@ endif
 dev-oci: clean-oci ## launch dev container environment withi initial test data
 	make gen-secrets
 	make postgres
-	sleep 3
+	sleep 5
 	make infra-ui
 	make infra-server
+	sleep 5
 	make test-data
 	@echo "Password: $$(cat $(CONF_DIR)/initial-admin-password-secret/password)"
 
