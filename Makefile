@@ -19,6 +19,7 @@ POSTGRES_IP_SUFFIX ?= 243
 SSH_IP_SUFFIX ?= 244
 INFRA_ADDR_RANGE ?= 192.168.89
 INFRA_IP_ADDR ?= $(INFRA_ADDR_RANGE).$(INFRA_SERVER_IP_SUFFIX)
+# INFRA_IP_ADDR ?= $(SERVER_DEV)
 INFRA_UI_IP_ADDR ?= $(INFRA_ADDR_RANGE).$(INFRA_UI_IP_SUFFIX)
 POSTGRES_IP_ADDR ?= $(INFRA_ADDR_RANGE).$(POSTGRES_IP_SUFFIX)
 SSH_IP_ADDR ?= $(INFRA_ADDR_RANGE).$(SSH_IP_SUFFIX)
@@ -120,7 +121,7 @@ docker-push:
 	$(DOCKER_ENGINE) push $(DOCKER_REGISTRY)/infra:$(TAG)
 	$(DOCKER_ENGINE) push $(DOCKER_REGISTRY)/ui:$(TAG)
 
-load:
+load: docker-push
 	minikube image load $(DOCKER_REGISTRY)/infra:$(TAG)
 	minikube image load $(DOCKER_REGISTRY)/ui:$(TAG)
 
@@ -147,7 +148,7 @@ un-dev: ## Clean the dev environment in Minikube
 	make dev/clean TAG=dev
 
 dev/context:
-	kubectl config use-context minikube
+	kubectl config use-context minikube || true
 
 dev/server: dev/context docker/infra docker/ui load
 	kubectl create ns infra || true
@@ -172,13 +173,13 @@ dev/server: dev/context docker/infra docker/ui load
 		infra-server ./charts/infra-server \
 		$(flags)
 
-dev/connector: dev/context docker/infra
-	helm upgrade -n infra --install --wait \
-		--set-string connector.image.pullPolicy=Never \
-		--set-string connector.image.repository=$(DOCKER_REGISTRY)/infra \
-		--set-string connector.image.tag=dev \
-		--set-string connector.podAnnotations.checksum=$$($(DOCKER_ENGINE) images -q $(DOCKER_REGISTRY)/infra:$(TAG)) \
-		infra ./charts/infra \
+dev/connector: dev/context docker-build load
+	kubectl create ns infra || true
+	helm upgrade infra ./charts/infra -n infra --install --wait $(HELM_FLAGS) \
+		--set-string image.pullPolicy=Never \
+		--set-string image.repository=$(DOCKER_REGISTRY)/infra \
+		--set-string image.tag=$(TAG) \
+		--set-string podAnnotations.checksum=$$($(DOCKER_ENGINE) images -q $(DOCKER_REGISTRY)/infra:$(TAG)) \
 		$(flags)
 
 .PHONY: dev/clean
@@ -220,6 +221,53 @@ dev-oci: clean-oci ## launch dev container environment withi initial test data
 	make test-data
 	make ssh-vms
 	@echo "Password: $$(cat $(CONF_DIR)/initial-admin-password-secret/password)"
+
+K8S_CONNECTOR_NAME ?= minikube-k8s
+.PHONY: k8s-connector-key
+k8s-connector-key:
+	rm -f /tmp/connector_key.txt
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra login $(INFRA_SERVER_URL) --skip-tls-verify
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra keys remove $(K8S_CONNECTOR_NAME) --connector --force || true
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra keys add --connector --name $(K8S_CONNECTOR_NAME) -q > /tmp/connector_key.txt
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra logout
+
+define INFRA_HELM_VALUES
+service:
+  type: LoadBalancer
+
+image:
+  repository: registry.gitlab.com/ska-telescope/external/infra/infra
+  tag: 0.21.0
+  pullPolicy: IfNotPresent
+
+config:
+  accessKey: ${CONNECTOR_KEY}
+  name: ${K8S_CONNECTOR_NAME}
+  server:
+    url: https://$${INFRA_SERVER_URL}
+    skipTLSVerify: true
+    trustedCertificate: |
+endef
+export INFRA_HELM_VALUES
+
+
+.PHONY: un-dev-connector
+un-dev-connector: dev/context
+	helm -n infra uninstall infra-server || true
+	helm -n infra uninstall infra || true
+	kubectl delete ns infra || true
+
+.PHONY: dev-connector
+dev-connector:  un-dev-connector get-access-key k8s-connector-key ## deploy k8s connector integrated with dev-oci environment
+	$(eval CONNECTOR_KEY:=$(shell cat /tmp/connector_key.txt))
+	@echo "CONNECTOR_KEY=$(CONNECTOR_KEY)"
+	@export INFRA_SERVER_URL="$(INFRA_ADDR_RANGE).1:9443"; \
+	    echo "$${INFRA_HELM_VALUES}" | envsubst > /tmp/connector-values.yaml
+	@cat internal/server/testdata/pki/ca.crt | sed -e 's/^/      /' >> /tmp/connector-values.yaml
+	cat /tmp/connector-values.yaml
+	make dev/connector HELM_FLAGS="--values /tmp/connector-values.yaml"
+	@rm -f /tmp/connector-values.yaml
+	@rm -f /tmp/connector_key.txt
 
 .PHONY: postgres
 postgres: ## deploy posgres container
@@ -331,13 +379,14 @@ users:
   - infraRole: view
     name: test01@local.net
     password: "${INFRA_PASSWORD}"
-endef INFRA_PASSWORD
+endef
 export INFRA_SERVER_CONF
 
 .PHONY: infra-server
 infra-server: ## deploy infra server container
 	$(DOCKER_ENGINE) rm -f infra || true
 	echo "$${INFRA_SERVER_CONF}" | envsubst > $$(pwd)/internal/server/testdata/infra.yaml
+
 
 	$(DOCKER_ENGINE) run -d --name=infra \
 		-e INFRA_SERVER_DB_PASSWORD=infra \
