@@ -29,7 +29,22 @@ export default function PasswordResetForm() {
 
       await jsonBody(res)
 
-      await mutate('/api/users/self')
+      // Fetch user data after successful password reset to ensure the cookie is set
+      // and user data is available before navigation
+      try {
+        const userRes = await fetch('/api/users/self')
+        const userData = await jsonBody(userRes)
+        
+        if (userData) {
+          await mutate('/api/users/self', userData, false)
+        } else {
+          await mutate('/api/users/self')
+        }
+      } catch (error) {
+        // If fetching user data fails, fall back to triggering revalidation
+        await mutate('/api/users/self')
+      }
+      
       router.replace('/')
     } catch (e) {
       setError(e.message)
