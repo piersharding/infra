@@ -259,7 +259,7 @@ export default function DestinationsAdd() {
                   resource: name,
                 }),
               })
-              mutate()
+              await mutate()
               // redirect to the root destinations page
               router.replace({
                 pathname: '/destinations',

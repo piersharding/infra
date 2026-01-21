@@ -117,6 +117,7 @@ export default function UserDetail() {
             <RemoveButton
               onClick={async () => {
                 await fetch(`/api/users/${userId}`, { method: 'DELETE' })
+                await mutate()
                 router.push('/users')
               }}
             >
@@ -186,7 +187,7 @@ export default function UserDetail() {
                                 })),
                               }),
                             })
-                            mutate()
+                            await mutate()
                           }}
                         >
                           <TrashIcon className='mr-2 h-4 w-4' /> Remove
@@ -228,7 +229,7 @@ export default function UserDetail() {
                   }),
                 })
 
-                mutate()
+                await mutate()
                 setSelectedResources([])
               }}
             />
