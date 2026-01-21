@@ -155,7 +155,7 @@ export default function GroupDetails() {
                     method: 'DELETE',
                   })
 
-                  mutate()
+                  await mutate()
                   router.replace('/groups')
                 }}
                 modalTitle='Remove group'
@@ -213,7 +213,7 @@ export default function GroupDetails() {
               })
 
               // TODO: show optimistic results
-              mutateUsers()
+              await mutateUsers()
               setAddUser('')
             }}
           >
@@ -311,7 +311,7 @@ export default function GroupDetails() {
                         })
 
                         // TODO: show optimistic result
-                        mutateUsers()
+                        await mutateUsers()
                         setSelectedDeleteIds([])
                         setOpen(false)
                       }}
@@ -347,7 +347,7 @@ export default function GroupDetails() {
             }),
           })
 
-          mutateUsers()
+          await mutateUsers()
           setSelectedDeleteIds([])
           setOpenSelectedDeleteModal(false)
         }}
