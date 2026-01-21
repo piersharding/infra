@@ -802,7 +802,8 @@ export default function DestinationDetail() {
 
                   // Refresh the destinations list cache
                   await mutateCurrentUserGrants(key =>
-                    typeof key === 'string' && key.startsWith('/api/destinations')
+                    typeof key === 'string' &&
+                    key.match(/^\/api\/destinations(\?|$)/)
                   )
 
                   router.replace('/destinations')
