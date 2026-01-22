@@ -164,7 +164,7 @@ export default function Destinations() {
             method: 'DELETE',
           })
 
-          mutate()
+          await mutate()
           setSelectedDeleteId(null)
           setOpenSelectedDeleteModal(false)
         }}
