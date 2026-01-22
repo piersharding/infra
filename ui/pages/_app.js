@@ -42,7 +42,7 @@ export default function App({ Component, pageProps }) {
         />
         <title>Infra</title>
       </Head>
-      <Fragment key={router.asPath}>
+      <Fragment key={router.pathname}>
         {layout(<Component {...pageProps} />)}
       </Fragment>
     </SWRConfig>
