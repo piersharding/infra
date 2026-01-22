@@ -59,6 +59,7 @@ func deleteCookie(req *http.Request, resp http.ResponseWriter, name, domain stri
 		MaxAge:   cookieMaxAgeDeleteImmediately,
 		Path:     cookiePath,
 		Domain:   domain,
+		SameSite: http.SameSiteStrictMode,
 		Secure:   secure,
 		HttpOnly: true, // not accessible by javascript
 	})

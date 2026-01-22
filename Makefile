@@ -10,13 +10,32 @@ SERVER_DEV=$(IP)
 INFRA_ACCESS_KEY ?= 06e294c1bb.f636105ae3142c1c896fe1f9
 INFRA_PASSWORD ?= Passw0rd1!Thing
 
+VM_NAME ?= ssh01
+VM_MEM ?= 8192mb
+VM_IMAGE ?= gcr.io/k8s-minikube/kicbase:v0.0.46
+INFRA_SERVER_IP_SUFFIX ?= 240
+INFRA_UI_IP_SUFFIX ?= 241
+POSTGRES_IP_SUFFIX ?= 243
+SSH_IP_SUFFIX ?= 244
+INFRA_ADDR_RANGE ?= 192.168.89
+INFRA_IP_ADDR ?= $(INFRA_ADDR_RANGE).$(INFRA_SERVER_IP_SUFFIX)
+# INFRA_IP_ADDR ?= $(SERVER_DEV)
+INFRA_UI_IP_ADDR ?= $(INFRA_ADDR_RANGE).$(INFRA_UI_IP_SUFFIX)
+POSTGRES_IP_ADDR ?= $(INFRA_ADDR_RANGE).$(POSTGRES_IP_SUFFIX)
+SSH_IP_ADDR ?= $(INFRA_ADDR_RANGE).$(SSH_IP_SUFFIX)
+INFRA_NETWORK ?= infra
+NETWORK_ARGS ?= --network=$(INFRA_NETWORK) --add-host=infra.local.net:$(INFRA_IP_ADDR) --add-host=infra-ui.local.net:$(INFRA_UI_IP_ADDR) --add-host=postgres-dev.local.net:$(POSTGRES_IP_ADDR) --add-host=$(VM_NAME).local.net:$(SSH_IP_ADDR)
+INFRA_SERVER_URL ?= $(INFRA_IP_ADDR):9443
+
 DOCKER_ENGINE ?= docker
 DOCKER_CONTEXT ?= .
 REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.7
+TAG ?= 0.21.8
+# BUILDVERSION is for client side compatibility - fixed to 0.21.0
+BUILDVERSION ?= 0.21.0
 GITLAB_TOKEN ?=
 
 LINT_ARGS ?= --fix
@@ -25,7 +44,7 @@ LINT_ARGS ?= --fix
 -include PrivateRules.mak
 
 
-clean: helm-clean clean-infra clean-infra-ui clean-postgres clean-secrets
+clean: clean-oci clean-secrets
 
 docker-login:
 	docker login $(DOCKER_HOST) -u$(REPOSITORY_USER) -p $(GITLAB_TOKEN)
@@ -52,7 +71,7 @@ vet: ## Run go vet against code.
 	go mod download
 	go vet ./...
 
-GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(TAG)" \
+GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(BUILDVERSION)" \
 					-X github.com/infrahq/infra/internal.TelemetryWriteKey="none" \
 					-linkmode external -extldflags "-static"
 build: ## build infra
@@ -75,11 +94,11 @@ git-tag-and-push:
 # must install goreleaser first - https://goreleaser.com/install/
 release-artefacts-local: ## build the release artefacts locally to test what will happen
 	rm -rf dist
-	RELEASE_NAME=v$(TAG) goreleaser release --snapshot --clean
+	RELEASE_NAME=v$(TAG) BUILDVERSION=$(BUILDVERSION) goreleaser release --snapshot --clean
 
 release-artefacts: ## build the release artefacts and publish ti gitlab
 	rm -rf dist
-	RELEASE_NAME=v$(TAG) GITLAB_TOKEN=$(GITLAB_TOKEN) goreleaser release --verbose --clean --skip announce,validate
+	RELEASE_NAME=v$(TAG) BUILDVERSION=$(BUILDVERSION) GITLAB_TOKEN=$(GITLAB_TOKEN) goreleaser release --verbose --clean --skip announce,validate
 
 docker/%:
 	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) --load -t $(DOCKER_REGISTRY)/infra/$*:$(TAG)
@@ -102,7 +121,7 @@ docker-push:
 	$(DOCKER_ENGINE) push $(DOCKER_REGISTRY)/infra:$(TAG)
 	$(DOCKER_ENGINE) push $(DOCKER_REGISTRY)/ui:$(TAG)
 
-load:
+load: docker-push
 	minikube image load $(DOCKER_REGISTRY)/infra:$(TAG)
 	minikube image load $(DOCKER_REGISTRY)/ui:$(TAG)
 
@@ -129,7 +148,7 @@ un-dev: ## Clean the dev environment in Minikube
 	make dev/clean TAG=dev
 
 dev/context:
-	kubectl config use-context minikube
+	kubectl config use-context minikube || true
 
 dev/server: dev/context docker/infra docker/ui load
 	kubectl create ns infra || true
@@ -154,13 +173,13 @@ dev/server: dev/context docker/infra docker/ui load
 		infra-server ./charts/infra-server \
 		$(flags)
 
-dev/connector: dev/context docker/infra
-	helm upgrade -n infra --install --wait \
-		--set-string connector.image.pullPolicy=Never \
-		--set-string connector.image.repository=$(DOCKER_REGISTRY)/infra \
-		--set-string connector.image.tag=dev \
-		--set-string connector.podAnnotations.checksum=$$($(DOCKER_ENGINE) images -q $(DOCKER_REGISTRY)/infra:$(TAG)) \
-		infra ./charts/infra \
+dev/connector: dev/context docker-build load
+	kubectl create ns infra || true
+	helm upgrade infra ./charts/infra -n infra --install --wait $(HELM_FLAGS) \
+		--set-string image.pullPolicy=Never \
+		--set-string image.repository=$(DOCKER_REGISTRY)/infra \
+		--set-string image.tag=$(TAG) \
+		--set-string podAnnotations.checksum=$$($(DOCKER_ENGINE) images -q $(DOCKER_REGISTRY)/infra:$(TAG)) \
 		$(flags)
 
 .PHONY: dev/clean
@@ -193,16 +212,68 @@ endif
 .PHONY: dev-oci
 dev-oci: clean-oci ## launch dev container environment withi initial test data
 	make gen-secrets
+	make infra-network
 	make postgres
-	sleep 3
+	sleep 5
 	make infra-ui
 	make infra-server
+	sleep 5
 	make test-data
+	make ssh-vms
 	@echo "Password: $$(cat $(CONF_DIR)/initial-admin-password-secret/password)"
+
+K8S_CONNECTOR_NAME ?= minikube-k8s
+.PHONY: k8s-connector-key
+k8s-connector-key:
+	rm -f /tmp/connector_key.txt
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra login $(INFRA_SERVER_URL) --skip-tls-verify
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra keys remove $(K8S_CONNECTOR_NAME) --connector --force || true
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra keys add --connector --name $(K8S_CONNECTOR_NAME) -q > /tmp/connector_key.txt
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra logout
+
+define INFRA_HELM_VALUES
+service:
+  type: LoadBalancer
+
+image:
+  repository: registry.gitlab.com/ska-telescope/external/infra/infra
+  tag: 0.21.0
+  pullPolicy: IfNotPresent
+
+config:
+  accessKey: ${CONNECTOR_KEY}
+  name: ${K8S_CONNECTOR_NAME}
+  server:
+    url: https://$${INFRA_SERVER_URL}
+    skipTLSVerify: true
+    trustedCertificate: |
+endef
+export INFRA_HELM_VALUES
+
+
+.PHONY: un-dev-connector
+un-dev-connector: dev/context
+	helm -n infra uninstall infra-server || true
+	helm -n infra uninstall infra || true
+	kubectl delete ns infra || true
+
+.PHONY: dev-connector
+dev-connector:  un-dev-connector get-access-key k8s-connector-key ## deploy k8s connector integrated with dev-oci environment
+	$(eval CONNECTOR_KEY:=$(shell cat /tmp/connector_key.txt))
+	@echo "CONNECTOR_KEY=$(CONNECTOR_KEY)"
+	@export INFRA_SERVER_URL="$(INFRA_ADDR_RANGE).1:9443"; \
+	    echo "$${INFRA_HELM_VALUES}" | envsubst > /tmp/connector-values.yaml
+	@cat internal/server/testdata/pki/ca.crt | sed -e 's/^/      /' >> /tmp/connector-values.yaml
+	cat /tmp/connector-values.yaml
+	make dev/connector HELM_FLAGS="--values /tmp/connector-values.yaml"
+	@rm -f /tmp/connector-values.yaml
+	@rm -f /tmp/connector_key.txt
 
 .PHONY: postgres
 postgres: ## deploy posgres container
 	$(DOCKER_ENGINE) run -d --name=postgres-dev --rm \
+    	$(NETWORK_ARGS) \
+    	--ip $(POSTGRES_IP_ADDR) \
 		-e POSTGRES_DB=infra \
 		-e POSTGRES_USER=infra \
 		-e POSTGRES_PASSWORD=infra \
@@ -249,7 +320,7 @@ gen-secrets: ## create all secrets and certs
 		-subj "/CN=Infra Server"
 
 .PHONY: clean-oci
-clean-oci: clean-infra clean-infra-ui clean-postgres
+clean-oci: clean-infra clean-infra-ui clean-postgres ssh-vms-clean clean-infra-network
 
 .PHONY: clean-infra
 clean-infra: ## clean infra server container
@@ -270,15 +341,60 @@ clean-secrets: # clean secrets
 clean-postgres: ## clean postgres container
 	$(DOCKER_ENGINE) rm -f postgres-dev || true
 
+define INFRA_SERVER_CONF
+---
+version: 0.2
+addr:
+  http: :8080
+  https: :9443
+  metrics: :9090
+admin:
+  # accessKeySecret: infra-admin-access-key
+  enable: true
+  enabled: true
+# dbEncryptionKey: /home/infra/internal/server/testdata/encryption-key/key
+dbHost: ${POSTGRES_IP_ADDR}
+dbName: infra
+dbParameters:
+dbPassword: infra
+dbPort: 5432
+dbUsername: infra
+enableTelemetry: true
+logLevel: debug
+sessionDuration: 720h0m0s
+sessionExtensionDeadline: 72h0m0s
+tls:
+  ca: /home/infra/internal/server/testdata/pki/ca.crt
+  caPrivateKey: /home/infra/internal/server/testdata/pki/ca.key
+ui:
+  proxyURL: http://${INFRA_UI_IP_ADDR}:3000
+users:
+  - accessKey: file:/home/infra/internal/server/testdata/initial-admin-access-key-secret/access-key
+    infraRole: admin
+    name: admin@local
+    password: file:/home/infra/internal/server/testdata/initial-admin-password-secret/password
+  - infraRole: admin
+    name: dev@local
+    password: "${INFRA_PASSWORD}"
+  - infraRole: view
+    name: test01@local.net
+    password: "${INFRA_PASSWORD}"
+endef
+export INFRA_SERVER_CONF
+
 .PHONY: infra-server
 infra-server: ## deploy infra server container
 	$(DOCKER_ENGINE) rm -f infra || true
+	echo "$${INFRA_SERVER_CONF}" | envsubst > $$(pwd)/internal/server/testdata/infra.yaml
+
+
 	$(DOCKER_ENGINE) run -d --name=infra \
 		-e INFRA_SERVER_DB_PASSWORD=infra \
 		-v $$(pwd)/internal:/home/infra/internal \
-		--network host \
+		$(NETWORK_ARGS) \
+		--ip $(INFRA_IP_ADDR) \
 		-p 8080:8080 \
-		-p 8443:8443 \
+		-p 9443:9443 \
 		-p 9090:9090 \
 		$(DOCKER_REGISTRY)/infra:$(TAG) \
 		server \
@@ -291,6 +407,8 @@ infra-server: ## deploy infra server container
 infra-ui: ## deploy ui container
 	$(DOCKER_ENGINE) rm -f infra-ui || true
 	$(DOCKER_ENGINE) run -d --name=infra-ui \
+	    $(NETWORK_ARGS) \
+    	--ip $(INFRA_UI_IP_ADDR) \
 		-e INFRA_SERVER_DB_PASSWORD=infra \
 		-e NODE_DEBUG=http \
 		-e LOG_LEVEL=debug \
@@ -317,12 +435,13 @@ get-users: get-access-key ## Get users from current dev deployment
 	  -H 'Infra-Version: 0.18.1' \
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' | jq -r '.items[]'
 
+USER_NAME ?= dev@example.com
 .PHONY: get-user
 get-user: get-access-key
 	$(eval USER_ID:=$(shell curl -s -X GET "http://$(INFRA_URL)/api/users" \
 	  -H 'Content-Type: application/json' \
 	  -H 'Infra-Version: 0.18.1' \
-	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' | jq -r '.items[] | select( .name | contains("dev@example.com") ) | .id'))
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' | jq -r '.items[] | select( .name | contains("$(USER_NAME)") ) | .id'))
 	@echo "USER_ID=$(USER_ID)"
 
 .PHONY: create-groups
@@ -363,6 +482,17 @@ add-grants: get-access-key ## Add grants to group in current dev deployment
 	  -H 'Infra-Version: 0.18.1' \
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
 	  -d '{ "grantsToAdd": [{ "groupName": "Example", "privilege": "view", "resource": "production" }] }'
+	curl -v -X PATCH http://$(INFRA_URL)/api/grants \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "grantsToAdd": [{ "groupName": "Example", "privilege": "connect", "resource": "ssh01" }] }'
+	curl -v -X PATCH http://$(INFRA_URL)/api/grants \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "grantsToAdd": [{ "userName": "test01@local.net", "privilege": "connect", "resource": "ssh01" }] }'
+
 
 .PHONY: create-destination
 create-destination: get-access-key ## Create test destination in current dev deployment
@@ -374,3 +504,194 @@ create-destination: get-access-key ## Create test destination in current dev dep
 
 .PHONY: test-data
 test-data: create-users create-groups add-user-group create-destination add-grants
+	make add-user-group USER_NAME=test01@local.net
+
+define INFRA_SSHD_CONFIG
+Match group infra-users
+    AuthorizedKeysFile none
+    PasswordAuthentication no
+    AllowTcpForwarding yes
+    PermitTunnel yes
+    AllowAgentForwarding yes
+    AuthorizedKeysCommand /usr/local/sbin/infra sshd auth-keys %u %f
+    AuthorizedKeysCommandUser infra
+endef
+export INFRA_SSHD_CONFIG
+
+define INFRA_SYSTEMD
+[Unit]
+Description=Infra SSH Connector
+Documentation=https://confluence.skatelescope.org/display/SWSI/InfraHQ+Management+and+Operation
+Wants=network-online.service
+After=network-online.service
+ConditionPathExists=/etc/infra/connector.yaml
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/infra connector -f /etc/infra/connector.yaml
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+endef
+export INFRA_SYSTEMD
+
+define INFRA_SSH_CLIENT_CONFIG
+kind: ssh
+name: "${VM_NAME}"
+endpointAddr: ${SSH_IP_ADDR}
+server:
+  url: https://$(INFRA_IP_ADDR):9443
+  accessKey: XXCONNECTOR_KEYXX
+endef
+export INFRA_SSH_CLIENT_CONFIG
+
+.PHONY: vm-clean
+vm-clean: ## Remove a kicbase container that emulates a VM
+	$(DOCKER_ENGINE) rm -f $(VM_NAME) || true
+	make vm-clean-hosts VM_NAME=$(VM_NAME)
+
+.PHONY: vm-ssh
+vm-ssh:
+	ssh root@$$($(DOCKER_ENGINE) inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(VM_NAME))
+
+.PHONY: vm-logs
+vm-logs:
+		$(DOCKER_ENGINE) exec -ti $(VM_NAME) bash -c "journalctl -f"
+
+.PHONY: vm-create
+vm-create: ## Create a kicbase container to emulate a VM
+	make vm-clean
+	sleep 1
+	$(DOCKER_ENGINE) run --rm \
+	-d -t \
+	--privileged \
+	--security-opt seccomp=unconfined \
+	--tmpfs /tmp \
+	--tmpfs /run \
+	--volume /lib/modules:/lib/modules:ro \
+	--hostname $(VM_NAME) \
+	--ip $(SSH_IP_ADDR) \
+	$(NETWORK_ARGS) \
+	--name $(VM_NAME) \
+	--memory=$(VM_MEM) \
+	-e container=$(DOCKER_ENGINE) \
+	$(VM_IMAGE)
+	sleep 3
+	# setup ssh keys
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) bash -c "mkdir -p /root/.ssh; touch /root/.ssh/authorized_keys; chmod 600 /root/.ssh/authorized_keys"
+	ssh-add -L | $(DOCKER_ENGINE) exec -i $(VM_NAME) bash -c "cat - >>/root/.ssh/authorized_keys"
+	# get rid of bad repos
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) bash -c "rm -f /etc/apt/sources.list.d/devel* /etc/apt/sources.list.d/dock*  /etc/apt/sources.list.d/nvidia*"
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) bash -c "sed -i 's/archive/uk.archive/' /etc/apt/sources.list "
+	make vm-hosts VM_NAME=$(VM_NAME)
+
+clean-infra-network: # delete infra network
+	sudo docker network rm $(INFRA_NETWORK) || true
+
+infra-network: # reconfigure infra network to /24
+	sudo docker network create --subnet $(INFRA_ADDR_RANGE).0/24 --driver bridge $(INFRA_NETWORK) || true
+
+.PHONY: infra-ssh-connector-key
+infra-ssh-connector-key: get-access-key
+	$(DOCKER_ENGINE) cp internal/server/testdata/pki/ca.crt $(VM_NAME):/usr/local/share/ca-certificates/infra-ca.crt
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chown root:root /usr/local/share/ca-certificates/infra-ca.crt"
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "update-ca-certificates"
+	$(DOCKER_ENGINE) cp dist/infra_linux_amd64_v1/infra $(VM_NAME):/usr/bin/infra
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chown root:root /usr/bin/infra"
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) infra login $(INFRA_SERVER_URL) --skip-tls-verify"
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) infra keys remove $(VM_NAME) --connector --force || true"
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) infra keys add --connector --name $(VM_NAME) -q" > /tmp/connector_key.txt
+	$(eval CONNECTOR_KEY:=$(shell cat /tmp/connector_key.txt))
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) infra logout"
+
+.PHONY: infra-ssh-config
+infra-ssh-config: infra-ssh-connector-key
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "mkdir -p /usr/local/sbin"
+	$(DOCKER_ENGINE) cp dist/infra_linux_amd64_v1/infra $(VM_NAME):/usr/local/sbin/infra
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chown root:root /usr/local/sbin/infra"
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chmod 755 /usr/local/sbin/infra"
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "addgroup infra; addgroup infra-users"
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "adduser --home /etc/infra --shell /usr/sbin/nologin --disabled-password --gecos 'Infra Agent' --ingroup infra infra"
+	echo "$${INFRA_SYSTEMD}" > /tmp/infra.service
+	$(DOCKER_ENGINE) cp /tmp/infra.service $(VM_NAME):/lib/systemd/system/infra.service
+	rm -f /tmp/infra.service
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chown root:root /lib/systemd/system/infra.service"
+	echo "$${INFRA_SSHD_CONFIG}" > /tmp/infra.conf
+	$(DOCKER_ENGINE) cp /tmp/infra.conf $(VM_NAME):/etc/ssh/sshd_config.d/infra.conf
+	rm -f /tmp/infra.conf
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chown root:root /etc/ssh/sshd_config.d/infra.conf"
+	export CONNECTOR_KEY=`cat /tmp/connector_key.txt` ; \
+	echo "$${INFRA_SSH_CLIENT_CONFIG}" | envsubst | sed "s/XXCONNECTOR_KEYXX/$$CONNECTOR_KEY/" > /tmp/connector.yaml
+	rm -rf /tmp/connector_key.txt
+	cat /tmp/connector.yaml
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "mkdir -p /etc/infra"
+	$(DOCKER_ENGINE) cp /tmp/connector.yaml $(VM_NAME):/etc/infra/connector.yaml
+	rm -f /tmp/connector.yaml
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chown root:root /etc/infra/connector.yaml"
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chmod 644 /etc/infra/connector.yaml "
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "systemctl daemon-reload; systemctl restart ssh "
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chmod 644 /lib/systemd/system/infra.service; systemctl daemon-reload; systemctl restart infra "
+
+.PHONY: ssh-vms
+ssh-vms:
+	make infra-network
+	make vm-create
+	# make ssh-vms-hosts
+	make infra-ssh-config
+
+.PHONY: ssh-vms-hosts
+ssh-vms-hosts: vm-hosts
+	IPADDR=`$(DOCKER_ENGINE) inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(VM_NAME)`; \
+	$(DOCKER_ENGINE) exec -ti infra sh -c "echo -e '$$IPADDR $(VM_NAME) $(VM_NAME).local.net\n' >> /etc/hosts "; \
+	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "echo -e '$$IPADDR $(VM_NAME) $(VM_NAME).local.net\n' >> /etc/hosts ";
+
+.PHONY: ssh-vms-clean
+ssh-vms-clean: vm-clean-hosts ## clean up ssh VM
+	make vm-clean VM_NAME=ssh01
+
+
+.PHONY: vm-hosts
+vm-hosts: vm-clean-hosts
+	$(eval IPADDR:=$(shell $(DOCKER_ENGINE) inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $(VM_NAME)))
+	sudo echo -e "$(IPADDR) $(VM_NAME) $(VM_NAME).local.net\n" | sudo tee -a /etc/hosts
+	tail /etc/hosts
+	sudo systemctl daemon-reload
+	sudo systemctl restart dnsmasq
+
+.PHONY: vm-clean-hosts
+vm-clean-hosts:
+	sudo perl -i -ne 'print unless $$_ =~ /$(VM_NAME).local.net/' /etc/hosts
+	sudo perl -i -ne 'print unless ($$_ =~ /^\n$$/ and $$e); $$e = ($$_ =~ /^\n$$/ ? "y" : "")' /etc/hosts
+
+
+PI_HOLE_PASSWD := letmein
+infra-hosts-get:
+	SID=`curl -s -X POST http://192.168.178.27/api/auth --data '{"password":"$(PI_HOLE_PASSWD)"}' | jq -r .session.sid`; \
+	 curl -s -X GET http://192.168.178.27/api/config?sid=$$SID | jq .config.dns.hosts; \
+	 curl -s -X GET http://192.168.178.27/api/config/dns/hosts?sid=$$SID | json_pp
+
+infra-hosts-delete:
+# have to use patch to delete
+	SID=`curl -s -X POST http://192.168.178.27/api/auth --data '{"password":"$(PI_HOLE_PASSWD)"}' | jq -r .session.sid`; \
+	 curl -v -X PATCH http://192.168.178.27/api/config/dns/hosts?sid=$$SID --data '{"config":{"dns":{"hosts":[]}}}'
+
+PI_HOLE_PATCH := /tmp/pi.hole.patch
+infra-hosts-patch:
+# have to use patch to delete
+	make infra-hosts-get
+	@echo -e '{' > $(PI_HOLE_PATCH)
+	@echo -e '"config": {' >> $(PI_HOLE_PATCH)
+	@echo -e '"dns": {' >> $(PI_HOLE_PATCH)
+	@echo -e '"hosts": [' >> $(PI_HOLE_PATCH)
+	@for i in `docker ps --format='{{.Names}}' | grep infra`; do \
+	IPADDR=`$(DOCKER_ENGINE) inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $$i`; \
+	echo -e "\"$$IPADDR $$i $$i.local.net\"," >> $(PI_HOLE_PATCH); \
+	done
+	@perl -0777 -i -ne 's/(.*),$$/$$1/;print' $(PI_HOLE_PATCH)
+	@echo -e ']}}}' >> $(PI_HOLE_PATCH)
+	@cat $(PI_HOLE_PATCH) | json_pp
+	SID=`curl -s -X POST http://192.168.178.27/api/auth --data '{"password":"$(PI_HOLE_PASSWD)"}' | jq -r .session.sid`; \
+	 curl -v -X PATCH http://192.168.178.27/api/config/dns/hosts?sid=$$SID --data @$(PI_HOLE_PATCH)
+	@echo ""
+	make infra-hosts-get

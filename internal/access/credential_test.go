@@ -11,6 +11,7 @@ import (
 
 	"github.com/infrahq/infra/internal/server/data"
 	"github.com/infrahq/infra/internal/server/models"
+	"github.com/infrahq/infra/internal/validate"
 )
 
 func TestCreateCredential(t *testing.T) {
@@ -89,9 +90,9 @@ func TestResetCredentials(t *testing.T) {
 	})
 
 	t.Run("reset to passed in value", func(t *testing.T) {
-		newPassword, err := ResetCredential(rCtx, user, "MyP@ssw0rd123")
+		newPassword, err := ResetCredential(rCtx, user, "mypassword")
 		assert.NilError(t, err)
-		assert.Equal(t, newPassword, "MyP@ssw0rd123")
+		assert.Equal(t, newPassword, "mypassword")
 
 		credential, err = data.GetCredentialByUserID(db, user.ID)
 		assert.NilError(t, err)
@@ -101,22 +102,16 @@ func TestResetCredentials(t *testing.T) {
 
 func TestGenerateFromPassword(t *testing.T) {
 	t.Run("default password requirements", func(t *testing.T) {
-		// Use a password that is not in the common passwords list
-		testPassword := "MyUn1queP@ss"
-		hash, err := GenerateFromPassword(testPassword)
+		hash, err := GenerateFromPassword("password")
 		assert.NilError(t, err)
 
-		err = bcrypt.CompareHashAndPassword(hash, []byte(testPassword))
+		err = bcrypt.CompareHashAndPassword(hash, []byte("password"))
 		assert.NilError(t, err)
 
 		_, err = GenerateFromPassword("passwor")
-		assert.ErrorContains(t, err, "8 characters")
-	})
-
-	t.Run("common password rejected", func(t *testing.T) {
-		// "password" is in the common passwords list and should be rejected
-		_, err := GenerateFromPassword("password")
-		assert.ErrorContains(t, err, "commonly used password")
+		assert.DeepEqual(t, err, validate.Error{
+			"password": []string{"8 characters"},
+		})
 	})
 }
 

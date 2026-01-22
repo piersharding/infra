@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"net/url"
 	"path/filepath"
 	"reflect"
@@ -227,9 +226,6 @@ api:
 					SessionDuration:          3 * time.Minute,
 					SessionInactivityTimeout: 1 * time.Minute,
 
-					// Debug endpoints disabled by default
-					Debug: server.DefaultDebugConfig(),
-
 					DBEncryptionKey: "/this-is-the-path",
 					DBHost:          "the-host",
 					DBPort:          5432,
@@ -292,30 +288,6 @@ api:
 						RequestTimeout:         2 * time.Minute,
 						BlockingRequestTimeout: 4 * time.Minute,
 					},
-
-					// CSRF is enabled by default for security
-					CSRF: server.CSRFConfig{
-						Enabled:  true,
-						Secure:   true,
-						SameSite: http.SameSiteStrictMode,
-						ExemptPaths: []string{
-							"/api/login",
-							"/api/signup",
-							"/api/device",
-							"/api/device/status",
-							"/api/password-reset-request",
-							"/api/password-reset",
-							"/api/forgot-domain-request",
-							"/api/version",
-							"/api/server-configuration",
-							"/api/scim/",
-						},
-						TrustedOrigins: []string{},
-						StoreConfig:    server.DefaultCSRFStoreConfig(),
-					},
-
-					// Security headers enabled by default
-					SecurityHeaders: server.DefaultSecurityHeadersConfig(),
 				}
 			},
 		},

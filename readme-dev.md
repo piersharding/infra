@@ -32,6 +32,24 @@ You can override these by:
 
 ---
 
+## Development testing TL;DR
+
+Local testing of all components needs Docker for Postgres, Infra Server and Infra UI, and Minikube for Kubernetes Connector.
+
+Once you have Docker and a Minikube instance running, use the following to launch the entire stack:
+
+```bash
+make dev-oci
+make dev-connector
+```
+
+To tear it all down:
+
+```bash
+make un-dev-connector
+make clean
+```
+
 ## Building and Publishing Container Images and Release Artifacts
 
 ### Building Container Images

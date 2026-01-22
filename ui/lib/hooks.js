@@ -37,7 +37,8 @@ export function useUser() {
       // clear cache to remove any local user data
       cache.clear()
 
-      await mutate(undefined)
+      // Set user to undefined without revalidation
+      await mutate(undefined, false)
     },
   }
 }

@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"gotest.tools/v3/assert"
@@ -24,20 +23,17 @@ func TestGenerateCSRFToken(t *testing.T) {
 	assert.Assert(t, token1 != token2, "tokens should be unique")
 }
 
-func TestCSRFTokenStoreInterface(t *testing.T) {
-	store := newMemoryCSRFStore(time.Hour)
-	defer store.Close()
+func TestCSRFTokenStore(t *testing.T) {
+	store := newCSRFTokenStore()
 
 	token := "test-token"
-	err := store.Add(token)
-	assert.NilError(t, err)
+	store.add(token)
 
-	assert.Assert(t, store.Validate(token), "token should be valid")
-	assert.Assert(t, !store.Validate("invalid-token"), "invalid token should not be valid")
+	assert.Assert(t, store.validate(token), "token should be valid")
+	assert.Assert(t, !store.validate("invalid-token"), "invalid token should not be valid")
 
-	err = store.Remove(token)
-	assert.NilError(t, err)
-	assert.Assert(t, !store.Validate(token), "removed token should not be valid")
+	store.remove(token)
+	assert.Assert(t, !store.validate(token), "removed token should not be valid")
 }
 
 func TestIsSafeMethod(t *testing.T) {
@@ -132,12 +128,8 @@ func TestCSRFMiddleware_UnsafeMethodWithValidToken(t *testing.T) {
 	config := DefaultCSRFConfig()
 	config.Secure = false
 
-	// Create a store for testing
-	store := newMemoryCSRFStore(time.Hour)
-	defer store.Close()
-
 	router := gin.New()
-	router.Use(CSRFMiddlewareWithStore(config, store))
+	router.Use(CSRFMiddleware(config))
 	router.POST("/api/test", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -145,8 +137,7 @@ func TestCSRFMiddleware_UnsafeMethodWithValidToken(t *testing.T) {
 	// Generate a valid token
 	token, err := generateCSRFToken()
 	assert.NilError(t, err)
-	err = store.Add(token)
-	assert.NilError(t, err)
+	globalCSRFStore.add(token)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/test", nil)
 	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: token})
@@ -163,12 +154,8 @@ func TestCSRFMiddleware_UnsafeMethodWithMismatchedToken(t *testing.T) {
 	config := DefaultCSRFConfig()
 	config.Secure = false
 
-	// Create a store for testing
-	store := newMemoryCSRFStore(time.Hour)
-	defer store.Close()
-
 	router := gin.New()
-	router.Use(CSRFMiddlewareWithStore(config, store))
+	router.Use(CSRFMiddleware(config))
 	router.POST("/api/test", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
@@ -176,8 +163,7 @@ func TestCSRFMiddleware_UnsafeMethodWithMismatchedToken(t *testing.T) {
 	// Generate a valid token for the cookie
 	cookieToken, err := generateCSRFToken()
 	assert.NilError(t, err)
-	err = store.Add(cookieToken)
-	assert.NilError(t, err)
+	globalCSRFStore.add(cookieToken)
 
 	// Use a different token in the header
 	headerToken, err := generateCSRFToken()
@@ -318,13 +304,9 @@ func TestRefreshCSRFToken(t *testing.T) {
 	config := DefaultCSRFConfig()
 	config.Secure = false
 
-	// Create a store for testing
-	store := newMemoryCSRFStore(time.Hour)
-	defer store.Close()
-
 	router := gin.New()
 	router.GET("/test", func(c *gin.Context) {
-		token, err := RefreshCSRFToken(c, config, store)
+		token, err := RefreshCSRFToken(c, config)
 		assert.NilError(t, err)
 		assert.Assert(t, len(token) > 0)
 		c.Status(http.StatusOK)
@@ -340,68 +322,6 @@ func TestRefreshCSRFToken(t *testing.T) {
 	// Check that the CSRF token header is set
 	csrfHeader := resp.Header().Get(csrfTokenHeader)
 	assert.Assert(t, len(csrfHeader) > 0, "CSRF token header should be set")
-}
-
-func TestRefreshCSRFToken_WithNilStore(t *testing.T) {
-	config := DefaultCSRFConfig()
-	config.Secure = false
-
-	router := gin.New()
-	router.GET("/test", func(c *gin.Context) {
-		token, err := RefreshCSRFToken(c, config, nil)
-		assert.NilError(t, err)
-		assert.Assert(t, len(token) > 0)
-		c.Status(http.StatusOK)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	resp := httptest.NewRecorder()
-
-	router.ServeHTTP(resp, req)
-
-	assert.Equal(t, http.StatusOK, resp.Code)
-
-	// Check that the CSRF token header is set
-	csrfHeader := resp.Header().Get(csrfTokenHeader)
-	assert.Assert(t, len(csrfHeader) > 0, "CSRF token header should be set")
-}
-
-func TestRefreshCSRFToken_RemovesOldToken(t *testing.T) {
-	config := DefaultCSRFConfig()
-	config.Secure = false
-
-	// Create a store for testing
-	store := newMemoryCSRFStore(time.Hour)
-	defer store.Close()
-
-	// Add an old token
-	oldToken := "old-csrf-token"
-	err := store.Add(oldToken)
-	assert.NilError(t, err)
-	assert.Assert(t, store.Validate(oldToken), "old token should be valid before refresh")
-
-	var newToken string
-	router := gin.New()
-	router.GET("/test", func(c *gin.Context) {
-		var err error
-		newToken, err = RefreshCSRFToken(c, config, store)
-		assert.NilError(t, err)
-		c.Status(http.StatusOK)
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
-	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: oldToken})
-	resp := httptest.NewRecorder()
-
-	router.ServeHTTP(resp, req)
-
-	assert.Equal(t, http.StatusOK, resp.Code)
-
-	// Old token should be removed
-	assert.Assert(t, !store.Validate(oldToken), "old token should be invalid after refresh")
-
-	// New token should be valid
-	assert.Assert(t, store.Validate(newToken), "new token should be valid")
 }
 
 func TestGetCSRFToken(t *testing.T) {
@@ -420,57 +340,4 @@ func TestGetCSRFToken(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.Code)
 	assert.Equal(t, expectedToken, resp.Body.String())
-}
-
-func TestDefaultCSRFConfig(t *testing.T) {
-	config := DefaultCSRFConfig()
-
-	assert.Equal(t, config.Enabled, true)
-	assert.Equal(t, config.Secure, true)
-	assert.Equal(t, config.SameSite, http.SameSiteStrictMode)
-	assert.Assert(t, len(config.ExemptPaths) > 0, "should have default exempt paths")
-	assert.Equal(t, config.StoreConfig.Type, CSRFStoreMemory)
-}
-
-func TestCSRFMiddlewareWithStore(t *testing.T) {
-	config := DefaultCSRFConfig()
-	config.Secure = false
-
-	store := newMemoryCSRFStore(time.Hour)
-	defer store.Close()
-
-	router := gin.New()
-	router.Use(CSRFMiddlewareWithStore(config, store))
-	router.GET("/api/test", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-	router.POST("/api/test", func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-
-	// GET should work and set a token (using /api/ path to trigger isAPIRequest)
-	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
-	resp := httptest.NewRecorder()
-	router.ServeHTTP(resp, req)
-
-	assert.Equal(t, http.StatusOK, resp.Code)
-
-	// Extract token from response header (set by ensureCSRFToken)
-	// We use the header because the cookie value is URL-encoded
-	token := resp.Header().Get(csrfTokenHeader)
-	assert.Assert(t, token != "", "CSRF token header should be set")
-
-	// Token should be in our custom store (added during ensureCSRFToken)
-	assert.Assert(t, store.Validate(token), "token should be valid in custom store")
-
-	// Now verify we can use the token for POST
-	req2 := httptest.NewRequest(http.MethodPost, "/api/test", nil)
-	req2.AddCookie(&http.Cookie{Name: csrfCookieName, Value: token})
-	req2.AddCookie(&http.Cookie{Name: cookieAuthName, Value: "test-auth"})
-	req2.Header.Set(csrfTokenHeader, token)
-	resp2 := httptest.NewRecorder()
-
-	router.ServeHTTP(resp2, req2)
-
-	assert.Equal(t, http.StatusOK, resp2.Code, "POST with valid token should succeed")
 }

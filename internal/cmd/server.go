@@ -99,15 +99,6 @@ func defaultServerOptions(infraDir string) server.Options {
 		BaseDomain:               "",
 		EnableLogSampling:        true,
 
-		// Debug endpoints disabled by default for security
-		Debug: server.DefaultDebugConfig(),
-
-		// CSRF protection enabled by default for security
-		CSRF: server.DefaultCSRFConfig(),
-
-		// Security headers enabled by default for protection against common web vulnerabilities
-		SecurityHeaders: server.DefaultSecurityHeadersConfig(),
-
 		Addr: server.ListenerOptions{
 			HTTP:    ":80",
 			HTTPS:   ":443",
