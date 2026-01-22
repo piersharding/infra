@@ -41,7 +41,7 @@ export default function App({ Component, pageProps }) {
         />
         <title>Infra</title>
       </Head>
-      {layout(<Component {...pageProps} key={router.asPath} />)}
+      {layout(<Component {...pageProps} key={router.pathname} />)}
     </SWRConfig>
   )
 }
