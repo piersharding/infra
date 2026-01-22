@@ -800,15 +800,6 @@ export default function DestinationDetail() {
                     method: 'DELETE',
                   })
 
-                  // Refresh the destinations list cache
-                  await mutateCurrentUserGrants(
-                    key =>
-                      typeof key === 'string' &&
-                      key.match(/^\/api\/destinations(\?|$)/),
-                    undefined,
-                    { revalidate: true }
-                  )
-
                   router.replace('/destinations')
                 }}
                 modalTitle='Remove cluster'
