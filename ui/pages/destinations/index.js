@@ -11,6 +11,7 @@ import { TrashIcon, PlusIcon } from '@heroicons/react/24/outline'
 import Table from '../../components/table'
 import Dashboard from '../../components/layouts/dashboard'
 import DeleteModal from '../../components/delete-modal'
+import Loader from '../../components/loader'
 
 export default function Destinations() {
   const router = useRouter()
@@ -25,7 +26,11 @@ export default function Destinations() {
   const [selectedDeleteId, setSelectedDeleteId] = useState(null)
 
   if (isAdminLoading) {
-    return null
+    return (
+      <div className='flex h-screen items-center justify-center'>
+        <Loader className='h-20 w-20' />
+      </div>
+    )
   }
 
   return (
