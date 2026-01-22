@@ -1,4 +1,5 @@
 import Head from 'next/head'
+import { Fragment } from 'react'
 import { useRouter } from 'next/router'
 import { SWRConfig } from 'swr'
 
@@ -41,7 +42,9 @@ export default function App({ Component, pageProps }) {
         />
         <title>Infra</title>
       </Head>
-      {layout(<Component {...pageProps} key={router.pathname} />)}
+      <Fragment key={router.asPath}>
+        {layout(<Component {...pageProps} />)}
+      </Fragment>
     </SWRConfig>
   )
 }
