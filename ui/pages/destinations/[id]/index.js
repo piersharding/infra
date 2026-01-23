@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment, useRef } from 'react'
+import { useEffect, useState, Fragment, useRef, useMemo } from 'react'
 import { usePopper } from 'react-popper'
 import * as ReactDOM from 'react-dom'
 import { useRouter } from 'next/router'
@@ -161,10 +161,13 @@ function EditRoleMenu({
 }
 
 function GrantCell({ grantsList, grant, destination, onRemove, onUpdate }) {
-  const destinationRoles =
-    destination?.roles && destination.roles.length > 0
-      ? destination.roles
-      : ['connect']
+  const destinationRoles = useMemo(
+    () =>
+      destination?.roles && destination.roles.length > 0
+        ? destination.roles
+        : ['connect'],
+    [destination?.roles]
+  )
   const checkbox = useRef()
   const [checked, setChecked] = useState(false)
   const [selectedNamespaces, setSelectedNamespaces] = useState([])
@@ -682,10 +685,13 @@ export default function DestinationDetail() {
 
   const [currentUserRoles, setCurrentUserRoles] = useState([])
   const [selectedResources, setSelectedResources] = useState([])
-  const destinationRoles =
-    destination?.roles && destination.roles.length > 0
-      ? destination.roles
-      : ['connect']
+  const destinationRoles = useMemo(
+    () =>
+      destination?.roles && destination.roles.length > 0
+        ? destination.roles
+        : ['connect'],
+    [destination?.roles]
+  )
 
   useEffect(() => {
     mutateCurrentUserGrants(
@@ -698,7 +704,7 @@ export default function DestinationDetail() {
       .sort(sortByPrivilege)
 
     setCurrentUserRoles(roles)
-  }, [grants, user, destination, currentUserGrants, mutateCurrentUserGrants])
+  }, [grants, user, destination])
 
   const metadata = [
     { label: 'ID', value: destination?.id, font: 'font-mono' },
