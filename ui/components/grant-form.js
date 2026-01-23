@@ -62,7 +62,7 @@ export default function GrantForm({
 
       setOptions(filteredOptions)
     }
-  }, [users, groups, grants, debouncedQuery, multiselect])
+  }, [grants, debouncedQuery, multiselect])
 
   return (
     <form
