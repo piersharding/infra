@@ -5,7 +5,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 
-import useSWR, { useSWRConfig } from 'swr'
+import useSWR from 'swr'
 import dayjs from 'dayjs'
 import copy from 'copy-to-clipboard'
 import {
@@ -681,8 +681,6 @@ export default function DestinationDetail() {
     `/api/grants?user=${user?.id}&resource=${destination?.name}&showInherited=1&limit=1000`
   )
 
-  const { mutate: mutateCurrentUserGrants } = useSWRConfig()
-
   const [currentUserRoles, setCurrentUserRoles] = useState([])
   const [selectedResources, setSelectedResources] = useState([])
   const destinationRoles = useMemo(
@@ -694,9 +692,7 @@ export default function DestinationDetail() {
   )
 
   useEffect(() => {
-    mutateCurrentUserGrants(
-      `/api/grants?user=${user?.id}&resource=${destination?.name}&showInherited=1&limit=1000`
-    )
+    if (!currentUserGrants) return
 
     const roles = currentUserGrants
       ?.filter(g => g.resource !== 'infra')
@@ -704,7 +700,7 @@ export default function DestinationDetail() {
       .sort(sortByPrivilege)
 
     setCurrentUserRoles(roles)
-  }, [grants, user, destination])
+  }, [currentUserGrants])
 
   const metadata = [
     { label: 'ID', value: destination?.id, font: 'font-mono' },
