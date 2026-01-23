@@ -1,11 +1,11 @@
-import { useEffect, useState, Fragment, useRef } from 'react'
+import { useEffect, useState, Fragment, useRef, useMemo } from 'react'
 import { usePopper } from 'react-popper'
 import * as ReactDOM from 'react-dom'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 
-import useSWR, { useSWRConfig } from 'swr'
+import useSWR from 'swr'
 import dayjs from 'dayjs'
 import copy from 'copy-to-clipboard'
 import {
@@ -161,10 +161,13 @@ function EditRoleMenu({
 }
 
 function GrantCell({ grantsList, grant, destination, onRemove, onUpdate }) {
-  const destinationRoles =
-    destination?.roles && destination.roles.length > 0
-      ? destination.roles
-      : ['connect']
+  const destinationRoles = useMemo(
+    () =>
+      destination?.roles && destination.roles.length > 0
+        ? destination.roles
+        : ['connect'],
+    [destination?.roles]
+  )
   const checkbox = useRef()
   const [checked, setChecked] = useState(false)
   const [selectedNamespaces, setSelectedNamespaces] = useState([])
@@ -678,19 +681,18 @@ export default function DestinationDetail() {
     `/api/grants?user=${user?.id}&resource=${destination?.name}&showInherited=1&limit=1000`
   )
 
-  const { mutate: mutateCurrentUserGrants } = useSWRConfig()
-
   const [currentUserRoles, setCurrentUserRoles] = useState([])
   const [selectedResources, setSelectedResources] = useState([])
-  const destinationRoles =
-    destination?.roles && destination.roles.length > 0
-      ? destination.roles
-      : ['connect']
+  const destinationRoles = useMemo(
+    () =>
+      destination?.roles && destination.roles.length > 0
+        ? destination.roles
+        : ['connect'],
+    [destination?.roles]
+  )
 
   useEffect(() => {
-    mutateCurrentUserGrants(
-      `/api/grants?user=${user?.id}&resource=${destination?.name}&showInherited=1&limit=1000`
-    )
+    if (!currentUserGrants) return
 
     const roles = currentUserGrants
       ?.filter(g => g.resource !== 'infra')
@@ -698,7 +700,7 @@ export default function DestinationDetail() {
       .sort(sortByPrivilege)
 
     setCurrentUserRoles(roles)
-  }, [grants, user, destination, currentUserGrants, mutateCurrentUserGrants])
+  }, [currentUserGrants])
 
   const metadata = [
     { label: 'ID', value: destination?.id, font: 'font-mono' },
