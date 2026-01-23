@@ -101,11 +101,13 @@ release-artefacts: ## build the release artefacts and publish ti gitlab
 	RELEASE_NAME=v$(TAG) BUILDVERSION=$(BUILDVERSION) GITLAB_TOKEN=$(GITLAB_TOKEN) goreleaser release --verbose --clean --skip announce,validate
 
 docker/%:
-	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) --load -t $(DOCKER_REGISTRY)/infra/$*:$(TAG)
+	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --load -t $(DOCKER_REGISTRY)/infra/$*:$(TAG)
 
+OCI_BUILD_FLAGS ?=
+OCI_UI_FILE ?= Dockerfile
 docker-build: fmt vet
-	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) --build-arg BUILDVERSION=v$(TAG) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
-	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT)/ui --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
+	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --build-arg BUILDVERSION=v$(TAG) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
+	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT)/ui $(OCI_BUILD_FLAGS) --file $(OCI_UI_FILE) --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
 
 # perform update of go dependencies
 go-update:
@@ -138,14 +140,13 @@ dev-test-data: dev-infra-server-vars ## Create test data in dev Minikube environ
 	make test-data INFRA_URL=$(INFRA_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY)
 
 .PHONY: dev
-dev: ## Deploy dev environment in Minikube
-	make dev/server TAG=dev
-	make dev-infra-server-vars
-	make dev-test-data
+dev: ## Deploy dev tag to docker/podman - use dev UI
+	make docker-build TAG=dev OCI_BUILD_FLAGS="--no-cache" OCI_UI_FILE=./ui/Dockerfile.dev
+	make dev-oci TAG=dev
 
 .PHONY: un-dev
-un-dev: ## Clean the dev environment in Minikube
-	make dev/clean TAG=dev
+un-dev: ## Clean the dev environment
+	make clean-oci TAG=dev
 
 dev/context:
 	kubectl config use-context minikube || true

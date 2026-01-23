@@ -903,7 +903,7 @@ export default function DestinationDetail() {
                         }),
                       })
 
-                      mutate()
+                      await mutate()
                       setSelectedResources([])
                     }}
                   />
@@ -964,7 +964,7 @@ export default function DestinationDetail() {
                 )
 
                 await Promise.all(promises)
-                mutate()
+                await mutate()
               }}
               onRemove={async grantsIdList => {
                 const promises = grantsIdList.map(
@@ -975,7 +975,7 @@ export default function DestinationDetail() {
                 )
 
                 await Promise.all(promises)
-                mutate()
+                await mutate()
               }}
             />
           </div>

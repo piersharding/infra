@@ -290,8 +290,8 @@ export default function Users() {
                   <Dialog.Panel className='relative w-full transform overflow-hidden rounded-xl border border-gray-100 bg-white p-8 text-left shadow-xl shadow-gray-300/10 transition-all sm:my-8 sm:max-w-sm'>
                     <UsersAddDialog
                       setOpen={setOpen}
-                      onAdded={() => {
-                        mutate()
+                      onAdded={async () => {
+                        await mutate()
                       }}
                     />
                   </Dialog.Panel>
@@ -405,7 +405,7 @@ export default function Users() {
                       })
                       setOpen(false)
 
-                      mutate()
+                      await mutate()
                     }}
                     title='Remove user'
                     message={
