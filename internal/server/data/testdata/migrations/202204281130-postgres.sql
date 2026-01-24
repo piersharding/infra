@@ -42,7 +42,7 @@ CREATE TABLE access_keys (
 );
 
 
-ALTER TABLE access_keys OWNER TO postgres;
+ALTER TABLE access_keys OWNER TO infra;
 
 --
 -- Name: access_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -56,7 +56,7 @@ CREATE SEQUENCE access_keys_id_seq
     CACHE 1;
 
 
-ALTER TABLE access_keys_id_seq OWNER TO postgres;
+ALTER TABLE access_keys_id_seq OWNER TO infra;
 
 --
 -- Name: access_keys_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -81,7 +81,7 @@ CREATE TABLE credentials (
 );
 
 
-ALTER TABLE credentials OWNER TO postgres;
+ALTER TABLE credentials OWNER TO infra;
 
 --
 -- Name: credentials_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -95,7 +95,7 @@ CREATE SEQUENCE credentials_id_seq
     CACHE 1;
 
 
-ALTER TABLE credentials_id_seq OWNER TO postgres;
+ALTER TABLE credentials_id_seq OWNER TO infra;
 
 --
 -- Name: credentials_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -120,7 +120,7 @@ CREATE TABLE destinations (
 );
 
 
-ALTER TABLE destinations OWNER TO postgres;
+ALTER TABLE destinations OWNER TO infra;
 
 --
 -- Name: destinations_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -134,7 +134,7 @@ CREATE SEQUENCE destinations_id_seq
     CACHE 1;
 
 
-ALTER TABLE destinations_id_seq OWNER TO postgres;
+ALTER TABLE destinations_id_seq OWNER TO infra;
 
 --
 -- Name: destinations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -160,7 +160,7 @@ CREATE TABLE encryption_keys (
 );
 
 
-ALTER TABLE encryption_keys OWNER TO postgres;
+ALTER TABLE encryption_keys OWNER TO infra;
 
 --
 -- Name: encryption_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -174,7 +174,7 @@ CREATE SEQUENCE encryption_keys_id_seq
     CACHE 1;
 
 
-ALTER TABLE encryption_keys_id_seq OWNER TO postgres;
+ALTER TABLE encryption_keys_id_seq OWNER TO infra;
 
 --
 -- Name: encryption_keys_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -199,7 +199,7 @@ CREATE TABLE grants (
 );
 
 
-ALTER TABLE grants OWNER TO postgres;
+ALTER TABLE grants OWNER TO infra;
 
 --
 -- Name: grants_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -213,7 +213,7 @@ CREATE SEQUENCE grants_id_seq
     CACHE 1;
 
 
-ALTER TABLE grants_id_seq OWNER TO postgres;
+ALTER TABLE grants_id_seq OWNER TO infra;
 
 --
 -- Name: grants_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -236,7 +236,7 @@ CREATE TABLE groups (
 );
 
 
-ALTER TABLE groups OWNER TO postgres;
+ALTER TABLE groups OWNER TO infra;
 
 --
 -- Name: groups_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -250,7 +250,7 @@ CREATE SEQUENCE groups_id_seq
     CACHE 1;
 
 
-ALTER TABLE groups_id_seq OWNER TO postgres;
+ALTER TABLE groups_id_seq OWNER TO infra;
 
 --
 -- Name: groups_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -275,7 +275,7 @@ CREATE TABLE identities (
 );
 
 
-ALTER TABLE identities OWNER TO postgres;
+ALTER TABLE identities OWNER TO infra;
 
 --
 -- Name: identities_groups; Type: TABLE; Schema: public; Owner: postgres
@@ -287,7 +287,7 @@ CREATE TABLE identities_groups (
 );
 
 
-ALTER TABLE identities_groups OWNER TO postgres;
+ALTER TABLE identities_groups OWNER TO infra;
 
 --
 -- Name: identities_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -301,7 +301,7 @@ CREATE SEQUENCE identities_id_seq
     CACHE 1;
 
 
-ALTER TABLE identities_id_seq OWNER TO postgres;
+ALTER TABLE identities_id_seq OWNER TO infra;
 
 --
 -- Name: identities_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -319,7 +319,7 @@ CREATE TABLE migrations (
 );
 
 
-ALTER TABLE migrations OWNER TO postgres;
+ALTER TABLE migrations OWNER TO infra;
 
 --
 -- Name: provider_users; Type: TABLE; Schema: public; Owner: postgres
@@ -342,7 +342,7 @@ CREATE TABLE provider_users (
 );
 
 
-ALTER TABLE provider_users OWNER TO postgres;
+ALTER TABLE provider_users OWNER TO infra;
 
 --
 -- Name: provider_users_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -356,7 +356,7 @@ CREATE SEQUENCE provider_users_id_seq
     CACHE 1;
 
 
-ALTER TABLE provider_users_id_seq OWNER TO postgres;
+ALTER TABLE provider_users_id_seq OWNER TO infra;
 
 --
 -- Name: provider_users_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -382,7 +382,7 @@ CREATE TABLE providers (
 );
 
 
-ALTER TABLE providers OWNER TO postgres;
+ALTER TABLE providers OWNER TO infra;
 
 --
 -- Name: providers_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -396,7 +396,7 @@ CREATE SEQUENCE providers_id_seq
     CACHE 1;
 
 
-ALTER TABLE providers_id_seq OWNER TO postgres;
+ALTER TABLE providers_id_seq OWNER TO infra;
 
 --
 -- Name: providers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -423,7 +423,7 @@ CREATE TABLE root_certificates (
 );
 
 
-ALTER TABLE root_certificates OWNER TO postgres;
+ALTER TABLE root_certificates OWNER TO infra;
 
 --
 -- Name: root_certificates_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -437,7 +437,7 @@ CREATE SEQUENCE root_certificates_id_seq
     CACHE 1;
 
 
-ALTER TABLE root_certificates_id_seq OWNER TO postgres;
+ALTER TABLE root_certificates_id_seq OWNER TO infra;
 
 --
 -- Name: root_certificates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -461,7 +461,7 @@ CREATE TABLE settings (
 );
 
 
-ALTER TABLE settings OWNER TO postgres;
+ALTER TABLE settings OWNER TO infra;
 
 --
 -- Name: settings_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -475,7 +475,7 @@ CREATE SEQUENCE settings_id_seq
     CACHE 1;
 
 
-ALTER TABLE settings_id_seq OWNER TO postgres;
+ALTER TABLE settings_id_seq OWNER TO infra;
 
 --
 -- Name: settings_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
@@ -503,7 +503,7 @@ CREATE TABLE trusted_certificates (
 );
 
 
-ALTER TABLE trusted_certificates OWNER TO postgres;
+ALTER TABLE trusted_certificates OWNER TO infra;
 
 --
 -- Name: trusted_certificates_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
@@ -517,7 +517,7 @@ CREATE SEQUENCE trusted_certificates_id_seq
     CACHE 1;
 
 
-ALTER TABLE trusted_certificates_id_seq OWNER TO postgres;
+ALTER TABLE trusted_certificates_id_seq OWNER TO infra;
 
 --
 -- Name: trusted_certificates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
