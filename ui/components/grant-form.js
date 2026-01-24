@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 
 import useSWR from 'swr'
 import { Combobox } from '@headlessui/react'
@@ -19,50 +19,49 @@ export default function GrantForm({
   const [role, setRole] = useState('')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(null)
-  const [options, setOptions] = useState([])
 
   const button = useRef()
 
   const debouncedQuery = useDebouncedSearch(query, 300)
 
-  const { data: { items: users } = { items: [] }, isLoading: usersLoading } =
-    useSWR(
-      debouncedQuery.length >= 2
-        ? `/api/users?name=${encodeURIComponent(debouncedQuery)}&limit=50`
-        : null
-    )
-  const { data: { items: groups } = { items: [] }, isLoading: groupsLoading } =
-    useSWR(
-      debouncedQuery.length >= 2
-        ? `/api/groups?name=${encodeURIComponent(debouncedQuery)}&limit=50`
-        : null
-    )
+  const { data: usersData, isLoading: usersLoading } = useSWR(
+    debouncedQuery.length >= 2
+      ? `/api/users?name=${encodeURIComponent(debouncedQuery)}&limit=50`
+      : null
+  )
+  const { data: groupsData, isLoading: groupsLoading } = useSWR(
+    debouncedQuery.length >= 2
+      ? `/api/groups?name=${encodeURIComponent(debouncedQuery)}&limit=50`
+      : null
+  )
+
+  const options = useMemo(() => {
+    if (debouncedQuery.length < 2) {
+      return []
+    }
+
+    const users = usersData?.items || []
+    const groups = groupsData?.items || []
+
+    if (users.length === 0 && groups.length === 0) {
+      return []
+    }
+
+    const optionsList = [
+      ...groups.map(g => ({ ...g, group: true })),
+      ...users.map(u => ({ ...u, user: true })),
+    ]
+
+    return multiselect
+      ? optionsList
+      : optionsList.filter(
+          item => !grants?.find(g => g.user === item.id || g.group === item.id)
+        )
+  }, [usersData, groupsData, grants, debouncedQuery, multiselect])
 
   useEffect(() => {
     setRole(sortByRole(roles)?.[0])
   }, [roles])
-
-  useEffect(() => {
-    if (debouncedQuery.length < 2) {
-      setOptions([])
-      return
-    }
-
-    if (users && groups) {
-      const optionsList = [
-        ...(groups?.map(g => ({ ...g, group: true })) || []),
-        ...(users?.map(u => ({ ...u, user: true })) || []),
-      ]
-      const filteredOptions = multiselect
-        ? optionsList
-        : optionsList?.filter(
-            item =>
-              !grants?.find(g => g.user === item.id || g.group === item.id)
-          )
-
-      setOptions(filteredOptions)
-    }
-  }, [grants, debouncedQuery, multiselect])
 
   return (
     <form
