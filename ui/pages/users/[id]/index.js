@@ -62,7 +62,7 @@ export default function UserDetail() {
         kind,
         hasGroupGrant: false,
         hasUserGrant: false,
-        userGrantIds: [],
+        userGrants: [],
         groupNames: new Set(),
       }
       current.privileges.add(g.privilege)
@@ -73,7 +73,7 @@ export default function UserDetail() {
       }
       if (g.user) {
         current.hasUserGrant = true
-        current.userGrantIds.push(g.id)
+        current.userGrants.push(g)
       }
       entriesMap.set(resource, current)
     })
@@ -84,7 +84,7 @@ export default function UserDetail() {
       kind: value.kind,
       hasGroupGrant: value.hasGroupGrant,
       hasUserGrant: value.hasUserGrant,
-      userGrantIds: value.userGrantIds,
+      userGrants: value.userGrants,
       groupNames: Array.from(value.groupNames),
     }))
   }, [grants, destinationRolesMap, destinations, groups])
@@ -159,7 +159,7 @@ export default function UserDetail() {
                     privileges,
                     hasGroupGrant,
                     hasUserGrant,
-                    userGrantIds,
+                    userGrants,
                     groupNames,
                   }) => (
                     <div
@@ -185,8 +185,10 @@ export default function UserDetail() {
                             await fetch('/api/grants', {
                               method: 'PATCH',
                               body: JSON.stringify({
-                                grantsToRemove: userGrantIds.map(id => ({
-                                  id,
+                                grantsToRemove: userGrants.map(g => ({
+                                  user: g.user,
+                                  privilege: g.privilege,
+                                  resource: g.resource,
                                 })),
                               }),
                             })
