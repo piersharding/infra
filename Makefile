@@ -53,6 +53,7 @@ test: check-psql-env
 	go test -short ./...
 
 test-all: check-psql-env test-npm
+	internal/server/testdata/pki/generate-localhost-cert.sh || true
 	go test ./...
 
 test-npm: ## run npm tests
@@ -115,9 +116,9 @@ go-update:
 
 # perform update of node dependencies
 npm-update:
-	cd ui && npm update
-	cd ui && npm audit fix
-	cd ui && npm audit fix --force
+	cd ui && npm update  --legacy-peer-deps
+	cd ui && npm audit fix  --legacy-peer-deps
+	cd ui && npm audit fix --force  --legacy-peer-deps
 
 docker-push:
 	$(DOCKER_ENGINE) push $(DOCKER_REGISTRY)/infra:$(TAG)
@@ -141,7 +142,7 @@ dev-test-data: dev-infra-server-vars ## Create test data in dev Minikube environ
 
 .PHONY: dev
 dev: ## Deploy dev tag to docker/podman - use dev UI
-	make docker-build TAG=dev OCI_BUILD_FLAGS="--no-cache" OCI_UI_FILE=Dockerfile.dev
+	make docker-build TAG=dev OCI_BUILD_FLAGS="--no-cache --progress=plain" OCI_UI_FILE=Dockerfile.dev
 	make dev-oci TAG=dev
 
 .PHONY: un-dev
@@ -333,7 +334,9 @@ clean-infra-ui: ## clean infra ui container
 
 .PHONY: clean-secrets
 clean-secrets: # clean secrets
-	rm -rf $(SECRETS_DIR) \
+	rm -rf $(SECRETS_DIR)/ca-public.pem \
+	    $(SECRETS_DIR)/ca.crt \
+		$(SECRETS_DIR)/ca.key \
     	$(CONF_DIR)/encryption-key \
     	$(CONF_DIR)/initial-admin-password-secret \
     	$(CONF_DIR)/initial-admin-access-key-secret

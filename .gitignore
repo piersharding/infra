@@ -27,3 +27,7 @@ internal/server/testdata/encryption-key/
 internal/server/testdata/initial-admin-access-key-secret/
 internal/server/testdata/initial-admin-password-secret/
 internal/server/testdata/pki/ca-public.pem
+internal/server/testdata/pki/ca.crt
+internal/server/testdata/pki/ca.key
+internal/server/testdata/pki/localhost.crt
+internal/server/testdata/pki/localhost.key

@@ -15,6 +15,9 @@ const ContentSecurityPolicy = `
 
 module.exports = phase => ({
   reactStrictMode: true,
+  eslint: {
+    dirs: ['pages', 'components', 'lib', 'public'],
+  },
   generateBuildId: async () => {
     if (process.env.NEXT_BUILD_ID) {
       return process.env.NEXT_BUILD_ID
