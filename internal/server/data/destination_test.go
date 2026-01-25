@@ -299,11 +299,25 @@ func TestListDestinations(t *testing.T) {
 			expected := []models.Destination{*destination}
 			assert.DeepEqual(t, actual, expected, cmpDestination)
 		})
-		t.Run("by name", func(t *testing.T) {
+		t.Run("by name exact match", func(t *testing.T) {
 			actual, err := ListDestinations(db, ListDestinationsOptions{ByName: "kubernetes"})
 			assert.NilError(t, err)
 
 			expected := []models.Destination{*destination}
+			assert.DeepEqual(t, actual, expected, cmpDestination)
+		})
+		t.Run("by name partial match", func(t *testing.T) {
+			actual, err := ListDestinations(db, ListDestinationsOptions{ByName: "kube"})
+			assert.NilError(t, err)
+
+			expected := []models.Destination{*destination}
+			assert.DeepEqual(t, actual, expected, cmpDestination)
+		})
+		t.Run("by name case insensitive", func(t *testing.T) {
+			actual, err := ListDestinations(db, ListDestinationsOptions{ByName: "BAST"})
+			assert.NilError(t, err)
+
+			expected := []models.Destination{*second}
 			assert.DeepEqual(t, actual, expected, cmpDestination)
 		})
 		t.Run("with pagination", func(t *testing.T) {

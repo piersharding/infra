@@ -163,12 +163,12 @@ dev/server: dev/context docker/infra docker/ui load
     	--set-string config.admin.enable=true \
     	--set-string config.admin.accessKeySecret=infra-server-access-key \
 	    --set-string server.service.type=LoadBalancer \
-		--set-string server.image.pullPolicy=Never \
+		--set-string server.image.pullPolicy=IfNotPresent \
 		--set-string server.image.repository=$(DOCKER_REGISTRY)/infra \
 		--set-string server.image.tag=$(TAG) \
 		--set-string server.podAnnotations.checksum=$$($(DOCKER_ENGINE) images -q $(DOCKER_REGISTRY)/infra/infra:$(TAG)) \
 	    --set-string ui.service.type=LoadBalancer \
-		--set-string ui.image.pullPolicy=Never \
+		--set-string ui.image.pullPolicy=IfNotPresent \
 		--set-string ui.image.repository=$(DOCKER_REGISTRY)/ui \
 		--set-string ui.image.tag=$(TAG) \
 		--set-string ui.podAnnotations.checksum=$$($(DOCKER_ENGINE) images -q $(DOCKER_REGISTRY)/infra/ui:$(TAG)) \
@@ -178,7 +178,7 @@ dev/server: dev/context docker/infra docker/ui load
 dev/connector: dev/context docker-build load
 	kubectl create ns infra || true
 	helm upgrade infra ./charts/infra -n infra --install --wait $(HELM_FLAGS) \
-		--set-string image.pullPolicy=Never \
+		--set-string image.pullPolicy=IfNotPresent \
 		--set-string image.repository=$(DOCKER_REGISTRY)/infra \
 		--set-string image.tag=$(TAG) \
 		--set-string podAnnotations.checksum=$$($(DOCKER_ENGINE) images -q $(DOCKER_REGISTRY)/infra:$(TAG)) \
@@ -222,7 +222,7 @@ dev-oci: clean-oci ## launch dev container environment withi initial test data
 	sleep 5
 	make test-data
 	make ssh-vms
-	@echo "Password: $$(cat $(CONF_DIR)/initial-admin-password-secret/password)"
+	@echo "User: admin@local Password: $$(cat $(CONF_DIR)/initial-admin-password-secret/password)"
 
 K8S_CONNECTOR_NAME ?= minikube-k8s
 .PHONY: k8s-connector-key
