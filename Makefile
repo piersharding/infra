@@ -33,7 +33,7 @@ REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.8
+TAG ?= 0.21.9
 # BUILDVERSION is for client side compatibility - fixed to 0.21.0
 BUILDVERSION ?= 0.21.0
 GITLAB_TOKEN ?=
@@ -53,6 +53,7 @@ test: check-psql-env
 	go test -short ./...
 
 test-all: check-psql-env test-npm
+	internal/server/testdata/pki/generate-localhost-cert.sh || true
 	go test ./...
 
 test-npm: ## run npm tests
@@ -107,7 +108,7 @@ OCI_BUILD_FLAGS ?=
 OCI_UI_FILE ?= Dockerfile
 docker-build: fmt vet
 	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --build-arg BUILDVERSION=v$(TAG) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
-	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT)/ui $(OCI_BUILD_FLAGS) --file $(OCI_UI_FILE) --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
+	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT)/ui $(OCI_BUILD_FLAGS) --file ./ui/$(OCI_UI_FILE) --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
 
 # perform update of go dependencies
 go-update:
@@ -115,9 +116,9 @@ go-update:
 
 # perform update of node dependencies
 npm-update:
-	cd ui && npm update
-	cd ui && npm audit fix
-	cd ui && npm audit fix --force
+	cd ui && npm update  --legacy-peer-deps
+	cd ui && npm audit fix  --legacy-peer-deps
+	cd ui && npm audit fix --force  --legacy-peer-deps
 
 docker-push:
 	$(DOCKER_ENGINE) push $(DOCKER_REGISTRY)/infra:$(TAG)
@@ -141,7 +142,7 @@ dev-test-data: dev-infra-server-vars ## Create test data in dev Minikube environ
 
 .PHONY: dev
 dev: ## Deploy dev tag to docker/podman - use dev UI
-	make docker-build TAG=dev OCI_BUILD_FLAGS="--no-cache" OCI_UI_FILE=./ui/Dockerfile.dev
+	make docker-build TAG=dev OCI_BUILD_FLAGS="--no-cache --progress=plain" OCI_UI_FILE=Dockerfile.dev
 	make dev-oci TAG=dev
 
 .PHONY: un-dev
@@ -162,12 +163,12 @@ dev/server: dev/context docker/infra docker/ui load
     	--set-string config.admin.enable=true \
     	--set-string config.admin.accessKeySecret=infra-server-access-key \
 	    --set-string server.service.type=LoadBalancer \
-		--set-string server.image.pullPolicy=Never \
+		--set-string server.image.pullPolicy=IfNotPresent \
 		--set-string server.image.repository=$(DOCKER_REGISTRY)/infra \
 		--set-string server.image.tag=$(TAG) \
 		--set-string server.podAnnotations.checksum=$$($(DOCKER_ENGINE) images -q $(DOCKER_REGISTRY)/infra/infra:$(TAG)) \
 	    --set-string ui.service.type=LoadBalancer \
-		--set-string ui.image.pullPolicy=Never \
+		--set-string ui.image.pullPolicy=IfNotPresent \
 		--set-string ui.image.repository=$(DOCKER_REGISTRY)/ui \
 		--set-string ui.image.tag=$(TAG) \
 		--set-string ui.podAnnotations.checksum=$$($(DOCKER_ENGINE) images -q $(DOCKER_REGISTRY)/infra/ui:$(TAG)) \
@@ -177,7 +178,7 @@ dev/server: dev/context docker/infra docker/ui load
 dev/connector: dev/context docker-build load
 	kubectl create ns infra || true
 	helm upgrade infra ./charts/infra -n infra --install --wait $(HELM_FLAGS) \
-		--set-string image.pullPolicy=Never \
+		--set-string image.pullPolicy=IfNotPresent \
 		--set-string image.repository=$(DOCKER_REGISTRY)/infra \
 		--set-string image.tag=$(TAG) \
 		--set-string podAnnotations.checksum=$$($(DOCKER_ENGINE) images -q $(DOCKER_REGISTRY)/infra:$(TAG)) \
@@ -221,7 +222,7 @@ dev-oci: clean-oci ## launch dev container environment withi initial test data
 	sleep 5
 	make test-data
 	make ssh-vms
-	@echo "Password: $$(cat $(CONF_DIR)/initial-admin-password-secret/password)"
+	@echo "User: admin@local Password: $$(cat $(CONF_DIR)/initial-admin-password-secret/password)"
 
 K8S_CONNECTOR_NAME ?= minikube-k8s
 .PHONY: k8s-connector-key
@@ -333,7 +334,9 @@ clean-infra-ui: ## clean infra ui container
 
 .PHONY: clean-secrets
 clean-secrets: # clean secrets
-	rm -rf $(SECRETS_DIR) \
+	rm -rf $(SECRETS_DIR)/ca-public.pem \
+	    $(SECRETS_DIR)/ca.crt \
+		$(SECRETS_DIR)/ca.key \
     	$(CONF_DIR)/encryption-key \
     	$(CONF_DIR)/initial-admin-password-secret \
     	$(CONF_DIR)/initial-admin-access-key-secret

@@ -151,7 +151,7 @@ func ListDestinations(tx ReadTxn, opts ListDestinationsOptions) ([]models.Destin
 		query.B("AND unique_id = ?", opts.ByUniqueID)
 	}
 	if opts.ByName != "" {
-		query.B("AND name = ?", opts.ByName)
+		query.B("AND name ILIKE ?", "%"+opts.ByName+"%")
 	}
 	if opts.ByKind != "" {
 		query.B("AND kind = ?", opts.ByKind)

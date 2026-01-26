@@ -32,14 +32,14 @@ export function useUser() {
       try {
         const userRes = await fetch('/api/users/self')
         const userData = await jsonBody(userRes)
-        
+
         // Update the SWR cache with the fetched user data
         if (userData) {
           await mutate(userData, false)
         } else {
           await mutate()
         }
-      } catch (error) {
+      } catch (_error) {
         // If fetching user data fails, fall back to triggering revalidation
         // This maintains backward compatibility if /api/users/self fails
         await mutate()
@@ -53,7 +53,7 @@ export function useUser() {
       // Set user to undefined without revalidation first
       // This prevents SWR from trying to refetch user data
       await mutate(undefined, false)
-      
+
       // Clear the entire cache to remove org, grants, and other user-specific data
       // Note: This is safe to do after mutate because mutate already updated the SWR internal state
       cache.clear()

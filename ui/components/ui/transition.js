@@ -1,4 +1,3 @@
-import React from 'react'
 import { Transition as HeadlessTransition } from '@headlessui/react'
 
 // In tests we want to avoid animation-related async updates (timers, RAF, etc.)

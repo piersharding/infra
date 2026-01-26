@@ -4,7 +4,7 @@ import DeleteModal from './delete-modal'
 
 export default function RemoveButton({
   children = 'Remove',
-  onRemove,
+  onRemove = () => {},
   modalTitle,
   modalMessage,
 }) {

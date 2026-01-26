@@ -397,3 +397,154 @@ func TestAPI_UpdateDestination(t *testing.T) {
 		})
 	}
 }
+
+func TestAPI_ListDestinations(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	routes := srv.GenerateRoutes()
+
+	// Create test destinations
+	kubernetesCluster := &models.Destination{
+		Name:          "kubernetes-prod",
+		Kind:          models.DestinationKindKubernetes,
+		UniqueID:      "k8s-unique-id",
+		ConnectionURL: "10.0.0.1:6443",
+		ConnectionCA:  "k8s-ca-cert",
+	}
+	bastionServer := &models.Destination{
+		Name:          "bastion-server",
+		Kind:          models.DestinationKindSSH,
+		UniqueID:      "bastion-unique-id",
+		ConnectionURL: "10.0.0.2:22",
+		ConnectionCA:  "ssh-fingerprint",
+	}
+	stagingCluster := &models.Destination{
+		Name:          "kubernetes-staging",
+		Kind:          models.DestinationKindKubernetes,
+		UniqueID:      "staging-unique-id",
+		ConnectionURL: "10.0.0.3:6443",
+		ConnectionCA:  "staging-ca-cert",
+	}
+
+	assert.NilError(t, data.CreateDestination(srv.db, kubernetesCluster))
+	assert.NilError(t, data.CreateDestination(srv.db, bastionServer))
+	assert.NilError(t, data.CreateDestination(srv.db, stagingCluster))
+
+	type testCase struct {
+		name     string
+		query    string
+		expected func(t *testing.T, resp *httptest.ResponseRecorder)
+	}
+
+	run := func(t *testing.T, tc testCase) {
+		url := "/api/destinations"
+		if tc.query != "" {
+			url = url + "?" + tc.query
+		}
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+		req.Header.Set("Infra-Version", apiVersionLatest)
+
+		resp := httptest.NewRecorder()
+		routes.ServeHTTP(resp, req)
+
+		tc.expected(t, resp)
+	}
+
+	testCases := []testCase{
+		{
+			name:  "list all destinations",
+			query: "",
+			expected: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, resp.Code, http.StatusOK, resp.Body.String())
+
+				var result api.ListResponse[api.Destination]
+				err := json.Unmarshal(resp.Body.Bytes(), &result)
+				assert.NilError(t, err)
+
+				assert.Equal(t, result.Count, 3)
+				assert.Equal(t, len(result.Items), 3)
+			},
+		},
+		{
+			name:  "search by partial name",
+			query: "name=kube",
+			expected: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, resp.Code, http.StatusOK, resp.Body.String())
+
+				var result api.ListResponse[api.Destination]
+				err := json.Unmarshal(resp.Body.Bytes(), &result)
+				assert.NilError(t, err)
+
+				assert.Equal(t, result.Count, 2)
+				assert.Equal(t, len(result.Items), 2)
+				// Results should be sorted by name
+				assert.Equal(t, result.Items[0].Name, "kubernetes-prod")
+				assert.Equal(t, result.Items[1].Name, "kubernetes-staging")
+			},
+		},
+		{
+			name:  "search by name case insensitive",
+			query: "name=BASTION",
+			expected: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, resp.Code, http.StatusOK, resp.Body.String())
+
+				var result api.ListResponse[api.Destination]
+				err := json.Unmarshal(resp.Body.Bytes(), &result)
+				assert.NilError(t, err)
+
+				assert.Equal(t, result.Count, 1)
+				assert.Equal(t, len(result.Items), 1)
+				assert.Equal(t, result.Items[0].Name, "bastion-server")
+			},
+		},
+		{
+			name:  "search with no results",
+			query: "name=nonexistent",
+			expected: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, resp.Code, http.StatusOK, resp.Body.String())
+
+				var result api.ListResponse[api.Destination]
+				err := json.Unmarshal(resp.Body.Bytes(), &result)
+				assert.NilError(t, err)
+
+				assert.Equal(t, result.Count, 0)
+				assert.Equal(t, len(result.Items), 0)
+			},
+		},
+		{
+			name:  "search by kind",
+			query: "kind=kubernetes",
+			expected: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, resp.Code, http.StatusOK, resp.Body.String())
+
+				var result api.ListResponse[api.Destination]
+				err := json.Unmarshal(resp.Body.Bytes(), &result)
+				assert.NilError(t, err)
+
+				assert.Equal(t, result.Count, 2)
+				assert.Equal(t, len(result.Items), 2)
+			},
+		},
+		{
+			name:  "search with pagination",
+			query: "name=kubernetes&page=1&limit=1",
+			expected: func(t *testing.T, resp *httptest.ResponseRecorder) {
+				assert.Equal(t, resp.Code, http.StatusOK, resp.Body.String())
+
+				var result api.ListResponse[api.Destination]
+				err := json.Unmarshal(resp.Body.Bytes(), &result)
+				assert.NilError(t, err)
+
+				assert.Equal(t, result.Count, 2)
+				assert.Equal(t, len(result.Items), 1)
+				assert.Equal(t, result.Items[0].Name, "kubernetes-prod")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			run(t, tc)
+		})
+	}
+}

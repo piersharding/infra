@@ -5,13 +5,16 @@ import { useRouter } from 'next/router'
 
 import useSWR from 'swr'
 import dayjs from 'dayjs'
-import { ChevronLeftIcon, TrashIcon } from '@heroicons/react/24/outline'
+import {
+  ChevronLeftIcon,
+  TrashIcon,
+  PlusIcon,
+} from '@heroicons/react/24/outline'
 import { CommandLineIcon } from '@heroicons/react/24/solid'
 
 import Dashboard from '../../../components/layouts/dashboard'
 import Loader from '../../../components/loader'
 import RemoveButton from '../../../components/remove-button'
-import GrantForm from '../../../components/grant-form'
 import { useUser } from '../../../lib/hooks'
 import { sortByPrivilege } from '../../../lib/grants'
 
@@ -59,7 +62,7 @@ export default function UserDetail() {
         kind,
         hasGroupGrant: false,
         hasUserGrant: false,
-        userGrantIds: [],
+        userGrants: [],
         groupNames: new Set(),
       }
       current.privileges.add(g.privilege)
@@ -70,7 +73,7 @@ export default function UserDetail() {
       }
       if (g.user) {
         current.hasUserGrant = true
-        current.userGrantIds.push(g.id)
+        current.userGrants.push(g)
       }
       entriesMap.set(resource, current)
     })
@@ -81,7 +84,7 @@ export default function UserDetail() {
       kind: value.kind,
       hasGroupGrant: value.hasGroupGrant,
       hasUserGrant: value.hasUserGrant,
-      userGrantIds: value.userGrantIds,
+      userGrants: value.userGrants,
       groupNames: Array.from(value.groupNames),
     }))
   }, [grants, destinationRolesMap, destinations, groups])
@@ -115,7 +118,7 @@ export default function UserDetail() {
           <h3 className='text-sm font-medium text-gray-800'>Grants</h3>
           {isAdmin && userId !== currentUser?.id && (
             <RemoveButton
-              onClick={async () => {
+              onRemove={async () => {
                 await fetch(`/api/users/${userId}`, { method: 'DELETE' })
                 await mutate()
                 router.push('/users')
@@ -156,7 +159,7 @@ export default function UserDetail() {
                     privileges,
                     hasGroupGrant,
                     hasUserGrant,
-                    userGrantIds,
+                    userGrants,
                     groupNames,
                   }) => (
                     <div
@@ -178,12 +181,14 @@ export default function UserDetail() {
                       </div>
                       {isAdmin && hasUserGrant && (
                         <RemoveButton
-                          onClick={async () => {
+                          onRemove={async () => {
                             await fetch('/api/grants', {
                               method: 'PATCH',
                               body: JSON.stringify({
-                                grantsToRemove: userGrantIds.map(id => ({
-                                  id,
+                                grantsToRemove: userGrants.map(g => ({
+                                  user: g.user,
+                                  privilege: g.privilege,
+                                  resource: g.resource,
                                 })),
                               }),
                             })
@@ -206,22 +211,24 @@ export default function UserDetail() {
         <section className='rounded-lg border border-gray-200/75 bg-white p-4'>
           <h3 className='text-sm font-medium text-gray-800'>Add grant</h3>
           <div className='mt-3 flex flex-col space-y-3'>
-            <GrantForm
-              roles={
-                destinationRolesMap.get(selectedResources[0]) || ['connect']
-              }
-              selectedResources={selectedResources}
-              multiselect={false}
-              grants={grants}
-              onSubmit={async ({ privilege }) => {
-                const resource = selectedResources[0] || ''
+            <form
+              className='my-2 flex flex-row items-center space-x-3'
+              onSubmit={async e => {
+                e.preventDefault()
+                if (selectedResources.length === 0) {
+                  return
+                }
+
+                const resource = selectedResources[0]
+                const roles = destinationRolesMap.get(resource) || ['connect']
+                const privilege = roles[0]
 
                 await fetch('/api/grants', {
                   method: 'PATCH',
                   body: JSON.stringify({
                     grantsToAdd: [
                       {
-                        user: parseInt(userId),
+                        user: userId,
                         privilege,
                         resource,
                       },
@@ -232,7 +239,23 @@ export default function UserDetail() {
                 await mutate()
                 setSelectedResources([])
               }}
-            />
+            >
+              <div className='flex-1'>
+                <p className='text-xs text-gray-600'>
+                  {selectedResources.length > 0
+                    ? `Grant access to: ${selectedResources[0]}`
+                    : 'Select a destination below'}
+                </p>
+              </div>
+              <button
+                disabled={selectedResources.length === 0}
+                type='submit'
+                className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-[7px] text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
+              >
+                <PlusIcon className='mr-1 h-3 w-3' />
+                Add
+              </button>
+            </form>
             <div className='flex flex-wrap gap-2 text-2xs text-gray-500'>
               {(destinations || []).map(d => (
                 <button

@@ -46,7 +46,7 @@ func TestResendAuthCookie(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Assert(t, matched)
 
-	assert.Equal(t, "signup=; Path=/; Domain=example.com; Max-Age=0; HttpOnly; Secure", cookies[1])
+	assert.Equal(t, "signup=; Path=/; Domain=example.com; Max-Age=0; HttpOnly; Secure; SameSite=Strict", cookies[1])
 }
 
 func TestCookieSecureFlagIsSetForTLS(t *testing.T) {

@@ -34,17 +34,17 @@ export default function PasswordResetForm() {
       try {
         const userRes = await fetch('/api/users/self')
         const userData = await jsonBody(userRes)
-        
+
         if (userData) {
           await mutate('/api/users/self', userData, false)
         } else {
           await mutate('/api/users/self')
         }
-      } catch (error) {
+      } catch (_error) {
         // If fetching user data fails, fall back to triggering revalidation
         await mutate('/api/users/self')
       }
-      
+
       router.replace('/')
     } catch (e) {
       setError(e.message)
