@@ -1,4 +1,13 @@
 SHELL=/usr/bin/env bash
+
+REPOSITORY_USER ?= ska-telescope
+REPOSITORY_NAME ?= external/infra
+DOCKER_HOST ?= registry.gitlab.com
+DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
+TAG ?= 0.21.10
+# BUILDVERSION is for client side compatibility - fixed to 0.21.0
+BUILDVERSION ?= 0.21.0
+
 ifneq ($(OS_NAME),darwin)
 IP=$(shell (ip a 2> /dev/null || ifconfig) | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p' | head -n1)
 HOST=$(shell hostname -f)
@@ -29,13 +38,6 @@ INFRA_SERVER_URL ?= $(INFRA_IP_ADDR):9443
 
 DOCKER_ENGINE ?= docker
 DOCKER_CONTEXT ?= .
-REPOSITORY_USER ?= ska-telescope
-REPOSITORY_NAME ?= external/infra
-DOCKER_HOST ?= registry.gitlab.com
-DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.9
-# BUILDVERSION is for client side compatibility - fixed to 0.21.0
-BUILDVERSION ?= 0.21.0
 GITLAB_TOKEN ?=
 
 LINT_ARGS ?= --fix
