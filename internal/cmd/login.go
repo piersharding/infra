@@ -95,7 +95,7 @@ infra login`,
 	cmd.Flags().StringVar(&options.TrustedFingerprint, "tls-trusted-fingerprint", "", "SHA256 fingerprint of the server TLS certificate")
 	cmd.Flags().BoolVar(&options.NoAgent, "no-agent", false, "Skip starting the Infra agent in the background")
 	cmd.Flags().BoolVar(&options.InjectUserSSHConfig, "enable-ssh", false, "Update ~/.ssh/config after login to use infra for ssh (technical preview)")
-	cmd.Flags().Lookup("enable-ssh").Hidden = true
+	cmd.Flags().Lookup("enable-ssh").Hidden = false // making SSH available
 	addNonInteractiveFlag(cmd.Flags(), &options.NonInteractive)
 	return cmd
 }
