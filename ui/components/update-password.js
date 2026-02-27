@@ -1,9 +1,11 @@
 import { useRouter } from 'next/router'
 import { useState } from 'react'
+import { useSWRConfig } from 'swr'
 
 import { formatPasswordRequirements } from '../lib/login'
 
 export default function UpdatePassword({ oldPassword, user }) {
+  const { mutate } = useSWRConfig()
   const router = useRouter()
   const { next } = router.query
 
@@ -29,6 +31,22 @@ export default function UpdatePassword({ oldPassword, user }) {
       })
 
       await jsonBody(res)
+
+      // Fetch user data after successful password update to ensure the session is updated
+      // and user data is available before navigation
+      try {
+        const userRes = await fetch('/api/users/self')
+        const userData = await jsonBody(userRes)
+        
+        if (userData) {
+          await mutate('/api/users/self', userData, false)
+        } else {
+          await mutate('/api/users/self')
+        }
+      } catch (error) {
+        // If fetching user data fails, fall back to triggering revalidation
+        await mutate('/api/users/self')
+      }
 
       router.replace(next ? decodeURIComponent(next) : '/')
     } catch (e) {
