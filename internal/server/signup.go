@@ -229,7 +229,7 @@ func createOrgAndUserForSignup(rCtx access.RequestContext, keyExpiresAt time.Tim
 	rCtx.Response.SignupOrgID = details.Org.ID
 
 	var identity *models.Identity
-	bearer := ""
+	var bearer string
 	switch {
 	case details.User != nil:
 		// username/password sign-up

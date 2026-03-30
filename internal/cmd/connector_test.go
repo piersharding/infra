@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/spf13/pflag"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/assert/opt"
@@ -190,7 +189,7 @@ func TestConnector_Run_Kubernetes(t *testing.T) {
 
 	client := http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // test client connects to a temporary self-signed server
 		},
 	}
 	resp, err := client.Do(req)
@@ -222,13 +221,6 @@ var cmpDestinationModel = cmp.Options{
 var cmpNonEmptyString = cmp.Comparer(func(a, b string) bool {
 	return a != "" && b != ""
 })
-
-var cmpKubeRequest = cmp.Options{
-	cmpopts.EquateEmpty(),
-	cmpopts.IgnoreFields(metav1.ObjectMeta{}, "Labels"),
-	cmpopts.IgnoreFields(rbacv1.RoleRef{}, "APIGroup"),
-	cmpopts.IgnoreFields(rbacv1.Subject{}, "APIGroup"),
-}
 
 func readFile(t *testing.T, p string) string {
 	t.Helper()

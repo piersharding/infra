@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/aws"         //nolint:staticcheck // EC2 metadata lookup still uses aws-sdk-go v1 here; migrating to v2 is a larger follow-up.
+	"github.com/aws/aws-sdk-go/aws/session" //nolint:staticcheck // EC2 metadata lookup still uses aws-sdk-go v1 here; migrating to v2 is a larger follow-up.
+	"github.com/aws/aws-sdk-go/service/ec2" //nolint:staticcheck // EC2 metadata lookup still uses aws-sdk-go v1 here; migrating to v2 is a larger follow-up.
 	"github.com/jessevdk/go-flags"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"

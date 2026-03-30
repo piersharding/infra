@@ -123,6 +123,7 @@ func (g *google) checkGoogleWorkspaceGroups(ctx context.Context, providerUser *m
 		return []string{}, fmt.Errorf("failed to marshal google credentials: %w", err)
 	}
 
+	//nolint:staticcheck // Google does not provide an equivalent replacement that preserves the WithSubject delegation flow used here.
 	creds, err := googleOAuth.CredentialsFromJSONWithParams(ctx, credBytes, params)
 	if err != nil {
 		return []string{}, fmt.Errorf("unable to create google credentials: %w", err)

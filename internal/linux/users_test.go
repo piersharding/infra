@@ -4,9 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/infrahq/infra/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/infrahq/infra/api"
 )
 
 func TestValidateUsername(t *testing.T) {
@@ -520,13 +521,11 @@ func TestRemoveUser_Validation(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), "invalid username")
-			} else {
+			} else if err != nil {
 				// We expect this to fail due to command execution, but not due to validation
 				// or succeed if user doesn't exist (which is valid)
 				// Just check that it's not a validation error
-				if err != nil {
-					assert.NotContains(t, err.Error(), "invalid username")
-				}
+				assert.NotContains(t, err.Error(), "invalid username")
 			}
 		})
 	}
@@ -582,6 +581,7 @@ func TestIsManagedByInfra(t *testing.T) {
 
 func TestReadLocalUsers(t *testing.T) {
 	// Test with valid passwd format
+	//nolint:gosec // passwd fixture content is test data for parser coverage, not credentials.
 	passwdContent := `root:x:0:0:root:/root:/bin/bash
 daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
 alice:x:1000:1000:Alice,,managed by infra:/home/alice:/bin/bash

@@ -187,7 +187,7 @@ func (a *API) Login(rCtx access.RequestContext, r *api.LoginRequest) (*api.Login
 			return nil, err
 		}
 		// all other failures from login should result in an unauthorized response
-		return nil, fmt.Errorf("%w: login failed: %v", internal.ErrUnauthorized, err)
+		return nil, fmt.Errorf("%w: login failed: %w", internal.ErrUnauthorized, err)
 	}
 
 	if onSuccess != nil {

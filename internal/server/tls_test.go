@@ -59,7 +59,7 @@ func TestTLSConfigFromOptions(t *testing.T) {
 		assert.NilError(t, err)
 
 		l = tls.NewListener(l, config)
-		// nolint:gosec
+		// nolint:gosec // test uses a temporary self-signed TLS listener
 		srv := http.Server{Handler: noopHandler}
 
 		go func() {

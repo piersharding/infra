@@ -331,6 +331,7 @@ func TestGetCSRFToken(t *testing.T) {
 		c.String(http.StatusOK, token)
 	})
 
+	//nolint:gosec // Fixed test token used only to verify cookie/header plumbing in unit tests.
 	expectedToken := "test-csrf-token"
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: expectedToken})

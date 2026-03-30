@@ -136,7 +136,7 @@ func testTokenResponse(claims jwt.Claims, signingKey *rsa.PrivateKey, email stri
 		return "", err
 	}
 
-	raw := ""
+	var raw string
 	if email != "" {
 		type Custom struct {
 			Email string `json:"email"`

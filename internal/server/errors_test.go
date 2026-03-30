@@ -145,7 +145,7 @@ func TestSendAPIError(t *testing.T) {
 			}
 
 			sendAPIError(resp, req, test.err)
-			assert.Equal(t, test.result.Code, int32(resp.Result().StatusCode))
+			assert.Equal(t, int(test.result.Code), resp.Result().StatusCode)
 
 			if test.emptyResponseBody {
 				assert.Equal(t, resp.Body.Len(), 0)

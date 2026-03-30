@@ -19,9 +19,8 @@
     "dayjs": "^1.11.9",
     "js-yaml": "^4.1.0",
     "moment": "^2.29.4",
-    "next": "^15.5.10",
+    "next": "^15.5.14",
     "node-notifier": "^10.0.1",
-    "npm": "^11.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-dom-confetti": "^0.2.0",
@@ -66,6 +65,26 @@
   "overrides": {
     "test-exclude": "^7.0.1",
     "jsdom": "^27.4.0",
-    "minimatch": "^10.2.1"
+    "minimatch": "^10.2.3",
+    "brace-expansion": "^5.0.5",
+    "flatted": "^3.4.2",
+    "anymatch": {
+      "picomatch": "^2.3.2"
+    },
+    "readdirp": {
+      "picomatch": "^2.3.2"
+    },
+    "micromatch": {
+      "picomatch": "^2.3.2"
+    },
+    "tinyglobby": {
+      "picomatch": "^4.0.4"
+    },
+    "jest-util": {
+      "picomatch": "^4.0.4"
+    },
+    "fdir": {
+      "picomatch": "^4.0.4"
+    }
   }
 }

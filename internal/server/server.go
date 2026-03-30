@@ -525,7 +525,7 @@ func (s *Server) syncIdentityInfo(ctx context.Context, tx *data.Transaction, ide
 				secureLogger.SecureError("failed to delete provider user", nestedErr)
 			}
 
-			return fmt.Errorf("%w: %s", ErrSyncFailed, err)
+			return fmt.Errorf("%w: %w", ErrSyncFailed, err)
 		}
 
 		providerUser.LastUpdate = time.Now().UTC()

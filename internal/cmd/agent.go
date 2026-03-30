@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -80,15 +81,20 @@ func configAgentRunning() (bool, error) {
 		return false, err
 	}
 
-	return processRunning(int32(pid))
+	return processRunning(pid)
 }
 
-func processRunning(pid int32) (bool, error) {
+func processRunning(pid int) (bool, error) {
 	if pid == 0 { // on windows pid 0 is the system idle process, it will be running but its not the agent
 		return false, nil
 	}
 
-	running, err := process.PidExists(pid)
+	if pid < math.MinInt32 || pid > math.MaxInt32 {
+		return false, fmt.Errorf("invalid pid %d", pid)
+	}
+
+	//nolint:gosec // pid is range-checked against int32 bounds immediately above.
+	running, err := process.PidExists(int32(pid))
 	if err != nil {
 		return false, err
 	}

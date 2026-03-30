@@ -19,7 +19,6 @@ import (
 	"github.com/infrahq/infra/internal/access"
 	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/internal/openapi3"
-
 	"github.com/infrahq/infra/internal/validate"
 	"github.com/infrahq/infra/metrics"
 )
@@ -328,7 +327,7 @@ func requestVersion(req *http.Request) (*semver.Version, error) {
 	}
 	reqVer, err := semver.NewVersion(headerVer)
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid Infra-Version header: %v. Current version is %s", internal.ErrBadRequest, err, internal.FullVersion())
+		return nil, fmt.Errorf("%w: invalid Infra-Version header: %w. Current version is %s", internal.ErrBadRequest, err, internal.FullVersion())
 	}
 	return reqVer, nil
 }
@@ -414,19 +413,19 @@ func readRequest(c *gin.Context, req interface{}) error {
 			params[v.Key] = []string{v.Value}
 		}
 		if err := binding.Uri.BindUri(params, req); err != nil {
-			return fmt.Errorf("%w: %s", internal.ErrBadRequest, err)
+			return fmt.Errorf("%w: %w", internal.ErrBadRequest, err)
 		}
 	}
 
 	if len(c.Request.URL.Query()) > 0 {
 		if err := binding.Query.Bind(c.Request, req); err != nil {
-			return fmt.Errorf("%w: %s", internal.ErrBadRequest, err)
+			return fmt.Errorf("%w: %w", internal.ErrBadRequest, err)
 		}
 	}
 
 	if c.Request.Body != nil && c.Request.ContentLength > 0 {
 		if err := json.NewDecoder(c.Request.Body).Decode(req); err != nil {
-			return fmt.Errorf("%w: %s", internal.ErrBadRequest, err)
+			return fmt.Errorf("%w: %w", internal.ErrBadRequest, err)
 		}
 	}
 

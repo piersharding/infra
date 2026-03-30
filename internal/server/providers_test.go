@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"gotest.tools/v3/assert"
-	"k8s.io/utils/strings/slices"
 
 	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/internal/server/data"

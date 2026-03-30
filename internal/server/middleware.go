@@ -192,7 +192,7 @@ func requireAccessKey(c *gin.Context, db data.WriteTxn, srv *Server) (access.Aut
 		if errors.Is(err, data.ErrAccessKeyExpired) {
 			return u, AuthenticationError{Message: "access key has expired"}
 		}
-		return u, fmt.Errorf("%w: invalid token: %s", internal.ErrUnauthorized, err)
+		return u, fmt.Errorf("%w: invalid token: %w", internal.ErrUnauthorized, err)
 	}
 
 	if accessKey.Scopes.Includes(models.ScopePasswordReset) {
@@ -287,7 +287,7 @@ hostLookup:
 func reqBearerToken(c *gin.Context, opts Options) (string, error) {
 	header := c.Request.Header.Get("Authorization")
 
-	bearer := ""
+	var bearer string
 
 	parts := strings.Split(header, " ")
 	if len(parts) == 2 && parts[0] == "Bearer" {

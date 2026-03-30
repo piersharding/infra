@@ -1,11 +1,11 @@
 package repeat
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"golang.org/x/net/context"
 	"gotest.tools/v3/assert"
 )
 
