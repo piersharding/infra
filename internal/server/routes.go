@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -347,6 +348,7 @@ func handlerForVersion(versions []routeVersion, reqVer *semver.Version) func(c *
 }
 
 var reflectTypeString = reflect.TypeOf("")
+var reflectTypeTextUnmarshaler = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
 
 // trimWhitespace trims leading and trailing whitespace from any string fields
 // in req. The req argument must be a non-nil pointer to a struct.
@@ -360,6 +362,117 @@ func trimWhitespace(req interface{}) {
 			}
 		}
 	}
+}
+
+func bindTextUnmarshalerFields(req any, values map[string][]string, tag string) error {
+	v := reflect.ValueOf(req)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return nil
+	}
+	return bindTextUnmarshalerStruct(v.Elem(), values, tag)
+}
+
+func bindTextUnmarshalerStruct(v reflect.Value, values map[string][]string, tag string) error {
+	if v.Kind() != reflect.Struct {
+		return nil
+	}
+
+	t := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		structField := t.Field(i)
+		if structField.PkgPath != "" && !structField.Anonymous {
+			continue
+		}
+
+		if tagValue, ok := bindingTagValue(structField, tag); ok && supportsTextUnmarshaler(field.Type()) {
+			raw, exists := values[tagValue]
+			if !exists {
+				continue
+			}
+			if err := bindTextUnmarshalerField(field, raw); err != nil {
+				return err
+			}
+			delete(values, tagValue)
+			continue
+		}
+
+		if structField.Anonymous {
+			if field.Kind() == reflect.Struct {
+				if err := bindTextUnmarshalerStruct(field, values, tag); err != nil {
+					return err
+				}
+			}
+			if field.Kind() == reflect.Ptr && !field.IsNil() && field.Elem().Kind() == reflect.Struct {
+				if err := bindTextUnmarshalerStruct(field.Elem(), values, tag); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func bindingTagValue(field reflect.StructField, tag string) (string, bool) {
+	tagValue := field.Tag.Get(tag)
+	if tagValue == "-" {
+		return "", false
+	}
+	tagValue, _, _ = strings.Cut(tagValue, ",")
+	if tagValue == "" {
+		tagValue = field.Name
+	}
+	if tagValue == "" {
+		return "", false
+	}
+	return tagValue, true
+}
+
+func supportsTextUnmarshaler(t reflect.Type) bool {
+	if t.Kind() == reflect.Ptr {
+		return supportsTextUnmarshaler(t.Elem())
+	}
+	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+		return supportsTextUnmarshaler(t.Elem())
+	}
+	return reflect.PointerTo(t).Implements(reflectTypeTextUnmarshaler)
+}
+
+func bindTextUnmarshalerField(field reflect.Value, raw []string) error {
+	if field.Kind() == reflect.Ptr {
+		if field.IsNil() {
+			field.Set(reflect.New(field.Type().Elem()))
+		}
+		return bindTextUnmarshalerField(field.Elem(), raw)
+	}
+	if field.Kind() == reflect.Slice {
+		slice := reflect.MakeSlice(field.Type(), len(raw), len(raw))
+		for i := range raw {
+			if err := bindTextUnmarshalerField(slice.Index(i), []string{raw[i]}); err != nil {
+				return err
+			}
+		}
+		field.Set(slice)
+		return nil
+	}
+	if field.Kind() == reflect.Array {
+		if len(raw) != field.Len() {
+			return fmt.Errorf("%q is not valid value for %s", raw, field.Type())
+		}
+		for i := range raw {
+			if err := bindTextUnmarshalerField(field.Index(i), []string{raw[i]}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	unmarshaler, ok := field.Addr().Interface().(encoding.TextUnmarshaler)
+	if !ok {
+		return fmt.Errorf("type %s does not implement encoding.TextUnmarshaler", field.Type())
+	}
+	return unmarshaler.UnmarshalText([]byte(raw[0]))
 }
 
 func responseStatusCode(method string, resp any) int {
@@ -412,13 +525,20 @@ func readRequest(c *gin.Context, req interface{}) error {
 		for _, v := range c.Params {
 			params[v.Key] = []string{v.Value}
 		}
+		if err := bindTextUnmarshalerFields(req, params, "uri"); err != nil {
+			return fmt.Errorf("%w: %w", internal.ErrBadRequest, err)
+		}
 		if err := binding.Uri.BindUri(params, req); err != nil {
 			return fmt.Errorf("%w: %w", internal.ErrBadRequest, err)
 		}
 	}
 
 	if len(c.Request.URL.Query()) > 0 {
-		if err := binding.Query.Bind(c.Request, req); err != nil {
+		query := c.Request.URL.Query()
+		if err := bindTextUnmarshalerFields(req, query, "form"); err != nil {
+			return fmt.Errorf("%w: %w", internal.ErrBadRequest, err)
+		}
+		if err := binding.MapFormWithTag(req, query, "form"); err != nil {
 			return fmt.Errorf("%w: %w", internal.ErrBadRequest, err)
 		}
 	}

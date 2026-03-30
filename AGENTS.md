@@ -469,13 +469,9 @@ func (g grantsTable) Columns() []string {
 
 ## Important Gotchas
 
-### Gin Fork
+### Gin Binding Compatibility
 
-The project uses a custom Gin fork, not the upstream package:
-```
-replace github.com/gin-gonic/gin => github.com/infrahq/gin v1.7.2-...
-```
-Do not upgrade `gin-gonic/gin` directly — update the `replace` directive instead.
+The project now uses upstream `github.com/gin-gonic/gin` directly. Request binding for `uid.ID`, `api.IDOrSelf`, and repeated `[]uid.ID` query parameters is preserved locally in `internal/server/routes.go` via a small `encoding.TextUnmarshaler` compatibility shim.
 
 ### Database Operations
 
