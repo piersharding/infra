@@ -4,7 +4,7 @@ REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.10
+TAG ?= 0.21.11
 # BUILDVERSION is for client side compatibility - fixed to 0.21.0
 BUILDVERSION ?= 0.21.0
 
@@ -126,9 +126,9 @@ docker-push:
 	$(DOCKER_ENGINE) push $(DOCKER_REGISTRY)/infra:$(TAG)
 	$(DOCKER_ENGINE) push $(DOCKER_REGISTRY)/ui:$(TAG)
 
-load: docker-push
-	minikube image load $(DOCKER_REGISTRY)/infra:$(TAG)
-	minikube image load $(DOCKER_REGISTRY)/ui:$(TAG)
+load:
+	minikube image load --daemon --overwrite $(DOCKER_REGISTRY)/infra:$(TAG)
+	minikube image load --daemon --overwrite $(DOCKER_REGISTRY)/ui:$(TAG)
 
 docker/ui: DOCKER_CONTEXT=ui
 
