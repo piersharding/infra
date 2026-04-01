@@ -140,6 +140,7 @@ func migrationIDs(t *testing.T, db DB) []string {
 	var ids []string
 	rows, err := db.Query(`SELECT id from migrations`)
 	assert.NilError(t, err)
+	defer func() { assert.NilError(t, rows.Close()) }()
 
 	for rows.Next() {
 		var id string
@@ -147,7 +148,7 @@ func migrationIDs(t *testing.T, db DB) []string {
 		ids = append(ids, id)
 	}
 
-	assert.NilError(t, rows.Close())
+	assert.NilError(t, rows.Err())
 	return ids
 }
 

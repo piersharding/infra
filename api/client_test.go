@@ -32,14 +32,20 @@ func TestErrorStatusCode(t *testing.T) {
 
 	t.Run("equal to self, not equal to other codes", func(t *testing.T) {
 		for c := 0; c < len(codes); c++ {
-			err := Error{Code: int32(codes[c])}
+			code, convErr := checkedHTTPStatusCode(codes[c])
+			assert.NilError(t, convErr)
+
+			err := Error{Code: code}
 			for o := 0; o < len(codes); o++ {
+				otherCode, convErr := checkedHTTPStatusCode(codes[o])
+				assert.NilError(t, convErr)
+
 				if o == c {
-					assert.Equal(t, ErrorStatusCode(err), int32(codes[o]))
+					assert.Equal(t, ErrorStatusCode(err), otherCode)
 					continue
 				}
 
-				assert.Assert(t, ErrorStatusCode(err) != int32(codes[o]),
+				assert.Assert(t, ErrorStatusCode(err) != otherCode,
 					"code=%v, other=%v", err.Code, codes[o])
 			}
 		}
@@ -54,11 +60,14 @@ func TestErrorStatusCode(t *testing.T) {
 	})
 
 	t.Run("from wrapped error", func(t *testing.T) {
+		code, convErr := checkedHTTPStatusCode(http.StatusInternalServerError)
+		assert.NilError(t, convErr)
+
 		err := fmt.Errorf("with some wrapping: %w",
-			Error{Code: int32(http.StatusInternalServerError)})
+			Error{Code: code})
 
 		actual := ErrorStatusCode(err)
-		assert.Equal(t, actual, int32(http.StatusInternalServerError))
+		assert.Equal(t, actual, code)
 	})
 }
 

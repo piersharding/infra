@@ -163,6 +163,7 @@ func addAuthURLAndScopeToProviders() *migrator.Migration {
 				if err != nil {
 					return err
 				}
+				defer rows.Close()
 
 				for rows.Next() {
 					var provider models.Provider
@@ -183,7 +184,7 @@ func addAuthURLAndScopeToProviders() *migrator.Migration {
 					authServerInfo, err := providerClient.AuthServerInfo(context.Background())
 					if err != nil {
 						if errors.Is(err, context.DeadlineExceeded) {
-							return fmt.Errorf("%w: %s", internal.ErrBadGateway, err)
+							return fmt.Errorf("%w: %w", internal.ErrBadGateway, err)
 						}
 						return fmt.Errorf("could not get provider info: %w", err)
 					}
@@ -195,7 +196,10 @@ func addAuthURLAndScopeToProviders() *migrator.Migration {
 						return err
 					}
 				}
-				return rows.Close()
+				if err := rows.Err(); err != nil {
+					return err
+				}
+				return nil
 			}
 
 			return nil

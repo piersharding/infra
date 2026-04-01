@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 )
 
 type SymmetricKey struct {
@@ -153,6 +154,24 @@ type encryptedPayload struct {
 	Nonce      []byte // must be crypto-random unique every time, size = block size
 }
 
+func checkedPayloadLength32(field string, length int) (uint32, error) {
+	if length < 0 || int64(length) > math.MaxUint32 {
+		return 0, fmt.Errorf("%s length %d exceeds max %d", field, length, uint64(math.MaxUint32))
+	}
+
+	//nolint:gosec // length is range-checked against MaxUint32 immediately above.
+	return uint32(length), nil
+}
+
+func checkedPayloadLength8(field string, length int) (uint8, error) {
+	if length < 0 || int64(length) > math.MaxUint8 {
+		return 0, fmt.Errorf("%s length %d exceeds max %d", field, length, uint64(math.MaxUint8))
+	}
+
+	//nolint:gosec // length is range-checked against MaxUint8 immediately above.
+	return uint8(length), nil
+}
+
 func unmarshalPayload(mp []byte, p *encryptedPayload) error {
 	b := bytes.NewBuffer(mp)
 
@@ -213,7 +232,11 @@ func unmarshalPayload(mp []byte, p *encryptedPayload) error {
 func marshalPayload(p *encryptedPayload) ([]byte, error) {
 	b := bytes.NewBuffer(nil)
 
-	if err := binary.Write(b, binary.BigEndian, uint32(len(p.Ciphertext))); err != nil {
+	ciphertextLength, err := checkedPayloadLength32("ciphertext", len(p.Ciphertext))
+	if err != nil {
+		return nil, err
+	}
+	if err := binary.Write(b, binary.BigEndian, ciphertextLength); err != nil {
 		return nil, err
 	}
 
@@ -221,7 +244,11 @@ func marshalPayload(p *encryptedPayload) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := binary.Write(b, binary.BigEndian, uint8(len(p.Algorithm))); err != nil {
+	algorithmLength, err := checkedPayloadLength8("algorithm", len(p.Algorithm))
+	if err != nil {
+		return nil, err
+	}
+	if err := binary.Write(b, binary.BigEndian, algorithmLength); err != nil {
 		return nil, err
 	}
 
@@ -229,7 +256,11 @@ func marshalPayload(p *encryptedPayload) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := binary.Write(b, binary.BigEndian, uint8(len(p.KeyID))); err != nil {
+	keyIDLength, err := checkedPayloadLength8("key id", len(p.KeyID))
+	if err != nil {
+		return nil, err
+	}
+	if err := binary.Write(b, binary.BigEndian, keyIDLength); err != nil {
 		return nil, err
 	}
 
@@ -237,7 +268,11 @@ func marshalPayload(p *encryptedPayload) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := binary.Write(b, binary.BigEndian, uint8(len(p.RootKeyID))); err != nil {
+	rootKeyIDLength, err := checkedPayloadLength8("root key id", len(p.RootKeyID))
+	if err != nil {
+		return nil, err
+	}
+	if err := binary.Write(b, binary.BigEndian, rootKeyIDLength); err != nil {
 		return nil, err
 	}
 
@@ -245,7 +280,11 @@ func marshalPayload(p *encryptedPayload) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := binary.Write(b, binary.BigEndian, uint8(len(p.Nonce))); err != nil {
+	nonceLength, err := checkedPayloadLength8("nonce", len(p.Nonce))
+	if err != nil {
+		return nil, err
+	}
+	if err := binary.Write(b, binary.BigEndian, nonceLength); err != nil {
 		return nil, err
 	}
 

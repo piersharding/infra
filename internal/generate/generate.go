@@ -39,6 +39,7 @@ func CryptoRandom(n int, charset string) (string, error) {
 var random *mathrand.Rand
 
 func init() {
+	//nolint:gosec // MathRandom is explicitly non-cryptographic and uses math/rand by design.
 	random = mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
 }
 
@@ -64,5 +65,6 @@ func MathRandom(n int, charset string) string {
 // only be used by tests.
 // SetSeed can not be called concurrently with itself or MathRandom.
 func SetSeed(seed int64) {
+	//nolint:gosec // Tests intentionally control the math/rand seed for deterministic output.
 	random = mathrand.New(mathrand.NewSource(seed))
 }

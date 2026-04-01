@@ -96,9 +96,14 @@ func (g *google) checkGoogleWorkspaceGroups(ctx context.Context, providerUser *m
 		return []string{}, ErrGoogleClientNotConfigured
 	}
 
-	params := googleOAuth.CredentialsParams{
-		Scopes:  googleAPIScopes,
-		Subject: g.GoogleCredentials.DomainAdminEmail, // delegated admin permissions scopes to the groups endpoint are required by the client
+	if val := ctx.Value(testGroupsKey{}); val != nil {
+		// Stub out the external call for unit tests before building credentials so
+		// tests do not depend on parsing a real service-account private key.
+		testGroups, ok := val.([]string)
+		if !ok {
+			return []string{}, fmt.Errorf("failed to parse test groups")
+		}
+		return testGroups, nil
 	}
 
 	// credentialsFile emulates the format of a Google credentials file
@@ -123,23 +128,15 @@ func (g *google) checkGoogleWorkspaceGroups(ctx context.Context, providerUser *m
 		return []string{}, fmt.Errorf("failed to marshal google credentials: %w", err)
 	}
 
-	creds, err := googleOAuth.CredentialsFromJSONWithParams(ctx, credBytes, params)
+	jwtConfig, err := googleOAuth.JWTConfigFromJSON(credBytes, googleAPIScopes...)
 	if err != nil {
 		return []string{}, fmt.Errorf("unable to create google credentials: %w", err)
 	}
+	jwtConfig.Subject = g.GoogleCredentials.DomainAdminEmail // delegated admin permissions scopes to the groups endpoint are required by the client
 
-	client, err := googleAdminDirectory.NewService(ctx, googleOption.WithCredentials(creds))
+	client, err := googleAdminDirectory.NewService(ctx, googleOption.WithHTTPClient(jwtConfig.Client(ctx)))
 	if err != nil {
 		return []string{}, fmt.Errorf("unable to create google admin directory service: %w", err)
-	}
-
-	if val := ctx.Value(testGroupsKey{}); val != nil {
-		// stub out the external call for unit tests
-		testGroups, ok := val.([]string)
-		if !ok {
-			return []string{}, fmt.Errorf("failed to parse test groups")
-		}
-		return testGroups, nil
 	}
 
 	resp, err := client.Groups.List().UserKey(providerUser.Email).Do()

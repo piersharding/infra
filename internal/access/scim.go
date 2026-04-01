@@ -62,7 +62,7 @@ func UpdateProviderUser(rCtx RequestContext, u *models.ProviderUser) error {
 	err := data.UpdateProviderUser(rCtx.DBTxn, u)
 	if err != nil {
 		if errors.Is(err, data.ErrSourceOfTruthConflict) {
-			return fmt.Errorf("%w: %s", internal.ErrBadRequest, err)
+			return fmt.Errorf("%w: %w", internal.ErrBadRequest, err)
 		}
 		return fmt.Errorf("update provider user: %w", err)
 	}

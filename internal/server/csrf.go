@@ -17,6 +17,7 @@ import (
 
 const (
 	// csrfTokenHeader is the HTTP header used to send/receive the CSRF token
+	//nolint:gosec // This is an HTTP header name, not a credential or secret.
 	csrfTokenHeader = "X-CSRF-Token"
 
 	// csrfCookieName is the name of the cookie that stores the CSRF token

@@ -187,6 +187,10 @@ func (id *ID) UnmarshalText(b []byte) error {
 	return err
 }
 
+func (id *ID) UnmarshalParam(param string) error {
+	return id.UnmarshalText([]byte(param))
+}
+
 func (id ID) DescribeSchema(schema *openapi3.Schema) {
 	schema.Type = "string"
 	schema.Format = "uid"

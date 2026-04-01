@@ -51,9 +51,9 @@ function oidc(id, clientID, authURL, scopes, kind, redirectURL, next) {
     window.localStorage.setItem('next', next)
   }
 
-  const state = [...Array(10)]
-    .map(() => (~~(Math.random() * 36)).toString(36))
-    .join('')
+  const stateBytes = new Uint8Array(16)
+  crypto.getRandomValues(stateBytes)
+  const state = Array.from(stateBytes, b => b.toString(16).padStart(2, '0')).join('')
   window.localStorage.setItem('state', state)
 
   const sendTo = new URL(authURL)

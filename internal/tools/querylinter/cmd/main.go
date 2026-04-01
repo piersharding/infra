@@ -11,12 +11,7 @@ func main() {
 	singlechecker.Main(querylinter.Analyzer)
 }
 
-type analyzerPlugin struct{}
-
-func (analyzerPlugin) GetAnalyzers() []*analysis.Analyzer {
-	return []*analysis.Analyzer{querylinter.Analyzer}
+// New implements the current golangci-lint Go plugin entrypoint.
+func New(_ any) ([]*analysis.Analyzer, error) {
+	return []*analysis.Analyzer{querylinter.Analyzer}, nil
 }
-
-// AnalyzerPlugin implements the interface for golangci-lint plugins
-// nolint
-var AnalyzerPlugin = analyzerPlugin{}

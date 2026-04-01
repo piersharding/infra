@@ -177,7 +177,7 @@ func (a *API) setProviderInfoFromServer(ctx context.Context, provider *models.Pr
 	// create a provider client to validate the server and get its info
 	oidc, err := a.server.providerClient(ctx, provider, "")
 	if err != nil {
-		return fmt.Errorf("%w: %s", internal.ErrBadRequest, err)
+		return fmt.Errorf("%w: %w", internal.ErrBadRequest, err)
 	}
 
 	err = oidc.Validate(ctx)
@@ -188,7 +188,7 @@ func (a *API) setProviderInfoFromServer(ctx context.Context, provider *models.Pr
 	authServerInfo, err := oidc.AuthServerInfo(ctx)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("%w: %s", internal.ErrBadGateway, err)
+			return fmt.Errorf("%w: %w", internal.ErrBadGateway, err)
 		}
 		return err
 	}

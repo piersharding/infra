@@ -57,15 +57,29 @@ func checkError(resp *http.Response, body []byte) error {
 		return nil
 	}
 
-	apiError := Error{Code: int32(resp.StatusCode)}
+	statusCode, err := checkedHTTPStatusCode(resp.StatusCode)
+	if err != nil {
+		return err
+	}
 
-	err := json.Unmarshal(body, &apiError)
+	apiError := Error{Code: statusCode}
+
+	err = json.Unmarshal(body, &apiError)
 	if err != nil {
 		// Use the full body as the message if we fail to decode a response.
 		apiError.Message = string(body)
 	}
 
 	return apiError
+}
+
+func checkedHTTPStatusCode(code int) (int32, error) {
+	if code < 0 {
+		return 0, fmt.Errorf("invalid http status code: %d", code)
+	}
+
+	//nolint:gosec // HTTP status codes are non-negative and far below int32 max; negative values are rejected above.
+	return int32(code), nil
 }
 
 // ErrorStatusCode returns the http status code from the error.
@@ -135,7 +149,7 @@ func request[Res any](client Client, req *http.Request) (*Res, error) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, fmt.Errorf("%w: %s", ErrTimeout, err)
+			return nil, fmt.Errorf("%w: %w", ErrTimeout, err)
 		}
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
@@ -455,7 +469,7 @@ func HandleConnError(err error) error {
 	urlErr := &url.Error{}
 	if errors.As(err, &urlErr) {
 		if urlErr.Timeout() {
-			return fmt.Errorf("%w: %s", ErrTimeout, err)
+			return fmt.Errorf("%w: %w", ErrTimeout, err)
 		}
 	}
 

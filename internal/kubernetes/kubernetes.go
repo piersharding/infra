@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/jessevdk/go-flags"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -292,16 +292,24 @@ func (k *Kubernetes) ec2ClusterName() (string, error) {
 		return "", err
 	}
 
-	awsSess, err := session.NewSession(&aws.Config{Region: aws.String(identity.Region)})
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithRegion(identity.Region))
 	if err != nil {
 		return "", err
 	}
 
-	connection := ec2.New(awsSess)
+	connection := ec2.NewFromConfig(cfg)
 	name := "instance-id"
 	value := identity.InstanceID
 
-	describeInstancesOutput, err := connection.DescribeInstances(&ec2.DescribeInstancesInput{Filters: []*ec2.Filter{{Name: &name, Values: []*string{&value}}}})
+	describeInstancesOutput, err := connection.DescribeInstances(
+		context.Background(),
+		&ec2.DescribeInstancesInput{
+			Filters: []ec2types.Filter{{
+				Name:   &name,
+				Values: []string{value},
+			}},
+		},
+	)
 	if err != nil {
 		return "", err
 	}
@@ -318,27 +326,25 @@ func (k *Kubernetes) ec2ClusterName() (string, error) {
 
 	instance := ec2Instances[0]
 
-	tags := []string{}
-	for _, tag := range instance.Tags {
-		tags = append(tags, fmt.Sprintf("%s:%s", *tag.Key, *tag.Value))
-	}
+	return ec2ClusterNameFromTags(instance.Tags)
+}
 
-	var clusterName string
-
+func ec2ClusterNameFromTags(tags []ec2types.Tag) (string, error) {
 	for _, tag := range tags {
-		if strings.HasPrefix(tag, "kubernetes.io/cluster/") { // tag key format: kubernetes.io/cluster/clustername"
-			key := strings.Split(tag, ":")[0]
-			clusterName = strings.Split(key, "/")[2] // rely on ec2 tag format to extract clustername
+		if tag.Key == nil {
+			continue
+		}
+		if !strings.HasPrefix(*tag.Key, "kubernetes.io/cluster/") {
+			continue
+		}
 
-			break
+		parts := strings.SplitN(*tag.Key, "/", 3)
+		if len(parts) == 3 && parts[2] != "" {
+			return parts[2], nil
 		}
 	}
 
-	if clusterName == "" {
-		return "", errors.New("unable to parse cluster name from EC2 tags")
-	}
-
-	return clusterName, nil
+	return "", errors.New("unable to parse cluster name from EC2 tags")
 }
 
 func (k *Kubernetes) gkeClusterName() (string, error) {

@@ -51,8 +51,11 @@ func (r SecureStringRule) Validate() *Failure {
 
 func (r SecureStringRule) DescribeSchema(schema *openapi3.Schema) {
 	property := schemaForProperty(schema, r.name)
-	property.MinLength = uint64(r.minLength)
-	property.MaxLength = &[]uint64{uint64(r.maxLength)}[0]
+	property.MinLength = schemaLength(r.minLength)
+	if r.maxLength > 0 {
+		maxLength := schemaLength(r.maxLength)
+		property.MaxLength = &maxLength
+	}
 	if r.pattern != nil {
 		property.Pattern = r.pattern.String()
 	}
@@ -344,6 +347,15 @@ func schemaForProperty(parent *openapi3.Schema, prop string) *openapi3.Schema {
 		parent.Properties[prop] = &openapi3.SchemaRef{Schema: &openapi3.Schema{}}
 	}
 	return parent.Properties[prop].Schema
+}
+
+func schemaLength(length int) uint64 {
+	if length <= 0 {
+		return 0
+	}
+
+	//nolint:gosec // validation schema lengths are constrained to non-negative ints before conversion.
+	return uint64(length)
 }
 
 func fieldName(f reflect.StructField) string {

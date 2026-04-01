@@ -195,7 +195,7 @@ dev/clean: dev/context
 # install from source, because we need to build our plugin with the exact
 # same version of Go, and the exact same version of all Go modules.
 golangci-lint:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.49.0
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
 
 lint: golangci-lint internal/tools/querylinter/cmd/querylinter.so
 	golangci-lint run $(LINT_ARGS)

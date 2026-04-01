@@ -174,7 +174,7 @@ func TestServer_Run(t *testing.T) {
 		tr := &http.Transport{}
 		tr.TLSClientConfig = &tls.Config{
 			// TODO: use the actual certs when that is possible
-			//nolint:gosec
+			//nolint:gosec // test client connects to a temporary self-signed server
 			InsecureSkipVerify: true,
 		}
 		client := &http.Client{Transport: tr}

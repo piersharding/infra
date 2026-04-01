@@ -91,17 +91,17 @@ func runSSHHosts(cli *CLI, hostname, port string) error {
 
 	opts, err := defaultClientOpts()
 	if err != nil {
-		return fmt.Errorf("%w: %v", errBeforeDestinationMatch, err)
+		return fmt.Errorf("%w: %w", errBeforeDestinationMatch, err)
 	}
 	client, err := NewAPIClient(opts)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errBeforeDestinationMatch, err)
+		return fmt.Errorf("%w: %w", errBeforeDestinationMatch, err)
 	}
 
 	// TODO: check a local file cache to avoid querying the server in all cases
 	dests, err := client.ListDestinations(ctx, api.ListDestinationsRequest{Kind: "ssh"})
 	if err != nil {
-		return fmt.Errorf("%w: %v", errBeforeDestinationMatch, err)
+		return fmt.Errorf("%w: %w", errBeforeDestinationMatch, err)
 	}
 
 	// Exit if the hostname is not known to infra

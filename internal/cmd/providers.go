@@ -322,7 +322,6 @@ func updateProvider(cli *CLI, name string, opts providerEditOptions) error {
 				}
 			}
 			// ignore error and proceed, key may not exist
-			err = nil
 		}
 		key, err := client.CreateAccessKey(ctx, &api.CreateAccessKeyRequest{
 			IssuedForID:       provider.ID,

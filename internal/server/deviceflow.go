@@ -67,7 +67,7 @@ retry:
 func (a *API) GetDeviceFlowStatus(rCtx access.RequestContext, req *api.DeviceFlowStatusRequest) (*api.DeviceFlowStatusResponse, error) {
 	dfar, err := data.GetDeviceFlowAuthRequest(rCtx.DBTxn, data.GetDeviceFlowAuthRequestOptions{ByDeviceCode: req.DeviceCode})
 	if err != nil {
-		return nil, fmt.Errorf("%w: error retrieving device flow auth request: %v", internal.ErrUnauthorized, err)
+		return nil, fmt.Errorf("%w: error retrieving device flow auth request: %w", internal.ErrUnauthorized, err)
 	}
 
 	if dfar.ExpiresAt.Before(time.Now()) {
@@ -86,7 +86,7 @@ func (a *API) GetDeviceFlowStatus(rCtx access.RequestContext, req *api.DeviceFlo
 
 	user, err := data.GetIdentity(rCtx.DBTxn, data.GetIdentityOptions{ByID: dfar.UserID})
 	if err != nil {
-		return nil, fmt.Errorf("%w: retrieving approval user: %v", internal.ErrUnauthorized, err)
+		return nil, fmt.Errorf("%w: retrieving approval user: %w", internal.ErrUnauthorized, err)
 	}
 
 	accessKey := &models.AccessKey{
@@ -104,12 +104,12 @@ func (a *API) GetDeviceFlowStatus(rCtx access.RequestContext, req *api.DeviceFlo
 
 	bearer, err := data.CreateAccessKey(rCtx.DBTxn, accessKey)
 	if err != nil {
-		return nil, fmt.Errorf("%w: creating new access key: %v", internal.ErrUnauthorized, err)
+		return nil, fmt.Errorf("%w: creating new access key: %w", internal.ErrUnauthorized, err)
 	}
 
 	user.LastSeenAt = time.Now().UTC()
 	if err := data.UpdateIdentity(rCtx.DBTxn, user); err != nil {
-		return nil, fmt.Errorf("%w: update user last seen: %v", internal.ErrUnauthorized, err)
+		return nil, fmt.Errorf("%w: update user last seen: %w", internal.ErrUnauthorized, err)
 	}
 
 	a.t.User(accessKey.IssuedForID.String(), user.Name)
@@ -122,13 +122,13 @@ func (a *API) GetDeviceFlowStatus(rCtx access.RequestContext, req *api.DeviceFlo
 
 	org, err := data.GetOrganization(rCtx.DBTxn, data.GetOrganizationOptions{ByID: accessKey.OrganizationID})
 	if err != nil {
-		return nil, fmt.Errorf("%w: device flow get organization for user: %v", internal.ErrUnauthorized, err)
+		return nil, fmt.Errorf("%w: device flow get organization for user: %w", internal.ErrUnauthorized, err)
 	}
 
 	// Delete the request so it can't be claimed twice
 	err = data.DeleteDeviceFlowAuthRequest(rCtx.DBTxn, dfar.ID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: device flow delete auth request: %v", internal.ErrUnauthorized, err)
+		return nil, fmt.Errorf("%w: device flow delete auth request: %w", internal.ErrUnauthorized, err)
 	}
 
 	return &api.DeviceFlowStatusResponse{

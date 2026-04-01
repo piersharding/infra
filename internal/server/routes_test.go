@@ -100,6 +100,41 @@ func TestReadRequest_Snowflake(t *testing.T) {
 	assert.Equal(t, id2, r.FormID)
 }
 
+func TestReadRequest_SnowflakeSlice(t *testing.T) {
+	c, _ := gin.CreateTestContext(nil)
+
+	id1 := uid.New()
+	id2 := uid.New()
+	id3 := uid.New()
+
+	uri, err := url.Parse(fmt.Sprintf("/foo?ids=%s&ids=%s&ids=%s", id1, id2, id3))
+	assert.NilError(t, err)
+
+	c.Request = &http.Request{URL: uri, Method: "GET"}
+	r := &struct {
+		IDs []uid.ID `form:"ids"`
+	}{}
+	err = readRequest(c, r)
+	assert.NilError(t, err)
+
+	assert.DeepEqual(t, r.IDs, []uid.ID{id1, id2, id3})
+}
+
+func TestReadRequest_IDOrSelf(t *testing.T) {
+	c, _ := gin.CreateTestContext(nil)
+
+	uri, err := url.Parse("/foo/self")
+	assert.NilError(t, err)
+
+	c.Request = &http.Request{URL: uri, Method: "GET"}
+	c.Params = append(c.Params, gin.Param{Key: "id", Value: "self"})
+	r := &api.GetUserRequest{}
+	err = readRequest(c, r)
+	assert.NilError(t, err)
+
+	assert.Assert(t, r.ID.IsSelf)
+}
+
 func TestReadRequest_EmptyRequest(t *testing.T) {
 	c, _ := gin.CreateTestContext(nil)
 

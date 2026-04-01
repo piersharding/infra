@@ -19,8 +19,8 @@
     "dayjs": "^1.11.9",
     "js-yaml": "^4.1.0",
     "moment": "^2.29.4",
-    "next": "^15.1.0",
-    "npm": "^11.7.0",
+    "next": "^15.5.14",
+    "node-notifier": "^10.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-dom-confetti": "^0.2.0",
@@ -31,7 +31,7 @@
     "universal-cookie": "^8.0.1"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.2.0",
+    "@eslint/eslintrc": "^0.1.0",
     "@eslint/js": "^9.17.0",
     "@next/eslint-plugin-next": "^16.1.4",
     "@tailwindcss/forms": "^0.5.4",
@@ -42,12 +42,12 @@
     "@types/react": "^19.0.0",
     "autoprefixer": "^10.4.14",
     "concurrently": "^8.2.0",
-    "eslint": "^9.17.0",
-    "eslint-config-next": "^15.1.0",
+    "eslint": "^10.0.2",
+    "eslint-config-next": "^0.2.4",
     "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-jest": "^28.10.0",
-    "eslint-plugin-jsx-a11y": "^6.10.2",
-    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-jest": "^29.15.0",
+    "eslint-plugin-jsx-a11y": "^6.4.1",
+    "eslint-plugin-react": "^7.22.0",
     "eslint-plugin-react-hooks": "^7.0.1",
     "glob": "^13.0.0",
     "jest": "^30.2.0",
@@ -64,6 +64,27 @@
   },
   "overrides": {
     "test-exclude": "^7.0.1",
-    "jsdom": "^27.4.0"
+    "jsdom": "^27.4.0",
+    "minimatch": "^10.2.3",
+    "brace-expansion": "^5.0.5",
+    "flatted": "^3.4.2",
+    "anymatch": {
+      "picomatch": "^2.3.2"
+    },
+    "readdirp": {
+      "picomatch": "^2.3.2"
+    },
+    "micromatch": {
+      "picomatch": "^2.3.2"
+    },
+    "tinyglobby": {
+      "picomatch": "^4.0.4"
+    },
+    "jest-util": {
+      "picomatch": "^4.0.4"
+    },
+    "fdir": {
+      "picomatch": "^4.0.4"
+    }
   }
 }

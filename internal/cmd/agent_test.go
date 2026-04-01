@@ -21,7 +21,7 @@ func TestProcessRunning(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		result, err := processRunning(int32(tc.pid))
+		result, err := processRunning(tc.pid)
 
 		if tc.err != "" {
 			assert.ErrorContains(t, err, tc.err)

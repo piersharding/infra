@@ -42,6 +42,10 @@ func (i *IDOrSelf) UnmarshalText(b []byte) error {
 	return err
 }
 
+func (i *IDOrSelf) UnmarshalParam(param string) error {
+	return i.UnmarshalText([]byte(param))
+}
+
 func (i IDOrSelf) DescribeSchema(schema *openapi3.Schema) {
 	schema.Type = "string"
 	schema.Format = "uid|self"

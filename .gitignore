@@ -11,6 +11,7 @@ PrivateRules.mak
 /.cache/
 /go/
 /test_output.log
+/.claude
 
 # infra binary
 dist/
@@ -31,3 +32,5 @@ internal/server/testdata/pki/ca.crt
 internal/server/testdata/pki/ca.key
 internal/server/testdata/pki/localhost.crt
 internal/server/testdata/pki/localhost.key
+/.sop
+/update-infra.sh

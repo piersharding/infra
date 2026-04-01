@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/infrahq/infra/internal/server/models"
-	"github.com/infrahq/infra/uid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/infrahq/infra/internal/server/models"
+	"github.com/infrahq/infra/uid"
 )
 
 func TestUpdateIdentityLastSeenAt_RaceConditionPrevention(t *testing.T) {

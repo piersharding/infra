@@ -211,7 +211,8 @@ func TestSecureLogger_WithSensitiveData(t *testing.T) {
 	// Verify that sensitive fields are redacted in the log
 	for _, tc := range testCases {
 		assert.Contains(t, logged, tc.key, "Sensitive field %s should be in the log", tc.key)
-		value := logged[tc.key].(string)
+		value, ok := logged[tc.key].(string)
+		require.True(t, ok, "logged field %s should be a string", tc.key)
 		if tc.key == "ip" {
 			// IP addresses are not considered sensitive by the current sanitization logic
 			assert.Equal(t, tc.value, value, "IP field %s should not be redacted", tc.key)
@@ -239,7 +240,8 @@ func TestSecureLogger_FieldSanitization(t *testing.T) {
 
 	// Verify the message is sanitized
 	assert.Contains(t, logged, "message")
-	message := logged["message"].(string)
+	message, ok := logged["message"].(string)
+	require.True(t, ok, "logged message should be a string")
 	assert.NotContains(t, message, "admin", "Username should be redacted")
 	assert.NotContains(t, message, "secret123", "Password should be redacted")
 }
@@ -264,7 +266,8 @@ func TestSecureLogger_MultipleSensitivePatterns(t *testing.T) {
 
 	// Verify the message is properly sanitized
 	assert.Contains(t, logged, "message")
-	sanitizedMessage := logged["message"].(string)
+	sanitizedMessage, ok := logged["message"].(string)
+	require.True(t, ok, "logged message should be a string")
 
 	// Check that sensitive data is redacted
 	assert.NotContains(t, sanitizedMessage, "admin")
