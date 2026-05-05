@@ -86,6 +86,20 @@ build: ## build infra
 .PHONY: bin/infra
 bin/infra: build ## build local bin/infra
 
+#############################################################################
+# Infra Release Process - steps:
+#############################################################################
+#  1. set $TAG
+#  2. make set-charts
+#  3. git commit && git push
+#  4. merge
+#  5. checkout main
+#  6. make git-tag-and-push
+#  7. make docker-build && make docker-push
+#  8. make release-artefacts-local
+#  9. make release-artefacts
+#############################################################################
+
 version: ## current image version
 	@echo "$(TAG)"
 
@@ -93,6 +107,20 @@ version: ## current image version
 git-tag-and-push:
 	git tag v$(TAG)
 	git push --tags
+
+# set the Helm Chart release
+set-release-chart:
+	@if [[ -f "charts/$(CHART_NAME)/Chart.yaml" ]]; then \
+	    sed -i.x -e "s/^version:.*/version: $(TAG)/g" charts/$(CHART_NAME)/Chart.yaml; \
+	    sed -i.x -e "s/^appVersion:.*/appVersion: $(TAG)/g" charts/$(CHART_NAME)/Chart.yaml; \
+	fi
+	@rm -f charts/*/Chart.yaml.x
+	@grep "version:" charts/$(CHART_NAME)/Chart.yaml
+	@grep "appVersion:" charts/$(CHART_NAME)/Chart.yaml
+
+set-charts: # set the chart versions
+	make set-release-chart CHART_NAME=infra-server
+	make set-release-chart CHART_NAME=infra
 
 # must install goreleaser first - https://goreleaser.com/install/
 release-artefacts-local: ## build the release artefacts locally to test what will happen
