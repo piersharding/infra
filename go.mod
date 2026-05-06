@@ -1,6 +1,6 @@
 module github.com/infrahq/infra
 
-go 1.25.7
+go 1.25.9
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
