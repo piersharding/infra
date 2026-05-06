@@ -4,7 +4,7 @@ REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.11
+TAG ?= 0.21.12
 # BUILDVERSION is for client side compatibility - fixed to 0.21.0
 BUILDVERSION ?= 0.21.0
 
@@ -223,7 +223,7 @@ dev/clean: dev/context
 # install from source, because we need to build our plugin with the exact
 # same version of Go, and the exact same version of all Go modules.
 golangci-lint:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 lint: golangci-lint internal/tools/querylinter/cmd/querylinter.so
 	golangci-lint run $(LINT_ARGS)
