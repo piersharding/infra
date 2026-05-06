@@ -244,7 +244,7 @@ func KillUserProcesses(localUser LocalUser) error {
 	// Note: This is a simplified implementation - full implementation would require
 	// more complex process enumeration and signaling
 
-	// Fallback to pkill command with validated input
+	// Fallback to pkill with a validated username. exec.Command does not invoke a shell.
 	//nolint:gosec
 	cmd := exec.Command("pkill", "--signal", "KILL", "--uid", localUser.Username)
 	cmd.Stdout = logging.L
@@ -303,7 +303,7 @@ func RemoveUser(localUser LocalUser) error {
 		return fmt.Errorf("failed to lookup user: %w", err)
 	}
 
-	// Fallback to userdel command with validated input
+	// Fallback to userdel with a validated username. exec.Command does not invoke a shell.
 	//nolint:gosec
 	cmd := exec.Command("userdel", "--remove", localUser.Username)
 	cmd.Stdout = logging.L

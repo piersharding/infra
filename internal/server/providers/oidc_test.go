@@ -669,7 +669,7 @@ func TestAuthServerInfo_IncludesOfflineAccessScope(t *testing.T) {
 
 	//nolint:forcetypeassert
 	testTransport := http.DefaultTransport.(*http.Transport).Clone()
-	//nolint:gosec
+	//nolint:gosec // test client connects to a temporary self-signed TLS server
 	testTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Transport: testTransport})
 

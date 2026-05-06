@@ -24,7 +24,7 @@ func TestSSHDAuthKeysCmd(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("INFRA_LOG_LEVEL", "debug")
 
-	etcPasswdFilename = "testdata/sshd-auth-keys/etcpasswd" //nolint:gosec
+	etcPasswdFilename = "testdata/sshd-auth-keys/etcpasswd" //nolint:gosec // passwd fixture path is test data, not a hardcoded secret
 	t.Cleanup(func() {
 		etcPasswdFilename = "/etc/passwd"
 	})

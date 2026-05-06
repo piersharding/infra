@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -448,7 +449,7 @@ func TestSyncGrantsToDestination_GracePeriod(t *testing.T) {
 		waiter := &fakeWaiter{endAtIndex: 5}
 		err := syncGrantsToDestination(context.Background(), r.con, waiter, r.toDestinationFn)
 		// Should return an error (not errDone) when grace period exceeded
-		assert.Assert(t, err != errDone, "expected grace period error, got errDone")
+		assert.Assert(t, !errors.Is(err, errDone), "expected grace period error, got errDone")
 		assert.ErrorContains(t, err, "grace period")
 
 		// toDestination must have been called once with empty grants
