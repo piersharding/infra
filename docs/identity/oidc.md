@@ -56,3 +56,16 @@ In order to authenticate using an OIDC identity provider you must register Infra
 - The OIDC identity provider must support the [UserInfo](https://openid.net/specs/openid-connect-core-1_0.html#UserInfo) endpoint.
 - The UserInfo response **must** contain either a `name` or `email` field.
 - If you wish to use groups, the identity provider **must** return the user's assigned groups from the UserInfo endpoint.
+
+## Refresh Tokens
+
+Infra requires a refresh token to maintain user sessions beyond the provider's short-lived access token TTL. Without a refresh token, sessions will begin failing IDP validation after approximately `sessionProviderSyncInterval × sessionSyncMaxFailures` (default: 6 hours).
+
+For generic OIDC providers, Infra requests the `offline_access` scope during login. Ensure your provider:
+1. Supports the `offline_access` scope (advertised in the provider's discovery document).
+2. Is configured to issue refresh tokens to your registered client application.
+
+**If sessions expire unexpectedly:**
+- Confirm `offline_access` appears in the provider's `scopes_supported` discovery endpoint.
+- Check server logs for `"no refresh token returned"` warnings — if present, the user must re-authenticate with `infra login`.
+- If the provider requires explicit consent, ensure the client is configured to prompt for consent on first login.

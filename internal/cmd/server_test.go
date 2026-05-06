@@ -221,10 +221,13 @@ api:
 			},
 			expected: func(t *testing.T) server.Options {
 				return server.Options{
-					Version:                  0.3,
-					TLSCache:                 "/cache/dir",
-					SessionDuration:          3 * time.Minute,
-					SessionInactivityTimeout: 1 * time.Minute,
+					Version:                     0.3,
+					TLSCache:                    "/cache/dir",
+					SessionDuration:             3 * time.Minute,
+					SessionInactivityTimeout:    1 * time.Minute,
+					SessionProviderSyncInterval: 120 * time.Minute,
+					SessionSyncMaxFailures:      3,
+					SessionSyncFailureWindow:    24 * time.Hour,
 
 					DBEncryptionKey: "/this-is-the-path",
 					DBHost:          "the-host",
@@ -328,6 +331,10 @@ api:
 
 func TestServerCmd_WithSecretsConfig(t *testing.T) {
 	pgDriver := database.PostgresDriver(t, "cmd")
+	certPath, err := filepath.Abs("testdata/pki/localhost.crt")
+	assert.NilError(t, err)
+	keyPath, err := filepath.Abs("testdata/pki/localhost.key")
+	assert.NilError(t, err)
 
 	var actual server.Options
 	patchRunServer(t, func(ctx context.Context, s *server.Server) error {
@@ -349,8 +356,8 @@ func TestServerCmd_WithSecretsConfig(t *testing.T) {
         metrics: "127.0.0.1:0"
 
       tls:
-        ca: testdata/pki/localhost.crt
-        caPrivateKey: file:testdata/pki/localhost.key
+        ca: ` + certPath + `
+        caPrivateKey: file:` + keyPath + `
 
 
       users:
@@ -368,7 +375,7 @@ func TestServerCmd_WithSecretsConfig(t *testing.T) {
 	t.Setenv("USER1_PASSWORD", "the-password-1")
 
 	ctx := context.Background()
-	err := Run(ctx, "server", "--config-file", dir.Join("cfg.yaml"))
+	err = Run(ctx, "server", "--config-file", dir.Join("cfg.yaml"))
 	assert.NilError(t, err)
 
 	expected := []server.User{

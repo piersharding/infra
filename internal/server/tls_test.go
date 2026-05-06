@@ -11,16 +11,26 @@ import (
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/golden"
 
+	"github.com/infrahq/infra/internal/certs"
 	"github.com/infrahq/infra/internal/cmd/types"
 )
 
 func TestTLSConfigFromOptions(t *testing.T) {
 	ca := golden.Get(t, "pki/ca.crt")
+	caKey := golden.Get(t, "pki/ca.key")
 	t.Run("user provided certificate", func(t *testing.T) {
+		caTLSCert, err := tls.X509KeyPair(ca, caKey)
+		assert.NilError(t, err)
+		caCert, err := x509.ParseCertificate(caTLSCert.Certificate[0])
+		assert.NilError(t, err)
+		localhostCert, localhostKey, err := certs.GenerateCertificate([]string{"127.0.0.1"}, caCert, caTLSCert.PrivateKey)
+		assert.NilError(t, err)
+		localhostCert = append(localhostCert, ca...)
+
 		opts := TLSOptions{
 			CA:          types.StringOrFile(ca),
-			Certificate: types.StringOrFile(golden.Get(t, "pki/localhost.crt")),
-			PrivateKey:  types.StringOrFile(golden.Get(t, "pki/localhost.key")),
+			Certificate: types.StringOrFile(localhostCert),
+			PrivateKey:  types.StringOrFile(localhostKey),
 		}
 		config, err := tlsConfigFromOptions(opts)
 		assert.NilError(t, err)

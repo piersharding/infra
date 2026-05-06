@@ -371,3 +371,67 @@ brew install infra.rb
 # pin the version for now (i.e. don't auto upgrade)
 brew pin infra
 ```
+
+---
+
+## Session Management
+
+### Session Lifecycle
+
+Infra sessions have two independent expiry mechanisms:
+
+| Mechanism | Config key | Default | Description |
+|---|---|---|---|
+| Hard expiry | `sessionDuration` | 30 days | Session ends regardless of activity |
+| Inactivity timeout | `sessionExtensionDeadline` | 3 days | Session ends if unused for this duration |
+
+Users can check their session status at any time with:
+
+```bash
+infra status
+```
+
+### Identity Provider Session Sync
+
+For OIDC-authenticated users, Infra periodically re-validates sessions with the identity provider (IDP) to detect revocations. The following server options control this behavior:
+
+| Option | Default | Description |
+|---|---|---|
+| `sessionProviderSyncInterval` | `120m` | How often the server contacts the IDP to validate a session |
+| `sessionSyncMaxFailures` | `3` | Consecutive IDP sync failures before invalidating the session |
+| `sessionSyncFailureWindow` | `24h` | Time window in which consecutive failures are counted |
+
+**Transient vs. revocation errors:** A single IDP error (e.g., network timeout) is not treated as a revocation. Infra only invalidates a session after `sessionSyncMaxFailures` consecutive failures within `sessionSyncFailureWindow`. An explicit revocation signal (`invalid_grant`, `token_revoked`, etc.) causes immediate session invalidation regardless of the failure count.
+
+**Refresh tokens:** Infra requires a valid refresh token to perform IDP sync. If the IDP does not return a refresh token during login, a warning is logged and session sync will fail eventually. Ensure your IDP is configured to issue refresh tokens (see the [identity provider guides](identity/)).
+
+### Connector Grant Sync Grace Period
+
+Kubernetes and SSH connectors periodically fetch access grants from the Infra server. If the server becomes unreachable, the connector's `grantSyncGracePeriod` determines how long to retain existing grants before failing closed:
+
+| Behavior | When |
+|---|---|
+| Grants unchanged (fail-open) | Within the grace period |
+| Warning logged | After 50% of grace period elapsed |
+| All access removed (fail-closed) | Grace period exceeded |
+
+Configure the grace period in `charts/infra/values.yaml`:
+
+```yaml
+config:
+  grantSyncGracePeriod: 24h0m0s  # set to 0 to disable fail-closed
+```
+
+### Troubleshooting Unexpected Session Expiry
+
+**"Your Infra session has expired"**
+The session hit its hard expiry (`sessionDuration`). Run `infra login` to start a new session.
+
+**"Your Infra session expired due to inactivity"**
+The session was not used within the `sessionExtensionDeadline`. Run `infra login` to start a new session.
+
+**"Your identity provider session has been revoked"**
+The IDP explicitly revoked the refresh token (e.g., the user was disabled, password changed, or admin revoked the session). Run `infra login` to re-authenticate.
+
+**"Your session could not be verified with your identity provider"**
+After `sessionSyncMaxFailures` consecutive IDP errors, Infra invalidated the session to be safe. This may indicate a persistent IDP connectivity problem. Check that the server can reach the IDP's token endpoint, then run `infra login`.

@@ -50,6 +50,46 @@ infra login
       --log-level string     Show logs when running the command [error, warn, info, debug] (default "info")
       --skip-version-check   Skip checking if the CLI is ahead of the server version
 ```
+### `infra status`
+
+Show the current session status
+
+#### Description
+
+Displays information about the active Infra session, including the authenticated user, server, identity provider, and how much time remains before the session expires.
+
+```bash
+infra status [flags]
+```
+
+#### Examples
+
+```bash
+# Show session status
+$ infra status
+
+User:              alice@example.com
+Server:            https://infra.example.com
+Provider:          Google
+Session expires:   29 days 14 hours remaining (2026-06-04 10:21 UTC)
+Inactivity limit:  2 days 6 hours remaining
+Status:            ✓ Active
+
+# When the session has expired
+$ infra status
+
+User:     alice@example.com
+Server:   https://infra.example.com
+Status:   ✗ Expired — run 'infra login' to continue
+```
+
+**Additional options**
+
+```console
+      --help                 Display help
+      --log-level string     Show logs when running the command [error, warn, info, debug] (default "info")
+      --skip-version-check   Skip checking if the CLI is ahead of the server version
+```
 ### `infra logout`
 
 Log out of Infra

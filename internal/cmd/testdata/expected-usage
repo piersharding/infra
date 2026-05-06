@@ -18,6 +18,7 @@ Management commands:
 
 Other commands:
   info         Display the info about the current session
+  status       Show the current session status
   version      Display the Infra version
   about        Display information about Infra
   completion   Generate shell auto-completion for the CLI

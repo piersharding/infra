@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -90,5 +91,6 @@ func defaultConnectorOptions() connector.Options {
 		Server: connector.ServerOptions{
 			URL: types.URL{Scheme: "https", Host: "api.infrahq.com"},
 		},
+		GrantSyncGracePeriod: 24 * time.Hour,
 	}
 }

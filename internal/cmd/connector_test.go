@@ -507,8 +507,9 @@ ssh:
 						SkipTLSVerify:      true,
 						TrustedCertificate: "ca.pem",
 					},
-					CACert: "/path/to/cert",
-					CAKey:  "/path/to/key",
+					GrantSyncGracePeriod: 24 * time.Hour,
+					CACert:               "/path/to/cert",
+					CAKey:                "/path/to/key",
 					SSH: connector.SSHOptions{
 						Group:          "the-group",
 						SSHDConfigPath: "/opt/sshd",

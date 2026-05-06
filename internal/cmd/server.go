@@ -89,15 +89,18 @@ func newServerCmd() *cobra.Command {
 
 func defaultServerOptions(infraDir string) server.Options {
 	return server.Options{
-		Version:                  0.3, // update this as the config version changes
-		TLSCache:                 filepath.Join(infraDir, "cache"),
-		DBEncryptionKey:          filepath.Join(infraDir, "sqlite3.db.key"),
-		EnableTelemetry:          true,
-		SessionDuration:          24 * time.Hour * 30, // 30 days
-		SessionInactivityTimeout: 24 * time.Hour * 3,  // 3 days
-		EnableSignup:             false,
-		BaseDomain:               "",
-		EnableLogSampling:        true,
+		Version:                     0.3, // update this as the config version changes
+		TLSCache:                    filepath.Join(infraDir, "cache"),
+		DBEncryptionKey:             filepath.Join(infraDir, "sqlite3.db.key"),
+		EnableTelemetry:             true,
+		SessionDuration:             24 * time.Hour * 30, // 30 days
+		SessionInactivityTimeout:    24 * time.Hour * 3,  // 3 days
+		SessionProviderSyncInterval: 120 * time.Minute,
+		SessionSyncMaxFailures:      3,
+		SessionSyncFailureWindow:    24 * time.Hour,
+		EnableSignup:                false,
+		BaseDomain:                  "",
+		EnableLogSampling:           true,
 
 		Addr: server.ListenerOptions{
 			HTTP:    ":80",

@@ -62,3 +62,15 @@ While still on the screen for the application you just created navigate to the *
 Copy the **URL**, **Client ID** and **Client Secret** values and provide them into Infra's Dashboard or CLI.
 
 ![Sign On](../images/okta-4.png)
+
+## Refresh Tokens
+
+Infra requires a refresh token to maintain user sessions beyond Okta's short-lived access token TTL. Without a refresh token, sessions will begin failing IDP validation after approximately `sessionProviderSyncInterval × sessionSyncMaxFailures` (default: 6 hours).
+
+Okta issues refresh tokens when the `offline_access` scope is included in the authorization request. Infra requests this scope automatically. To enable it:
+1. In your Okta application settings, navigate to **Sign On > OpenID Connect ID Token**.
+2. Ensure **Refresh Token** is enabled under **Grant type**.
+
+**If sessions expire unexpectedly:**
+- Confirm **Refresh Token** grant type is enabled in the Okta application.
+- Check server logs for `"no refresh token returned"` warnings — if present, the user must re-authenticate with `infra login`.

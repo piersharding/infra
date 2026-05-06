@@ -59,6 +59,11 @@ type Options struct {
 
 	SSH SSHOptions
 
+	// GrantSyncGracePeriod is the duration to wait after the last successful
+	// grant sync before failing closed (removing all access). Set to 0 to
+	// disable fail-closed behavior (keep existing grants indefinitely).
+	GrantSyncGracePeriod time.Duration
+
 	// Kubernetes specific options below here
 	CACert types.StringOrFile
 	CAKey  types.StringOrFile
@@ -106,12 +111,13 @@ type ListenerOptions struct {
 
 // connector stores all the dependencies for the connector operations.
 type connector struct {
-	k8s         kubeClient
-	client      apiClient
-	destination *api.Destination
-	certCache   *CertCache
-	options     Options
-	lastGrants  []api.Grant
+	k8s                kubeClient
+	client             apiClient
+	destination        *api.Destination
+	certCache          *CertCache
+	options            Options
+	lastGrants         []api.Grant
+	lastSuccessfulSync time.Time
 }
 
 type apiClient interface {
@@ -542,7 +548,32 @@ func syncGrantsToDestination(
 	for {
 		if err := sync(ctx); err != nil {
 			logging.L.Error().Err(err).Msg("sync grants to destination")
+
+			grace := con.options.GrantSyncGracePeriod
+			if grace > 0 {
+				if con.lastSuccessfulSync.IsZero() {
+					con.lastSuccessfulSync = time.Now()
+				}
+				elapsed := time.Since(con.lastSuccessfulSync)
+				switch {
+				case elapsed > grace:
+					logging.L.Error().
+						Str("gracePeriod", grace.String()).
+						Msg("grant sync grace period exceeded; removing all access")
+					if removeErr := toDestination(ctx, []api.Grant{}); removeErr != nil {
+						logging.L.Error().Err(removeErr).Msg("failed to remove access after grace period exceeded")
+					}
+					return fmt.Errorf("grant sync grace period of %s exceeded", grace)
+				case elapsed > grace/2:
+					remaining := grace - elapsed
+					logging.L.Warn().
+						Str("elapsed", elapsed.Round(time.Second).String()).
+						Str("remaining", remaining.Round(time.Second).String()).
+						Msg("grant sync has been failing; access will be removed if not recovered")
+				}
+			}
 		} else {
+			con.lastSuccessfulSync = time.Now()
 			waiter.Reset()
 		}
 

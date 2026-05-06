@@ -9,6 +9,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/infrahq/infra/internal"
+	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/internal/server/data"
 	"github.com/infrahq/infra/internal/server/email"
 	"github.com/infrahq/infra/internal/server/models"
@@ -45,6 +46,13 @@ func (a *OIDCAuthn) Authenticate(ctx context.Context, db *data.Transaction, requ
 		}
 
 		return AuthenticatedIdentity{}, fmt.Errorf("exhange code for tokens: %w", err)
+	}
+
+	if idpAuth.RefreshToken == "" {
+		logging.L.Warn().
+			Str("providerID", a.Provider.ID.String()).
+			Str("email", idpAuth.Email).
+			Msg("no refresh token returned by IDP; session sync will fail once the access token expires. Ensure the provider is configured with offline_access scope (or access_type=offline for Google).")
 	}
 
 	if a.Provider.ID == models.InternalGoogleProviderID {

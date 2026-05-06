@@ -61,6 +61,20 @@ type Options struct {
 	SessionDuration          time.Duration // the lifetime of the access key infra issues on login
 	SessionInactivityTimeout time.Duration // access keys issued on login must be used within this window of time, or they become invalid
 
+	// SessionProviderSyncInterval is how frequently the server re-validates an OIDC
+	// user's session with their identity provider. Defaults to 120 minutes.
+	// Setting this lower causes more frequent IDP token refreshes.
+	SessionProviderSyncInterval time.Duration
+
+	// SessionSyncMaxFailures is the number of consecutive transient IDP sync failures
+	// (e.g. network errors) allowed within SessionSyncFailureWindow before the user's
+	// session is invalidated. Defaults to 3.
+	SessionSyncMaxFailures int
+
+	// SessionSyncFailureWindow is the time window in which SessionSyncMaxFailures
+	// consecutive failures must occur before the session is invalidated. Defaults to 24h.
+	SessionSyncFailureWindow time.Duration
+
 	// Redis contains configuration options to the cache server.
 	Redis redis.Options
 
@@ -148,6 +162,7 @@ type Server struct {
 	routines        []routine
 	metricsRegistry *prometheus.Registry
 	Google          *models.Provider
+	syncFailures    *syncFailureTracker
 }
 
 type Addrs struct {
@@ -158,7 +173,10 @@ type Addrs struct {
 
 // newServer creates a Server with base dependencies initialized to zero values.
 func newServer(options Options) *Server {
-	return &Server{options: options}
+	return &Server{
+		options:      options,
+		syncFailures: newSyncFailureTracker(options.SessionSyncMaxFailures, options.SessionSyncFailureWindow),
+	}
 }
 
 // New creates a Server, and initializes it. The returned Server is ready to run.
@@ -464,14 +482,27 @@ func configureEmail(options Options) {
 	}
 }
 
-// providerUserUpdateThreshold is the duration of time that must pass before a
-// users session is attempted to be validated again with an external identity provider.
-// This prevents hitting IDP rate limits.
-const providerUserUpdateThreshold = 120 * time.Minute
-
 var ErrSyncFailed = fmt.Errorf("user sync failed")
 
-// syncIdentityInfo calls the identity provider used to authenticate this user session to update their current information
+// deleteProviderSession removes all access keys and the provider user record for the given session.
+// It is called when the IDP explicitly revokes a user's session or after repeated transient failures.
+func (s *Server) deleteProviderSession(tx *data.Transaction, providerUser *models.ProviderUser) {
+	secureLogger := logging.SecureLogger(logging.L)
+	secureLogger.SecureInfo("user session expired, pruning keys created for this session")
+
+	if err := data.DeleteAccessKeys(tx, data.DeleteAccessKeysOptions{ByIssuedForID: providerUser.IdentityID, ByProviderID: providerUser.ProviderID}); err != nil {
+		secureLogger.SecureError("failed to revoke invalid user session", err)
+	}
+
+	if err := data.DeleteProviderUsers(tx, data.DeleteProviderUsersOptions{ByIdentityID: providerUser.IdentityID, ByProviderID: providerUser.ProviderID}); err != nil {
+		secureLogger.SecureError("failed to delete provider user", err)
+	}
+}
+
+// syncIdentityInfo calls the identity provider used to authenticate this user session to update their current information.
+// On transient IDP errors the session is preserved and retried after SessionProviderSyncInterval. The session is only
+// destroyed when the IDP explicitly revokes access or when transient failures persist beyond SessionSyncMaxFailures
+// within SessionSyncFailureWindow.
 func (s *Server) syncIdentityInfo(ctx context.Context, tx *data.Transaction, identity *models.Identity, sessionProviderID uid.ID) error {
 	var provider *models.Provider
 	if s.Google != nil && sessionProviderID == s.Google.ID {
@@ -498,42 +529,51 @@ func (s *Server) syncIdentityInfo(ctx context.Context, tx *data.Transaction, ide
 		return fmt.Errorf("failed to get provider user to update: %w", err)
 	}
 
-	// if provider user was updated recently, skip checking this now to avoid hitting rate limits
-	if time.Since(providerUser.LastUpdate) > providerUserUpdateThreshold {
-		oidc, err := s.providerClient(ctx, provider, providerUser.RedirectURL)
-		if err != nil {
-			return fmt.Errorf("update provider client: %w", err)
-		}
+	// skip re-checking if the provider user was updated recently, to avoid hitting IDP rate limits
+	if time.Since(providerUser.LastUpdate) <= s.options.SessionProviderSyncInterval {
+		return nil
+	}
 
-		// update current identity provider groups and account status
-		_, err = data.SyncProviderUser(ctx, tx, providerUser, oidc)
-		if err != nil {
-			if errors.Is(err, internal.ErrBadGateway) {
-				return err
-			}
+	oidc, err := s.providerClient(ctx, provider, providerUser.RedirectURL)
+	if err != nil {
+		return fmt.Errorf("update provider client: %w", err)
+	}
 
-			secureLogger := logging.SecureLogger(logging.L)
-			secureLogger.SecureInfo("user session expired, pruning keys created for this session")
+	// update current identity provider groups and account status
+	_, err = data.SyncProviderUser(ctx, tx, providerUser, oidc)
 
-			if nestedErr := data.DeleteAccessKeys(tx, data.DeleteAccessKeysOptions{ByIssuedForID: providerUser.IdentityID, ByProviderID: providerUser.ProviderID}); nestedErr != nil {
-				secureLogger := logging.SecureLogger(logging.L)
-				secureLogger.SecureError("failed to revoke invalid user session", nestedErr)
-			}
+	// always advance LastUpdate so retries are spaced by SessionProviderSyncInterval, not by every kubectl call
+	providerUser.LastUpdate = time.Now().UTC()
+	if updateErr := data.UpdateProviderUser(tx, providerUser); updateErr != nil {
+		return fmt.Errorf("update idp user: %w", updateErr)
+	}
 
-			if nestedErr := data.DeleteProviderUsers(tx, data.DeleteProviderUsersOptions{ByIdentityID: providerUser.IdentityID, ByProviderID: providerUser.ProviderID}); nestedErr != nil {
-				secureLogger := logging.SecureLogger(logging.L)
-				secureLogger.SecureError("failed to delete provider user", nestedErr)
-			}
+	if err != nil {
+		secureLogger := logging.SecureLogger(logging.L)
 
+		failKey := syncFailureKey{providerID: providerUser.ProviderID, identityID: providerUser.IdentityID}
+
+		if isIDPRevocationError(err) {
+			// IDP has explicitly revoked this session — destroy immediately
+			secureLogger.SecureWarnError("IDP revoked user session", err)
+			s.deleteProviderSession(tx, providerUser)
 			return fmt.Errorf("%w: %w", ErrSyncFailed, err)
 		}
 
-		providerUser.LastUpdate = time.Now().UTC()
-		if err := data.UpdateProviderUser(tx, providerUser); err != nil {
-			return fmt.Errorf("update idp user: %w", err)
+		// transient error — check backstop to decide whether to preserve or destroy the session
+		if s.syncFailures.RecordFailure(failKey) {
+			secureLogger.SecureWarnError("IDP sync failure limit reached, ending user session", err)
+			s.deleteProviderSession(tx, providerUser)
+			return fmt.Errorf("%w: %w: %w", ErrSyncFailed, ErrSyncBackstop, err)
 		}
+
+		// transient failure within tolerance — keep the session alive, log and continue
+		secureLogger.SecureWarnError("transient IDP sync error, session preserved", err)
+		return nil
 	}
 
+	failKey := syncFailureKey{providerID: providerUser.ProviderID, identityID: providerUser.IdentityID}
+	s.syncFailures.RecordSuccess(failKey)
 	return nil
 }
 

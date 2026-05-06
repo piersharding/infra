@@ -58,3 +58,15 @@ To connect Azure active directory via Infra's Dashboard, navigate to `Settings`,
      - Click **Grant admin consent for Default Directory** and select **Yes** when prompted.
        ![Add API permissions](../images/azure-ad-5.png)
 8. From the **Overview** tab copy the **Application (client) ID**, **Directory (tenant) ID**, and **Client Secret** values and provide them into Infra's Dashboard or CLI.
+
+## Refresh Tokens
+
+Infra requires a refresh token to maintain user sessions beyond Azure AD's short-lived access token TTL. Without a refresh token, sessions will begin failing IDP validation after approximately `sessionProviderSyncInterval × sessionSyncMaxFailures` (default: 6 hours).
+
+Azure AD issues refresh tokens when the `offline_access` permission is granted. Ensure your app registration includes:
+- **OpenId permissions** > **offline_access** (as shown in the setup steps above).
+- Admin consent has been granted for the `offline_access` permission.
+
+**If sessions expire unexpectedly:**
+- Confirm `offline_access` is listed under the app's **API permissions** and has been granted.
+- Check server logs for `"no refresh token returned"` warnings — if present, the user must re-authenticate with `infra login`.

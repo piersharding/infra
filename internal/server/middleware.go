@@ -130,15 +130,18 @@ func authenticateRequest(c *gin.Context, route routeSettings, srv *Server) (acce
 		defer logError(tx.Rollback, "failed to rollback identity provider sync transaction")
 		tx = tx.WithOrgID(authned.Organization.ID)
 		// sync the identity info here to keep the UI session in sync with IDP session validity
-		if err := srv.syncIdentityInfo(context.Background(), tx, authned.User, authned.AccessKey.ProviderID); err != nil {
+		if syncErr := srv.syncIdentityInfo(context.Background(), tx, authned.User, authned.AccessKey.ProviderID); syncErr != nil {
 			deleteCookie(c.Request, c.Writer, cookieAuthorizationName, c.Request.Host)
-			if errors.Is(err, ErrSyncFailed) {
-				logging.L.Debug().Err(err)
+			if errors.Is(syncErr, ErrSyncFailed) {
+				logging.L.Debug().Err(syncErr)
 			} else {
-				logging.L.Error().Err(err)
+				logging.L.Error().Err(syncErr)
 			}
 			if err = tx.Commit(); err != nil {
 				logging.L.Error().Err(err)
+			}
+			if errors.Is(syncErr, ErrSyncBackstop) {
+				return authned, AuthenticationError{Message: "session could not be verified with identity provider"}
 			}
 			return authned, AuthenticationError{Message: "session in identity provider expired or revoked"}
 		}
