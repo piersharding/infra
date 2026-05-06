@@ -686,4 +686,3 @@ func TestAuthServerInfo_IncludesOfflineAccessScope(t *testing.T) {
 	}
 	assert.Assert(t, found, "expected offline_access in ScopesSupported, got: %v", info.ScopesSupported)
 }
-
