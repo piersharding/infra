@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 
 	"github.com/infrahq/infra/internal/claims"
 	"github.com/infrahq/infra/internal/server/models"
@@ -46,7 +46,7 @@ func createJWT(db ReadTxn, organization *models.Organization, identity *models.I
 		Groups: groups,
 	}
 
-	raw, err := jwt.Signed(signer).Claims(claim).Claims(custom).CompactSerialize()
+	raw, err := jwt.Signed(signer).Claims(claim).Claims(custom).Serialize()
 	if err != nil {
 		return "", err
 	}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/gin-gonic/gin"
-	"gopkg.in/square/go-jose.v2"
+	"github.com/go-jose/go-jose/v4"
 
 	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/internal"

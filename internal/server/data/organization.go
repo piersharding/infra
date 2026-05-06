@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"gopkg.in/square/go-jose.v2"
+	"github.com/go-jose/go-jose/v4"
 
 	"github.com/infrahq/infra/internal/server/data/querybuilder"
 	"github.com/infrahq/infra/internal/server/models"

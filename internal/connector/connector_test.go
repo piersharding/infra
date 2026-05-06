@@ -18,11 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
 	"gotest.tools/v3/assert"
 	rbacv1 "k8s.io/api/rbac/v1"
 
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/internal/claims"
 	"github.com/infrahq/infra/internal/kubernetes"
@@ -176,7 +176,7 @@ func generateJWT(t *testing.T, priv *jose.JSONWebKey, email string, expiry time.
 		Groups: []string{"developers"},
 	}
 
-	raw, err := jwt.Signed(signer).Claims(cl).Claims(custom).CompactSerialize()
+	raw, err := jwt.Signed(signer).Claims(cl).Claims(custom).Serialize()
 	assert.NilError(t, err)
 	return raw
 }

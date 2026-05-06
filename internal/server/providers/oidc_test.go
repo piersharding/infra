@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"golang.org/x/oauth2"
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
 	"gotest.tools/v3/assert"
 
 	"github.com/infrahq/infra/internal/server/models"
@@ -142,12 +142,12 @@ func testTokenResponse(claims jwt.Claims, signingKey *rsa.PrivateKey, email stri
 			Email string `json:"email"`
 		}
 
-		raw, err = jwt.Signed(signer).Claims(claims).Claims(Custom{Email: email}).CompactSerialize()
+		raw, err = jwt.Signed(signer).Claims(claims).Claims(Custom{Email: email}).Serialize()
 		if err != nil {
 			return "", err
 		}
 	} else {
-		raw, err = jwt.Signed(signer).Claims(claims).CompactSerialize()
+		raw, err = jwt.Signed(signer).Claims(claims).Serialize()
 		if err != nil {
 			return "", err
 		}

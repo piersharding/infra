@@ -20,7 +20,6 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/term v0.42.0
 	gopkg.in/segmentio/analytics-go.v3 v3.1.0
-	gopkg.in/square/go-jose.v2 v2.6.0
 	k8s.io/api v0.35.1
 	k8s.io/apimachinery v0.35.1
 	k8s.io/client-go v0.35.1
@@ -35,6 +34,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/creack/pty v1.1.18
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-redis/redis_rate/v9 v9.1.2
 	github.com/google/go-cmp v0.7.0
@@ -85,7 +85,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.4 // indirect
