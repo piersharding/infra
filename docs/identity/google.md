@@ -70,3 +70,14 @@ To connect Google Workspace via Infra's Dashboard, navigate to `Settings`, selec
    - Click **Add new**.
    - For **Client ID** enter the service account's unique ID noted in step 6.
    - For **OAuth scopes** enter `https://www.googleapis.com/auth/admin.directory.group.readonly`.
+
+## Refresh Tokens
+
+Infra requires a refresh token to maintain user sessions beyond Google's short-lived access token TTL (typically 1 hour). Without a refresh token, sessions will begin failing IDP validation after approximately `sessionProviderSyncInterval × sessionSyncMaxFailures` (default: 6 hours).
+
+Google issues refresh tokens only when the authorization request includes `access_type=offline` and `prompt=consent`. Infra sets these parameters automatically when Google is configured as an identity provider.
+
+**If sessions expire unexpectedly:**
+- Verify the OAuth application is of type **Web application** (not service account).
+- Confirm the user granted the offline access consent screen.
+- Check server logs for `"no refresh token returned"` warnings — if present, the user must re-authenticate with `infra login`.

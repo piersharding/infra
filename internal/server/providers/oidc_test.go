@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"golang.org/x/oauth2"
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
 	"gotest.tools/v3/assert"
 
 	"github.com/infrahq/infra/internal/server/models"
@@ -142,12 +142,12 @@ func testTokenResponse(claims jwt.Claims, signingKey *rsa.PrivateKey, email stri
 			Email string `json:"email"`
 		}
 
-		raw, err = jwt.Signed(signer).Claims(claims).Claims(Custom{Email: email}).CompactSerialize()
+		raw, err = jwt.Signed(signer).Claims(claims).Claims(Custom{Email: email}).Serialize()
 		if err != nil {
 			return "", err
 		}
 	} else {
-		raw, err = jwt.Signed(signer).Claims(claims).CompactSerialize()
+		raw, err = jwt.Signed(signer).Claims(claims).Serialize()
 		if err != nil {
 			return "", err
 		}
@@ -634,4 +634,55 @@ func TestOIDC_GetUserInfo(t *testing.T) {
 			test.verifyFunc(t, info, err)
 		})
 	}
+}
+
+// TestAuthServerInfo_IncludesOfflineAccessScope verifies that when the IDP discovery
+// document advertises the offline_access scope, AuthServerInfo includes it in the
+// returned ScopesSupported list. This ensures the frontend includes offline_access
+// in the authorization URL so the IDP returns a refresh token.
+func TestAuthServerInfo_IncludesOfflineAccessScope(t *testing.T) {
+	mux := http.NewServeMux()
+	ts := httptest.NewTLSServer(mux)
+	t.Cleanup(ts.Close)
+
+	serverURL := strings.ReplaceAll(ts.URL, "https://", "")
+
+	// discovery doc that advertises offline_access support
+	wellKnown := fmt.Sprintf(`{
+		"issuer": "%[1]s",
+		"authorization_endpoint": "%[1]s/auth",
+		"token_endpoint": "%[1]s/token",
+		"jwks_uri": "%[1]s/keys",
+		"userinfo_endpoint": "%[1]s/userinfo",
+		"id_token_signing_alg_values_supported": ["RS256"],
+		"scopes_supported": ["openid", "email", "groups", "offline_access"]
+	}`, ts.URL)
+
+	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, wellKnown)
+	})
+	mux.HandleFunc("/keys", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"keys":[]}`)
+	})
+
+	//nolint:forcetypeassert
+	testTransport := http.DefaultTransport.(*http.Transport).Clone()
+	//nolint:gosec // test client connects to a temporary self-signed TLS server
+	testTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, &http.Client{Transport: testTransport})
+
+	provider := NewOIDCClient(models.Provider{Kind: models.ProviderKindOIDC, URL: serverURL, ClientID: "client-id"}, "secret", "https://example.com/callback")
+	info, err := provider.AuthServerInfo(ctx)
+	assert.NilError(t, err)
+
+	found := false
+	for _, s := range info.ScopesSupported {
+		if s == "offline_access" {
+			found = true
+			break
+		}
+	}
+	assert.Assert(t, found, "expected offline_access in ScopesSupported, got: %v", info.ScopesSupported)
 }

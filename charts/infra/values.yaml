@@ -39,6 +39,12 @@ config:
   caCert: /var/run/secrets/infrahq.com/certificate-authority/ca.crt
   caKey: /var/run/secrets/infrahq.com/certificate-authority/ca.key
 
+  ## Grace period before the connector removes all access when the Infra server is unreachable.
+  ## After the last successful grant sync, if failures continue beyond this duration, all access
+  ## is revoked (fail-closed). Set to 0 to keep existing grants indefinitely (fail-open).
+  ## Default 24 hours.
+  grantSyncGracePeriod: 24h0m0s
+
 ## Number of connector pods to run
 ## No effect unless `autoscaling.enabled` is `false`
 replicas: 1

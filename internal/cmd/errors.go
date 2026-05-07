@@ -7,6 +7,7 @@ import (
 
 	"github.com/muesli/termenv"
 
+	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/internal/logging"
 )
 
@@ -38,4 +39,32 @@ func (e *LoginError) Error() string {
 	}
 
 	return sb.String()
+}
+
+// formatAuthError converts a 401 api.Error into a user-friendly cmd.Error.
+// If err is not a 401 api.Error, it is returned unchanged.
+func formatAuthError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var apiErr api.Error
+	if !errors.As(err, &apiErr) || apiErr.Code != 401 {
+		return err
+	}
+	return Error{Message: sessionExpiredMessage(apiErr.Message)}
+}
+
+func sessionExpiredMessage(serverMsg string) string {
+	switch serverMsg {
+	case "access key has expired due to inactivity":
+		return "Your Infra session expired due to inactivity.\nRun 'infra login' to continue."
+	case "access key has expired":
+		return "Your Infra session has expired.\nRun 'infra login' to continue."
+	case "session in identity provider expired or revoked":
+		return "Your identity provider session has been revoked.\nRun 'infra login' to continue."
+	case "session could not be verified with identity provider":
+		return "Your session could not be verified with your identity provider.\nRun 'infra login' to continue."
+	default:
+		return "Your session is no longer valid.\nRun 'infra login' to continue."
+	}
 }

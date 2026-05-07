@@ -64,6 +64,18 @@ config:
   ## Default 3 days
   sessionExtensionDeadline: 72h0m0s
 
+  ## How frequently the server re-validates sessions with the identity provider
+  ## Default 120 minutes
+  sessionProviderSyncInterval: 120m0s
+
+  ## Number of consecutive IDP sync failures before invalidating a session (transient errors only)
+  ## Default 3
+  sessionSyncMaxFailures: 3
+
+  ## Time window for counting consecutive IDP sync failures
+  ## Default 24 hours
+  sessionSyncFailureWindow: 24h0m0s
+
   ## Server TLS configuration.
   ## If omitted, a self-signed CA will be generated
   ## If set, ensure secrets are accessible within the pod

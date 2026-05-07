@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog"
+	"golang.org/x/oauth2"
 	"gotest.tools/v3/assert"
 	is "gotest.tools/v3/assert/cmp"
 	"gotest.tools/v3/golden"
@@ -538,5 +540,207 @@ func TestSyncIdentityInfo(t *testing.T) {
 
 		_, err = data.GetAccessKeyByKeyID(db, key.KeyID)
 		assert.NilError(t, err)
+	})
+
+	t.Run("a transient upstream failure preserves the session", func(t *testing.T) {
+		user, err := data.CreateProviderUser(db, provider, identity)
+		assert.NilError(t, err)
+
+		stmt := `
+			UPDATE provider_users
+			SET last_update = ?
+			WHERE provider_id = ? AND identity_id = ?
+		`
+		_, err = db.Exec(stmt, time.Now().UTC().Add(-121*time.Minute), user.ProviderID, user.IdentityID)
+		assert.NilError(t, err)
+
+		key := &models.AccessKey{
+			IssuedForID: identity.ID,
+			ProviderID:  provider.ID,
+		}
+		_, err = data.CreateAccessKey(db, key)
+		assert.NilError(t, err)
+
+		ctx := providers.WithOIDCClient(context.Background(), &fakeOIDCWithError{err: internal.ErrBadGateway})
+		err = srv.syncIdentityInfo(ctx, db, identity, provider.ID)
+		assert.NilError(t, err)
+
+		_, err = data.GetAccessKeyByKeyID(db, key.KeyID)
+		assert.NilError(t, err)
+	})
+}
+
+// fakeOIDCWithError is an OIDC client that always returns the given error from GetUserInfo.
+type fakeOIDCWithError struct {
+	err error
+}
+
+func (m *fakeOIDCWithError) Validate(_ context.Context) error { return nil }
+func (m *fakeOIDCWithError) AuthServerInfo(_ context.Context) (*providers.AuthServerInfo, error) {
+	return &providers.AuthServerInfo{}, nil
+}
+func (m *fakeOIDCWithError) ExchangeAuthCodeForProviderTokens(_ context.Context, _ string) (*providers.IdentityProviderAuth, error) {
+	return nil, nil
+}
+func (m *fakeOIDCWithError) RefreshAccessToken(_ context.Context, pu *models.ProviderUser) (string, *time.Time, error) {
+	return string(pu.AccessToken), &pu.ExpiresAt, nil
+}
+func (m *fakeOIDCWithError) GetUserInfo(_ context.Context, _ *models.ProviderUser) (*providers.UserInfoClaims, error) {
+	return nil, m.err
+}
+
+// advanceProviderUser sets last_update far enough in the past that syncIdentityInfo will trigger a sync.
+func advanceProviderUser(t *testing.T, db data.WriteTxn, pu *models.ProviderUser) {
+	t.Helper()
+	stmt := `UPDATE provider_users SET last_update = ? WHERE provider_id = ? AND identity_id = ?`
+	_, err := db.Exec(stmt, time.Now().UTC().Add(-200*time.Minute), pu.ProviderID, pu.IdentityID)
+	assert.NilError(t, err)
+}
+
+func TestSyncIdentityInfo_ErrorHandling(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires database")
+	}
+
+	srv := setupServer(t, func(t *testing.T, o *Options) {
+		o.SessionProviderSyncInterval = 120 * time.Minute
+		o.SessionSyncMaxFailures = 3
+		o.SessionSyncFailureWindow = 24 * time.Hour
+	})
+	db := txnForTestCase(t, srv.db, srv.db.DefaultOrg.ID)
+
+	identity := &models.Identity{Name: "sync-error-user"}
+	assert.NilError(t, data.CreateIdentity(srv.DB(), identity))
+
+	provider := &models.Provider{
+		Name:         "test-idp",
+		URL:          "idp.example.com",
+		ClientID:     "cid",
+		ClientSecret: "sec",
+		Kind:         models.ProviderKindOIDC,
+	}
+	assert.NilError(t, data.CreateProvider(db, provider))
+
+	infraProvider := data.InfraProvider(srv.DB())
+
+	newKey := func(t *testing.T) *models.AccessKey {
+		t.Helper()
+		k := &models.AccessKey{IssuedForID: identity.ID, ProviderID: provider.ID}
+		_, err := data.CreateAccessKey(db, k)
+		assert.NilError(t, err)
+		return k
+	}
+	newInfraKey := func(t *testing.T) *models.AccessKey {
+		t.Helper()
+		k := &models.AccessKey{IssuedForID: identity.ID, ProviderID: infraProvider.ID}
+		_, err := data.CreateAccessKey(db, k)
+		assert.NilError(t, err)
+		return k
+	}
+	keyExists := func(t *testing.T, k *models.AccessKey) bool {
+		t.Helper()
+		_, err := data.GetAccessKeyByKeyID(db, k.KeyID)
+		if err != nil {
+			assert.ErrorIs(t, err, internal.ErrNotFound)
+			return false
+		}
+		return true
+	}
+
+	t.Run("transient error preserves session", func(t *testing.T) {
+		pu, err := data.CreateProviderUser(db, provider, identity)
+		assert.NilError(t, err)
+		advanceProviderUser(t, db, pu)
+
+		key := newKey(t)
+		infraKey := newInfraKey(t)
+
+		ctx := providers.WithOIDCClient(context.Background(), &fakeOIDCWithError{err: fmt.Errorf("network timeout")})
+		err = srv.syncIdentityInfo(ctx, db, identity, provider.ID)
+		assert.NilError(t, err) // session preserved — no error returned
+
+		assert.Check(t, keyExists(t, key), "provider access key should still exist after transient error")
+		assert.Check(t, keyExists(t, infraKey), "infra access key should still exist after transient error")
+	})
+
+	t.Run("revocation error destroys session immediately", func(t *testing.T) {
+		pu, err := data.CreateProviderUser(db, provider, identity)
+		assert.NilError(t, err)
+		advanceProviderUser(t, db, pu)
+
+		key := newKey(t)
+		infraKey := newInfraKey(t)
+
+		oauthErr := &oauth2.RetrieveError{ErrorCode: "invalid_grant"}
+		ctx := providers.WithOIDCClient(context.Background(), &fakeOIDCWithError{err: oauthErr})
+		err = srv.syncIdentityInfo(ctx, db, identity, provider.ID)
+		assert.ErrorContains(t, err, "sync failed")
+
+		assert.Check(t, !keyExists(t, key), "provider access key should be deleted after revocation")
+		assert.Check(t, keyExists(t, infraKey), "infra access key should survive provider revocation")
+	})
+
+	t.Run("backstop triggers session destruction after max consecutive failures", func(t *testing.T) {
+		// reset tracker state
+		srv.syncFailures = newSyncFailureTracker(srv.options.SessionSyncMaxFailures, srv.options.SessionSyncFailureWindow)
+
+		pu, err := data.CreateProviderUser(db, provider, identity)
+		assert.NilError(t, err)
+
+		key := newKey(t)
+		transientErr := &fakeOIDCWithError{err: fmt.Errorf("upstream timeout")}
+
+		// first N-1 failures must preserve the session
+		for i := 0; i < srv.options.SessionSyncMaxFailures-1; i++ {
+			advanceProviderUser(t, db, pu)
+			ctx := providers.WithOIDCClient(context.Background(), transientErr)
+			err = srv.syncIdentityInfo(ctx, db, identity, provider.ID)
+			assert.NilError(t, err, "session should be preserved on failure %d", i+1)
+			assert.Check(t, keyExists(t, key), "access key should survive failure %d", i+1)
+			// re-read pu since LastUpdate was advanced
+			pu, err = data.GetProviderUser(db, provider.ID, identity.ID)
+			assert.NilError(t, err)
+		}
+
+		// the Nth failure must trigger the backstop
+		advanceProviderUser(t, db, pu)
+		ctx := providers.WithOIDCClient(context.Background(), transientErr)
+		err = srv.syncIdentityInfo(ctx, db, identity, provider.ID)
+		assert.ErrorContains(t, err, "sync failed")
+		assert.Check(t, !keyExists(t, key), "access key should be deleted after backstop triggers")
+	})
+
+	t.Run("recovery after transient error resets backstop", func(t *testing.T) {
+		srv.syncFailures = newSyncFailureTracker(srv.options.SessionSyncMaxFailures, srv.options.SessionSyncFailureWindow)
+
+		pu, err := data.CreateProviderUser(db, provider, identity)
+		assert.NilError(t, err)
+
+		key := newKey(t)
+
+		// one transient failure
+		advanceProviderUser(t, db, pu)
+		ctx := providers.WithOIDCClient(context.Background(), &fakeOIDCWithError{err: fmt.Errorf("flaky")})
+		err = srv.syncIdentityInfo(ctx, db, identity, provider.ID)
+		assert.NilError(t, err)
+		assert.Check(t, keyExists(t, key))
+
+		// successful sync resets the counter
+		pu, err = data.GetProviderUser(db, provider.ID, identity.ID)
+		assert.NilError(t, err)
+		advanceProviderUser(t, db, pu)
+		ctx = providers.WithOIDCClient(context.Background(), &fakeOIDCImplementation{})
+		err = srv.syncIdentityInfo(ctx, db, identity, provider.ID)
+		assert.NilError(t, err)
+		assert.Check(t, keyExists(t, key))
+
+		// verify tracker was reset — a new transient failure should again be tolerated
+		pu, err = data.GetProviderUser(db, provider.ID, identity.ID)
+		assert.NilError(t, err)
+		advanceProviderUser(t, db, pu)
+		ctx = providers.WithOIDCClient(context.Background(), &fakeOIDCWithError{err: fmt.Errorf("flaky again")})
+		err = srv.syncIdentityInfo(ctx, db, identity, provider.ID)
+		assert.NilError(t, err, "session should still be tolerated after backstop was reset")
+		assert.Check(t, keyExists(t, key))
 	})
 }

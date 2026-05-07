@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"gotest.tools/v3/assert"
 	rbacv1 "k8s.io/api/rbac/v1"
 
@@ -175,7 +176,7 @@ func generateJWT(t *testing.T, priv *jose.JSONWebKey, email string, expiry time.
 		Groups: []string{"developers"},
 	}
 
-	raw, err := jwt.Signed(signer).Claims(cl).Claims(custom).CompactSerialize()
+	raw, err := jwt.Signed(signer).Claims(cl).Claims(custom).Serialize()
 	assert.NilError(t, err)
 	return raw
 }
@@ -403,4 +404,91 @@ func (f *fakeKubeClient) UpdateClusterRoleBindings(subjects map[string][]rbacv1.
 func (f *fakeKubeClient) UpdateRoleBindings(subjects map[kubernetes.ClusterRoleNamespace][]rbacv1.Subject) error {
 	f.updateRoleBindingsArgs = append(f.updateRoleBindingsArgs, subjects)
 	return f.updateBindingsError
+}
+
+func TestSyncGrantsToDestination_GracePeriod(t *testing.T) {
+	// appliedGrants captures the grants list passed to toDestination.
+	type run struct {
+		con             *connector
+		appliedGrants   [][]api.Grant
+		toDestinationFn func(ctx context.Context, grants []api.Grant) error
+	}
+
+	setupRun := func(opts Options) *run {
+		r := &run{}
+		r.con = &connector{
+			client:      &fakeAPIClient{listGrantsError: fmt.Errorf("server unreachable")},
+			destination: &api.Destination{Name: "dest"},
+			options:     opts,
+		}
+		r.toDestinationFn = func(ctx context.Context, grants []api.Grant) error {
+			r.appliedGrants = append(r.appliedGrants, grants)
+			return nil
+		}
+		return r
+	}
+
+	t.Run("grace period not yet expired keeps grants unchanged", func(t *testing.T) {
+		r := setupRun(Options{GrantSyncGracePeriod: time.Hour})
+		// Simulate failures that started 30 min ago (within grace period)
+		r.con.lastSuccessfulSync = time.Now().Add(-30 * time.Minute)
+
+		waiter := &fakeWaiter{endAtIndex: 2}
+		err := syncGrantsToDestination(context.Background(), r.con, waiter, r.toDestinationFn)
+		assert.ErrorIs(t, err, errDone)
+
+		// toDestination should not have been called (no fail-closed yet)
+		assert.Equal(t, len(r.appliedGrants), 0)
+	})
+
+	t.Run("grace period expired removes all access", func(t *testing.T) {
+		r := setupRun(Options{GrantSyncGracePeriod: time.Hour})
+		// Simulate failures that started 2 hours ago (past grace period)
+		r.con.lastSuccessfulSync = time.Now().Add(-2 * time.Hour)
+
+		waiter := &fakeWaiter{endAtIndex: 5}
+		err := syncGrantsToDestination(context.Background(), r.con, waiter, r.toDestinationFn)
+		// Should return an error (not errDone) when grace period exceeded
+		assert.Assert(t, !errors.Is(err, errDone), "expected grace period error, got errDone")
+		assert.ErrorContains(t, err, "grace period")
+
+		// toDestination must have been called once with empty grants
+		assert.Equal(t, len(r.appliedGrants), 1)
+		assert.Equal(t, len(r.appliedGrants[0]), 0, "expected empty grants on fail-closed")
+	})
+
+	t.Run("grace period disabled never removes access", func(t *testing.T) {
+		r := setupRun(Options{GrantSyncGracePeriod: 0}) // disabled
+		r.con.lastSuccessfulSync = time.Now().Add(-72 * time.Hour)
+
+		waiter := &fakeWaiter{endAtIndex: 3}
+		err := syncGrantsToDestination(context.Background(), r.con, waiter, r.toDestinationFn)
+		assert.ErrorIs(t, err, errDone)
+
+		// With grace period disabled, toDestination is never called on failure
+		assert.Equal(t, len(r.appliedGrants), 0)
+	})
+
+	t.Run("recovery after failure resets grace period", func(t *testing.T) {
+		// First simulate a successful sync to set lastSuccessfulSync
+		opts := Options{GrantSyncGracePeriod: time.Hour}
+		r := setupRun(opts)
+
+		successClient := &fakeAPIClient{
+			listGrantsResult: &api.ListResponse[api.Grant]{
+				Items:           []api.Grant{{User: uid.ID(1), Resource: "dest", Privilege: "view"}},
+				LastUpdateIndex: api.LastUpdateIndex{Index: 10},
+			},
+		}
+		r.con.client = successClient
+
+		waiter := &fakeWaiter{endAtIndex: 1}
+		err := syncGrantsToDestination(context.Background(), r.con, waiter, r.toDestinationFn)
+		assert.ErrorIs(t, err, errDone)
+
+		// After recovery the grace period should be reset (lastSuccessfulSync updated)
+		assert.Assert(t, !r.con.lastSuccessfulSync.IsZero())
+		assert.Assert(t, time.Since(r.con.lastSuccessfulSync) < 5*time.Second,
+			"lastSuccessfulSync should be recent after a successful sync")
+	})
 }

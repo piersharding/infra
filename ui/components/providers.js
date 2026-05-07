@@ -43,6 +43,41 @@ export function oidcSignup({ id, clientID, authURL, scopes, kind }, next) {
   oidc(id, clientID, authURL, scopes, kind, redirectURL, next)
 }
 
+function withOfflineAccess(scopes = []) {
+  if (scopes.includes('offline_access')) {
+    return scopes
+  }
+
+  return [...scopes, 'offline_access']
+}
+
+export function buildOIDCAuthURL(
+  authURL,
+  clientID,
+  scopes,
+  kind,
+  redirectURL,
+  state
+) {
+  const sendTo = new URL(authURL)
+  const requestedScopes = withOfflineAccess(scopes)
+  // URL searchParams add query parameters to a URL
+  sendTo.searchParams.append('redirect_uri', redirectURL)
+  sendTo.searchParams.append('client_id', clientID)
+  sendTo.searchParams.append('response_type', 'code')
+  sendTo.searchParams.append('scope', requestedScopes.join(' '))
+  sendTo.searchParams.append('state', state)
+
+  if (kind === 'google') {
+    // google only sends a refresh token when a user consents, always prompt so we always get the ref token
+    sendTo.searchParams.append('prompt', 'consent')
+    // also need to specify offline access in the case of Google to get a refresh token
+    sendTo.searchParams.append('access_type', 'offline')
+  }
+
+  return sendTo
+}
+
 function oidc(id, clientID, authURL, scopes, kind, redirectURL, next) {
   window.localStorage.setItem('redirectURL', redirectURL)
 
@@ -56,22 +91,15 @@ function oidc(id, clientID, authURL, scopes, kind, redirectURL, next) {
   const state = Array.from(stateBytes, b => b.toString(16).padStart(2, '0')).join('')
   window.localStorage.setItem('state', state)
 
-  const sendTo = new URL(authURL)
-  // URL searchParams add query parameters to a URL
-  sendTo.searchParams.append('redirect_uri', redirectURL)
-  sendTo.searchParams.append('client_id', clientID)
-  sendTo.searchParams.append('response_type', 'code')
-  sendTo.searchParams.append('scope', scopes.join(' '))
-  sendTo.searchParams.append('state', state)
-
-  if (kind === 'google') {
-    // google only sends a refresh token when a user consents, always prompt so we always get the ref token
-    sendTo.searchParams.append('prompt', 'consent')
-    // also need to specify offline access in the case of Google to get a refresh token
-    sendTo.searchParams.append('access_type', 'offline')
-  }
-
-  document.location.href = sendTo.href
+  const sendTo = buildOIDCAuthURL(
+    authURL,
+    clientID,
+    scopes,
+    kind,
+    redirectURL,
+    state
+  )
+  window.location.assign(sendTo.href)
 }
 
 export default function Providers({

@@ -27,7 +27,7 @@ func Run(ctx context.Context, args ...string) error {
 	cli := newCLI(ctx)
 	cmd := NewRootCmd(cli)
 	cmd.SetArgs(args)
-	return cmd.ExecuteContext(ctx)
+	return formatAuthError(cmd.ExecuteContext(ctx))
 }
 
 func printTable(data interface{}, out io.Writer) {
@@ -224,6 +224,7 @@ func NewRootCmd(cli *CLI) *cobra.Command {
 
 		// Other commands
 		newInfoCmd(cli),
+		newStatusCmd(cli),
 		newVersionCmd(cli),
 
 		// Hidden commands

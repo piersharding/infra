@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 
 	"github.com/infrahq/infra/internal/claims"
 )
@@ -42,6 +42,22 @@ func newAuthenticator(options Options) *authenticator {
 
 var JWKCacheRefresh = 5 * time.Minute
 
+var acceptedJWTSignatureAlgorithms = []jose.SignatureAlgorithm{
+	jose.EdDSA,
+	jose.HS256,
+	jose.HS384,
+	jose.HS512,
+	jose.RS256,
+	jose.RS384,
+	jose.RS512,
+	jose.ES256,
+	jose.ES384,
+	jose.ES512,
+	jose.PS256,
+	jose.PS384,
+	jose.PS512,
+}
+
 func (j *authenticator) Authenticate(req *http.Request) (claims.Custom, error) {
 	c := claims.Custom{}
 	authHeader := req.Header.Get("Authorization")
@@ -51,7 +67,7 @@ func (j *authenticator) Authenticate(req *http.Request) (claims.Custom, error) {
 		return c, fmt.Errorf("no bearer token found")
 	}
 
-	tok, err := jwt.ParseSigned(raw)
+	tok, err := jwt.ParseSigned(raw, acceptedJWTSignatureAlgorithms)
 	if err != nil {
 		return c, fmt.Errorf("invalid JWT signature: %w", err)
 	}

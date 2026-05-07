@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/go-jose/go-jose/v4"
 	gocmp "github.com/google/go-cmp/cmp"
 	"github.com/prometheus/client_golang/prometheus"
-	"gopkg.in/square/go-jose.v2"
 	"gotest.tools/v3/assert"
 
 	"github.com/infrahq/infra/internal/ginutil"
