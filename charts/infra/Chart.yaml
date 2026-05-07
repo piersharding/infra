@@ -2,5 +2,5 @@ apiVersion: v2
 name: infra
 description: A Helm chart for Infra connector. For Infra server charts, use infra-server.
 type: application
-version: 0.21.9
-appVersion: 0.21.9
+version: 0.21.12
+appVersion: 0.21.12
