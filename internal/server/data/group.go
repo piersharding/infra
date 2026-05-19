@@ -76,8 +76,6 @@ type ListGroupsOptions struct {
 	// is a member of the group.
 	ByGroupMember uid.ID
 
-	OrganizationID *uid.ID // optional filter — if nil, uses tx.OrganizationID()
-
 	Pagination *Pagination
 }
 
@@ -211,34 +209,4 @@ func countUsersInGroup(tx ReadTxn, groupID uid.ID) (int64, error) {
 
 func CountAllGroups(tx ReadTxn) (int64, error) {
 	return countRows(tx, groupsTable{})
-}
-
-// IsGroupMember checks if a user is a direct member of a group.
-func IsGroupMember(tx ReadTxn, userID, groupID uid.ID) (bool, error) {
-	var count int64
-	err := tx.QueryRow(`SELECT count(*) FROM identities_groups WHERE identity_id = ? AND group_id = ?`, userID, groupID).Scan(&count)
-	if err != nil {
-		return false, handleError(err)
-	}
-	return count > 0, nil
-}
-
-// ListGroupMembers returns the user IDs that are direct members of a group.
-func ListGroupMembers(tx ReadTxn, groupID uid.ID) ([]uid.ID, error) {
-	rows, err := tx.Query(`SELECT identity_id FROM identities_groups WHERE group_id = ?`, groupID)
-	if err != nil {
-		return nil, handleError(err)
-	}
-	defer rows.Close()
-
-	var memberIDs []uid.ID
-	for rows.Next() {
-		var id uid.ID
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan group member: %w", err)
-		}
-		memberIDs = append(memberIDs, id)
-	}
-
-	return memberIDs, nil
 }

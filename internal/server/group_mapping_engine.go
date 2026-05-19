@@ -107,19 +107,12 @@ func evaluateMappingsForOrg(tx data.WriteTxn, orgID uid.ID) error {
 				}
 			}
 
-			// For SSH destinations with matched groups containing members, also expand
-			// into per-user grants so the SSH connector picks them up.
+			// For SSH destinations with matched groups, also create a group-level
+			// grant (same pattern as Kubernetes). Grants are given to the group,
+			// not individual members — access flows through group membership.
 			if models.DestinationType(mapping.DestinationType) == models.DestinationTypeSSH {
-				members, err := data.ListGroupMembers(tx, g.ID)
-				if err != nil {
-					logging.L.Warn().Err(err).Str("group", g.Name).Msg("failed to list group members")
-					continue
-				}
-
-				for _, memberID := range members {
-					if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, memberID, privilege, resourceName); err != nil {
-						logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("user", memberID.String()).Msg("failed to create per-user SSH grant")
-					}
+				if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
+					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create group SSH grant")
 				}
 			}
 		}
@@ -289,6 +282,16 @@ func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID)
 		return fmt.Errorf("list groups: %w", err)
 	}
 
+	// Cache user's groups for O(1) membership lookup.
+	userGroups, err := data.ListGroupIDsForUser(tx, userID)
+	if err != nil {
+		return fmt.Errorf("list groups for user: %w", err)
+	}
+	groupSet := make(map[uid.ID]struct{}, len(userGroups))
+	for _, id := range userGroups {
+		groupSet[id] = struct{}{}
+	}
+
 	for _, mapping := range validMappings {
 		re, err := regexp.Compile(mapping.SourceGroupRegex)
 		if err != nil {
@@ -302,8 +305,7 @@ func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID)
 			}
 
 			// Check if this user is a member of the group.
-			isMember, err := data.IsGroupMember(tx, userID, g.ID)
-			if err != nil || !isMember {
+			if _, found := groupSet[g.ID]; !found {
 				continue
 			}
 
