@@ -3,6 +3,7 @@ package server
 import (
 	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/internal/access"
+	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/internal/server/data"
 	"github.com/infrahq/infra/internal/server/models"
 )
@@ -41,6 +42,11 @@ func (a *API) CreateGroup(rCtx access.RequestContext, r *api.CreateGroupRequest)
 	err := access.CreateGroup(rCtx, group)
 	if err != nil {
 		return nil, err
+	}
+
+	// A new group may match existing mapping rules — evaluate to create grants.
+	if err := EvaluateGroupMappings(rCtx.DBTxn); err != nil {
+		logging.L.Warn().Err(err).Str("group", r.Name).Msg("error evaluating group mappings after group creation")
 	}
 
 	return group.ToAPI(), nil

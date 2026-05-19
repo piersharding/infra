@@ -276,8 +276,17 @@ func (s *Server) Run(ctx context.Context) error {
 	group.Go(backgroundJob(ctx, s.db, data.RemoveExpiredPasswordResetTokens, 15*time.Minute))
 	group.Go(backgroundJob(ctx, s.db, data.DeleteExpiredUserPublicKeys, time.Hour))
 
-	// Evaluate group mappings periodically to keep grants in sync.
-	group.Go(backgroundJob(ctx, s.db, EvaluateGroupMappings, 2*time.Minute))
+	// Run a one-time evaluation of group mappings at startup.
+	tx, beginErr := s.db.Begin(context.Background(), nil)
+	if beginErr != nil {
+		return fmt.Errorf("failed to start transaction for group mapping evaluation: %w", beginErr)
+	}
+	if err := EvaluateGroupMappings(tx); err != nil {
+		_ = tx.Rollback()
+		logging.L.Warn().Err(err).Msg("error evaluating group mappings at startup")
+	} else {
+		_ = tx.Commit()
+	}
 
 	if s.tel != nil {
 		group.Go(func() error {
