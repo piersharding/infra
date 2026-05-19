@@ -276,6 +276,9 @@ func (s *Server) Run(ctx context.Context) error {
 	group.Go(backgroundJob(ctx, s.db, data.RemoveExpiredPasswordResetTokens, 15*time.Minute))
 	group.Go(backgroundJob(ctx, s.db, data.DeleteExpiredUserPublicKeys, time.Hour))
 
+	// Evaluate group mappings periodically to keep grants in sync.
+	group.Go(backgroundJob(ctx, s.db, EvaluateGroupMappings, 2*time.Minute))
+
 	if s.tel != nil {
 		group.Go(func() error {
 			return runTelemetryHeartbeat(ctx, s.tel)

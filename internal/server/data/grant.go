@@ -393,3 +393,55 @@ func deleteGrantsBulk(tx WriteTxn, grants []*models.Grant) error {
 func CountAllGrants(tx ReadTxn) (int64, error) {
 	return countRows(tx, grantsTable{})
 }
+
+// DeleteGrant soft-deletes a single grant by ID.
+func DeleteGrant(tx WriteTxn, id uid.ID) error {
+	query := querybuilder.New("UPDATE grants SET")
+	query.B("deleted_at = now(), updated_at = now()")
+	query.B("WHERE deleted_at is null AND organization_id = ?")
+	query.B("AND id = ?", tx.OrganizationID(), id)
+
+	result, err := tx.Exec(query.String(), query.Args...)
+	if err != nil {
+		return handleError(err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("grant not found")
+	}
+	return nil
+}
+
+// ListAllGrants returns all non-deleted grants for an organization.
+func ListAllGrants(tx ReadTxn, orgID uid.ID) ([]models.Grant, error) {
+	table := grantsTable{}
+	query := querybuilder.New("SELECT")
+	query.B(columnsForSelect(table))
+	query.B(", update_index")
+	query.B("FROM grants")
+	query.B("WHERE deleted_at is null AND organization_id = ?")
+	query.B(orgID)
+
+	rows, err := tx.Query(query.String(), query.Args...)
+	if err != nil {
+		return nil, handleError(err)
+	}
+	defer rows.Close()
+
+	var grants []models.Grant
+	for rows.Next() {
+		table := grantsTable{}
+		var updateIndex int64
+		fields := append(table.ScanFields(), &updateIndex)
+		err := rows.Scan(fields...)
+		if err != nil {
+			return nil, fmt.Errorf("scan grant row: %w", err)
+		}
+		grant := (*models.Grant)(&table)
+		grant.UpdateIndex = updateIndex
+		grants = append(grants, *grant)
+	}
+
+	return grants, nil
+}
