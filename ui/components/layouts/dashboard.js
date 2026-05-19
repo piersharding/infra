@@ -8,6 +8,7 @@ import {
   UserGroupIcon,
   UserIcon,
   Cog8ToothIcon,
+  Squares2X2Icon,
   XMarkIcon,
   Bars3Icon,
   UserCircleIcon,
@@ -111,6 +112,12 @@ export default function Dashboard({ children }) {
       href: '/groups',
       admin: true,
       icon: UserGroupIcon,
+    },
+    {
+      name: 'Groups Mapping',
+      href: '/groups-mapping',
+      admin: true,
+      icon: Squares2X2Icon,
     },
     {
       name: 'Users',

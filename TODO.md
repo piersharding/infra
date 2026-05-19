@@ -86,25 +86,25 @@ Create a "Groups Mapping" admin page and server-side logic to define regex-based
 ## Phase 3: Frontend — Groups Mapping Admin Page
 
 ### 13. New page component structure
-- [ ] Create `ui/pages/groups-mapping/index.js` as the main admin listing page showing all group mappings in a table (rule_name, source_group_regex, destination_type, template preview, actions)
+- [x] Created `ui/pages/groups-mapping/index.js` — listing page with table, search/filter, delete modal as the main admin listing page showing all group mappings in a table (rule_name, source_group_regex, destination_type, template preview, actions)
 - [ ] Use Dashboard layout consistent with existing admin pages (/settings/, /destinations/)
 - [ ] Add navigation link to `ui/components/layouts/dashboard/sidebar.js` under the Settings section — place it between the Providers and Access Keys links (or near them), using a Link component pointing to `/groups-mapping`
 - [ ] **Verify:** Jest shallow-render of `groups-mapping/index.js` completes without console errors; table cells render with mock data rows
 
 ### 14. List and display group mappings
-- [ ] Fetch data from `/api/group-mappings` using SWR hook
+- [x] Fetches from `/api/group-mappings` via SWR hook `/api/group-mappings` using SWR hook
 - [ ] Display in a table with columns: Rule Name, Source Group Regex, Destination Type, Generated Resource Example (showing template applied to sample group names), Actions (edit/delete)
 - [ ] Add search/filter functionality consistent with existing pages
 - [ ] **Verify:** Jest test renders the page and asserts that each column cell contains expected text; searching by rule name filters rows correctly; empty state message displays when no mappings exist
 
 ### 15. Create/Edit group mapping dialog
-- [ ] Create `ui/pages/groups-mapping/add.js` or inline modal for creating a new rule
+- [x] Created `ui/pages/groups-mapping/add.js` with full form or inline modal for creating a new rule
 - [ ] Form fields: Rule Name (**required** text), Source Group Regex (**required** text, pattern input type="regex" if supported), Destination Type selector (kubernetes/ssh), Name Template (**required** text with $N placeholder hints showing live preview using sample group names), Role Template (**required** text with $N placeholder hints — visible for kubernetes; hidden for SSH since the role is always "connect"), Namespace Template (optional — shown only when kubernetes is selected)
 - [ ] Include regex preview/test feature: show matching groups live as the user types the regex
 - [ ] **Verify:** form validation rejects empty required fields; submitting valid data calls `POST /api/group-mappings` and navigates back to list with a success message; Role Template field is hidden when "ssh" is selected and visible when "kubernetes" is selected; Namespace Template field is also conditional on kubernetes selection; live preview updates as user types (asserted via Jest by checking rendered text changes)
 
 ### 16. Delete confirmation for group mappings
-- [ ] Add delete functionality with confirmation modal consistent with existing patterns in the codebase
+- [x] Delete functionality uses `DeleteModal` component — confirms before API call, navigates back on success
 - [ ] **Verify:** clicking "delete" opens a confirmation modal (not immediate deletion); confirming triggers `DELETE /api/group-mappings/:id` and removes the row from the table; cancelling closes the modal without any API call
 
 ---
