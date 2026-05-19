@@ -11,24 +11,11 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
-// EvaluateGroupMappings is a BackgroundJobFunc that evaluates all group mappings
-// for every organization and creates/upgrades grants accordingly.
+// EvaluateGroupMappings evaluates all active mapping rules and creates or updates grants to match.
+// It iterates over group mappings, matches them against groups using regex patterns,
+// and creates group-level grants for SSH and Kubernetes destinations. Stale grants
+// (created by this engine that no longer have a matching rule) are cleaned up automatically.
 func EvaluateGroupMappings(tx data.WriteTxn) error {
-	orgs, err := data.ListOrganizations(tx, data.ListOrganizationsOptions{})
-	if err != nil {
-		return fmt.Errorf("list organizations: %w", err)
-	}
-
-	for _, org := range orgs {
-		if err := evaluateMappingsForOrg(tx, org.ID); err != nil {
-			logging.L.Warn().Err(err).Str("org_id", org.ID.String()).Msg("error evaluating group mappings")
-		}
-	}
-
-	return nil
-}
-
-func evaluateMappingsForOrg(tx data.WriteTxn, orgID uid.ID) error {
 	mappings, err := data.ListGroupMappings(tx, data.ListGroupMappingsOptions{})
 	if err != nil {
 		return fmt.Errorf("list group mappings: %w", err)
@@ -36,7 +23,7 @@ func evaluateMappingsForOrg(tx data.WriteTxn, orgID uid.ID) error {
 
 	var validMappings []models.GroupMapping
 	for _, m := range mappings {
-		if m.OrganizationID == orgID && !m.DeletedAt.Valid {
+		if !m.DeletedAt.Valid {
 			validMappings = append(validMappings, m)
 		}
 	}
@@ -89,7 +76,7 @@ func evaluateMappingsForOrg(tx data.WriteTxn, orgID uid.ID) error {
 				continue
 			}
 
-			if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
+			if err := createOrUpdateGrant(tx, tx.OrganizationID(), mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
 				logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create grant")
 			}
 
@@ -102,7 +89,7 @@ func evaluateMappingsForOrg(tx data.WriteTxn, orgID uid.ID) error {
 				}
 
 				nsResource := fmt.Sprintf("%s.%s", resourceName, namespaceName)
-				if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, privilege, nsResource); err != nil {
+				if err := createOrUpdateGrant(tx, tx.OrganizationID(), mapping.DestinationType, g.ID, privilege, nsResource); err != nil {
 					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create namespaced grant")
 				}
 			}
@@ -111,7 +98,7 @@ func evaluateMappingsForOrg(tx data.WriteTxn, orgID uid.ID) error {
 			// grant (same pattern as Kubernetes). Grants are given to the group,
 			// not individual members — access flows through group membership.
 			if models.DestinationType(mapping.DestinationType) == models.DestinationTypeSSH {
-				if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
+				if err := createOrUpdateGrant(tx, tx.OrganizationID(), mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
 					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create group SSH grant")
 				}
 			}
@@ -180,7 +167,9 @@ func parseCaptureRef(s string) (int, error) {
 	return n, nil
 }
 
-// createOrUpdateGrant creates a grant for the given subject.
+// createOrUpdateGrant creates or updates a grant with the specified privilege and resource
+// for the given destination type. Grants are created with CreatedBy = "system" so they can be
+// identified and cleaned up by cleanupStaleGrants.
 func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
 	if err := data.CreateGrant(tx, &models.Grant{
 		Model:              models.Model{}, // will be set by OnInsert
@@ -204,6 +193,8 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 }
 
 // cleanupStaleGrants removes grants created by this engine that no longer have a matching rule.
+// It iterates over all system-created grants and deletes those whose resource doesn't match
+// any active mapping rule. Grants with CreatedBy != "system" are preserved (user-managed).
 func cleanupStaleGrants(tx data.WriteTxn) error {
 	grants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	if err != nil {
@@ -260,6 +251,8 @@ func EvaluateGroupMappingForUser(tx data.WriteTxn, userID uid.ID) error {
 	return nil
 }
 
+// evaluateMappingsForUserInOrg evaluates group mappings for a specific user within an organization.
+// It checks which groups the user belongs to and creates per-user grants where applicable.
 func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID) error {
 	mappings, err := data.ListGroupMappings(tx, data.ListGroupMappingsOptions{})
 	if err != nil {
@@ -355,6 +348,9 @@ func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID)
 	return cleanupStaleUserGrants(tx, userID)
 }
 
+// createOrUpdateUserGrant creates or updates a grant for an individual user.
+// Unlike createOrUpdateGrant which grants access to the group itself,
+// this function grants direct access to the specified userID.
 func createOrUpdateUserGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
 	if err := data.CreateGrant(tx, &models.Grant{
 		Model:              models.Model{},
@@ -369,6 +365,9 @@ func createOrUpdateUserGrant(tx data.WriteTxn, orgID uid.ID, destType models.Des
 	return nil
 }
 
+// cleanupStaleUserGrants removes per-user grants created by this engine for a specific user
+// that no longer have a matching mapping rule. Only system-created grants are cleaned up;
+// manually-created grants are preserved.
 func cleanupStaleUserGrants(tx data.WriteTxn, userID uid.ID) error {
 	grants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	if err != nil {
