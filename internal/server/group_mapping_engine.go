@@ -42,7 +42,7 @@ func evaluateMappingsForOrg(tx data.WriteTxn, orgID uid.ID) error {
 	}
 
 	if len(validMappings) == 0 {
-		return cleanupStaleGrants(tx, orgID)
+		return cleanupStaleGrants(tx)
 	}
 
 	groups, err := data.ListGroups(tx, data.ListGroupsOptions{})
@@ -125,7 +125,7 @@ func evaluateMappingsForOrg(tx data.WriteTxn, orgID uid.ID) error {
 		}
 	}
 
-	return cleanupStaleGrants(tx, orgID)
+	return cleanupStaleGrants(tx)
 }
 
 // applyTemplate substitutes $N references in a template string with the Nth capture group
@@ -211,8 +211,8 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 }
 
 // cleanupStaleGrants removes grants created by this engine that no longer have a matching rule.
-func cleanupStaleGrants(tx data.WriteTxn, orgID uid.ID) error {
-	grants, err := data.ListAllGrants(tx, orgID)
+func cleanupStaleGrants(tx data.WriteTxn) error {
+	grants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	if err != nil {
 		return fmt.Errorf("list grants for cleanup: %w", err)
 	}
@@ -230,7 +230,7 @@ func cleanupStaleGrants(tx data.WriteTxn, orgID uid.ID) error {
 		}
 
 		for _, m := range mappings {
-			if m.OrganizationID == orgID && !m.DeletedAt.Valid {
+			if m.OrganizationID == tx.OrganizationID() && !m.DeletedAt.Valid {
 				re, err := regexp.Compile(m.SourceGroupRegex)
 				if err != nil {
 					continue
@@ -242,7 +242,7 @@ func cleanupStaleGrants(tx data.WriteTxn, orgID uid.ID) error {
 		}
 
 		if !matched {
-			if err := data.DeleteGrant(tx, grant.ID); err != nil {
+			if err := data.DeleteGrants(tx, data.DeleteGrantsOptions{ByID: grant.ID}); err != nil {
 				logging.L.Warn().Err(err).Str("grant", grant.ID.String()).Msg("failed to delete stale auto-grant")
 			}
 		}
@@ -281,7 +281,7 @@ func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID)
 	}
 
 	if len(validMappings) == 0 {
-		return cleanupStaleUserGrants(tx, userID, orgID)
+		return cleanupStaleUserGrants(tx, userID)
 	}
 
 	groups, err := data.ListGroups(tx, data.ListGroupsOptions{})
@@ -350,7 +350,7 @@ func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID)
 		}
 	}
 
-	return cleanupStaleUserGrants(tx, userID, orgID)
+	return cleanupStaleUserGrants(tx, userID)
 }
 
 func createOrUpdateUserGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
@@ -367,8 +367,8 @@ func createOrUpdateUserGrant(tx data.WriteTxn, orgID uid.ID, destType models.Des
 	return nil
 }
 
-func cleanupStaleUserGrants(tx data.WriteTxn, userID uid.ID, orgID uid.ID) error {
-	grants, err := data.ListAllGrants(tx, orgID)
+func cleanupStaleUserGrants(tx data.WriteTxn, userID uid.ID) error {
+	grants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	if err != nil {
 		return fmt.Errorf("list grants for user cleanup: %w", err)
 	}
@@ -378,7 +378,7 @@ func cleanupStaleUserGrants(tx data.WriteTxn, userID uid.ID, orgID uid.ID) error
 			continue
 		}
 		if grant.Subject.Kind == 0 && grant.Subject.ID == userID { // User subject kind = 0
-			if err := data.DeleteGrant(tx, grant.ID); err != nil {
+			if err := data.DeleteGrants(tx, data.DeleteGrantsOptions{ByID: grant.ID}); err != nil {
 				logging.L.Warn().Err(err).Str("grant", grant.ID.String()).Msg("failed to delete stale user auto-grant")
 			}
 		}

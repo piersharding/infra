@@ -130,7 +130,7 @@ func TestEvaluateGroupMappingsKubernetes(t *testing.T) {
 	assert.NilError(t, EvaluateGroupMappings(tx))
 
 	// Verify grants were created for matching groups only.
-	allGrants, err := data.ListAllGrants(tx, orgID)
+	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	assert.NilError(t, err)
 
 	var k8sGroupGrants []models.Grant
@@ -193,7 +193,7 @@ func TestEvaluateGroupMappingsSSH(t *testing.T) {
 	assert.NilError(t, EvaluateGroupMappings(tx))
 
 	// Verify grants were created with privilege = "connect".
-	allGrants, err := data.ListAllGrants(tx, orgID)
+	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	assert.NilError(t, err)
 
 	var sshConnectGrants []models.Grant
@@ -255,7 +255,7 @@ func TestCleanupStaleGrants(t *testing.T) {
 	assert.NilError(t, EvaluateGroupMappings(tx))
 
 	// Verify manual grants survive.
-	allGrants, err := data.ListAllGrants(tx, orgID)
+	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	assert.NilError(t, err)
 
 	var manualRemaining int
