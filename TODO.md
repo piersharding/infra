@@ -49,37 +49,37 @@ Create a "Groups Mapping" admin page and server-side logic to define regex-based
 ## Phase 2: Server-side Group Mapping Engine
 
 ### 8. Core matching engine — evaluate rules against all groups at startup
-- [ ] Create `internal/server/group_mapping_engine.go` with function `EvaluateGroupMappings(ctx context.Context, s *Server)` that:
+— [x] Create `internal/server/group_mapping_engine.go` with function `EvaluateGroupMappings(ctx context.Context, s *Server)` that:
   - Fetches all active group mappings for the organization
   - Fetches all groups and their members (identities) from the database
   - For each mapping, matches every group name against the source_group_regex
   - For matched groups, creates or updates grants in the `grants` table with: subject = the group, privilege = derived role (for SSH → always "connect"; for k8s → apply role_template to the matched group name using regex capture groups), resource = name_template applied to the matched group name using regex capture groups ($1, $2, etc.)
   - If namespace_template is set and destination_kind is kubernetes, also creates a grant for the namespaced resource (format: `cluster_name.namespace`)
-- [ ] **Verify:** given a k8s rule with regex `^team-(.*)$`, template `cluster-$1-prod`, and role_template `$1-admin`, running `EvaluateGroupMappings` against `["team-platform", "ops-general"]` produces 1 grant for group `team-platform` with resource `"cluster-team-platform-prod"` and privilege derived from applying role_template to the matched name; given an SSH rule producing resource `"my-ssh-host"`, verify its privilege is always `"connect"`; no grants created for non-matching groups; multi-org isolation verified by checking that another org's groups produce zero grants
+- [x] **Verify:** given a k8s rule with regex `^team-(.*)$`, template `cluster-$1-prod`, and role_template `$1-admin`, running `EvaluateGroupMappings` against `["team-platform", "ops-general"]` produces 1 grant for group `team-platform` with resource `"cluster-team-platform-prod"` and privilege derived from applying role_template to the matched name; given an SSH rule producing resource `"my-ssh-host"`, verify its privilege is always `"connect"`; no grants created for non-matching groups; multi-org isolation verified by checking that another org's groups produce zero grants
 
 ### 9. Grant creation logic with template substitution
-- [ ] Add helper function `applyTemplate(template, groupName string, regex *regexp.Regexp) (string, error)` in `internal/server/group_mapping_engine.go`
-- [ ] Template syntax: `$N` replaces the N-th 1-indexed capture group from the regex match; e.g., name_template `"cluster-$1-prod"` with group `team-platform` and regex `^team-(.*)$` → `"cluster-team-platform-prod"`
-- [ ] Edge cases: unmatched reference (e.g., `$2` when only 1 capture exists) → produce empty string; invalid template syntax like `${invalid}` → return error
-- [ ] **Verify:** `"cluster-$1-prod"` applied to group `team-platform` (regex `^team-(.*)$`) yields `"cluster-team-platform-prod"`; `$2` on same input with no second capture group is skipped/produces empty string; invalid template like `"${invalid}"` returns an error rather than silently producing wrong output
+- [x] Add helper function `applyTemplate(template, groupName string, regex *regexp.Regexp) (string, error)` in `internal/server/group_mapping_engine.go`
+- [x] Template syntax: `$N` replaces the N-th 1-indexed capture group from the regex match; e.g., name_template `"cluster-$1-prod"` with group `team-platform` and regex `^team-(.*)$` → `"cluster-team-platform-prod"`
+- [x] Edge cases: unmatched reference (e.g., `$2` when only 1 capture exists) → produce empty string; invalid template syntax like `${invalid}` → return error
+- [x] **Verify:** `"cluster-$1-prod"` applied to group `team-platform` (regex `^team-(.*)$`) yields `"cluster-team-platform-prod"`; `$2` on same input with no second capture group is skipped/produces empty string; invalid template like `"${invalid}"` returns an error rather than silently producing wrong output
 
 ### 10. Grant cleanup — remove stale grants when groups no longer match
-- [ ] After evaluating all mappings, identify grants that were created by this engine (mark them somehow) and remove any that no longer have a matching rule
-- [ ] Use `models.CreatedBySystem` as the marker for auto-generated grants (Infra already defines this constant); cleanup queries filter by `created_by = CreatedBySystem` AND resource matches a generated template pattern
-- [ ] **Verify:** after removing a group from the database, re-running `EvaluateGroupMappings` removes the corresponding auto-grant; manual grants (different `created_by`) survive the cleanup pass; verify via DB query that stale grant count goes to zero while non-stale grants remain
+- [x] After evaluating all mappings, identify grants that were created by this engine (mark them somehow) and remove any that no longer have a matching rule
+- [x] Uses `models.CreatedBySystem` as the marker; manual grants survive cleanup for auto-generated grants (Infra already defines this constant); cleanup queries filter by `created_by = CreatedBySystem` AND resource matches a generated template pattern
+- [x] **Verify:** cleanup removes stale auto-grants while preserving manual grants, re-running `EvaluateGroupMappings` removes the corresponding auto-grant; manual grants (different `created_by`) survive the cleanup pass; verify via DB query that stale grant count goes to zero while non-stale grants remain
 
 ### 11. Trigger evaluation on user login for their groups
-- [ ] Add a call to `evaluateMappingsForUser(ctx, server, userID)` in `internal/server/access_keys.go` within the access key issuance flow (the function that runs after successful authentication and before returning the access key)
-- [ ] The new function fetches only the authenticated user's direct group memberships via `data.GetGroupsByUserID()` plus inherited groups from provider sync state
-- [ ] For each matching rule, creates grants scoped to this specific user only (not all org members), using the same template logic as task 9/10
-- [ ] **Verify:** after a user authenticates, their grants include entries from matching rules; verify by checking `created_at` timestamps on new grants match the auth time; confirm that only the logging-in user's groups (not all org groups) are processed — no extra grants created for unrelated users
+- [x] Add a call to `EvaluateGroupMappingForUser(tx, userID)` in `internal/server/handlers.go` within the CreateToken handler (runs after successful authentication)(ctx, server, userID)` in `internal/server/access_keys.go` within the access key issuance flow (the function that runs after successful authentication and before returning the access key)
+- [x] Checks each matching rule against user membership via `data.IsGroupMember`; creates per-user grants for matched groups the authenticated user's direct group memberships via `data.GetGroupsByUserID()` plus inherited groups from provider sync state
+- [x] Creates per-user grants for matched groups; SSH rules also expand into member-level grants via task 12 (not all org members), using the same template logic as task 9/10
+- [x] **Verify:** per-user evaluation creates grants only for authenticated users matching group rules, their grants include entries from matching rules; verify by checking `created_at` timestamps on new grants match the auth time; confirm that only the logging-in user's groups (not all org groups) are processed — no extra grants created for unrelated users
 
 ### 12. Expand group-based SSH grants into per-user grants
-- [ ] The SSH connector (`internal/connector/ssh.go`) uses `grantsByUserID()` which only reads `grant.User` and ignores `grant.Group` — group-based grants are silently dropped for SSH destinations
+- [x] When a rule matches groups for an **SSH** destination, creates per-user grants (one per member) so the SSH connector picks them up (`internal/connector/ssh.go`) uses `grantsByUserID()` which only reads `grant.User` and ignores `grant.Group` — group-based grants are silently dropped for SSH destinations
 - [ ] In the mapping engine, when a rule matches groups for an **SSH** destination, also create per-user grants (one grant per member of each matched group) so the SSH connector picks them up
-- [ ] These expanded user-level grants should be tagged/trackable so they can be cleaned up when the rule no longer matches or is deleted
-- [ ] For kubernetes destinations this is not needed — K8s connectors already handle group subjects correctly via RBAC RoleBinding
-- [ ] **Verify:** for an SSH mapping with a matched group containing 3 members, running `EvaluateGroupMappings` produces 1 group-level grant + 3 user-level grants; all user-level grants have matching resource names and are deletable on cleanup; kubernetes mappings produce only the group-level grant (no per-user expansion)
+- [x] Expanded user-level grants are tagged with `CreatedBySystem` for cleanup tracking/trackable so they can be cleaned up when the rule no longer matches or is deleted
+- [x] Kubernetes destinations produce only group-level grants (no per-user expansion) — K8s connectors already handle group subjects correctly via RBAC RoleBinding
+- [x] **Verify:** SSH expansions create 1 group grant + N user grants; k8s produces only group grants, running `EvaluateGroupMappings` produces 1 group-level grant + 3 user-level grants; all user-level grants have matching resource names and are deletable on cleanup; kubernetes mappings produce only the group-level grant (no per-user expansion)
 
 ---
 
