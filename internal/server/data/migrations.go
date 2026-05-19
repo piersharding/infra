@@ -90,6 +90,7 @@ func migrations() []*migrator.Migration {
 		moveSettingsJWKOrganizations(),
 		addAccessKeyIssuedForKind(),
 		storeProviderUserGroupsArray(),
+		addGroupMappingsTable(),
 		// next one here, then run `go test -run TestMigrations ./internal/server/data -update`
 	}
 }
@@ -1379,6 +1380,32 @@ func storeProviderUserGroupsArray() *migrator.Migration {
 				}
 			}
 			return nil
+		},
+	}
+}
+
+func addGroupMappingsTable() *migrator.Migration {
+	return &migrator.Migration{
+		ID: "2024-05-19T12:00",
+		Migrate: func(tx migrator.DB) error {
+			_, err := tx.Exec(`
+			CREATE TABLE IF NOT EXISTS group_mappings (
+				id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+				organization_id uuid NOT NULL,
+				created_at     timestamptz NOT NULL DEFAULT now(),
+				updated_at     timestamptz NOT NULL DEFAULT now(),
+				deleted_at     timestamptz,
+				created_by     uuid NOT NULL,
+				rule_name      text NOT NULL,
+				source_group_regex text NOT NULL,
+				destination_type text NOT NULL CHECK (destination_type IN ('kubernetes', 'ssh')),
+				name_template  text NOT NULL,
+				namespace_template text,
+				role_template  text
+			);
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_group_mappings_rule_name_org_id ON group_mappings (rule_name, organization_id) WHERE deleted_at IS NULL;
+			`)
+			return err
 		},
 	}
 }

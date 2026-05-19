@@ -34,3 +34,13 @@ func (s optionalString) Value() (driver.Value, error) {
 	}
 	return string(s), nil
 }
+
+// optionalStringPtr returns a driver.Value for a *string pointer.
+// It returns nil if the pointer is nil or points to an empty string,
+// otherwise it returns the pointed-to string value.
+func optionalStringPtr(s *string) any {
+	if s == nil || *s == "" {
+		return nil
+	}
+	return *s
+}
