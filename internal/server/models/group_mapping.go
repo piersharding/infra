@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/infrahq/infra/api"
+	"github.com/infrahq/infra/uid"
 )
 
 type DestinationType string
@@ -17,12 +18,15 @@ type GroupMapping struct {
 	Model
 	OrganizationMember
 
-	RuleName         string `json:"rule_name"`
-	SourceGroupRegex string `json:"source_group_regex"`
-	DestinationType  DestinationType `json:"destination_type"`
-	NameTemplate     string `json:"name_template"`
-	NamespaceTemplate *string `json:"namespace_template,omitempty"`
-	RoleTemplate     *string `json:"role_template,omitempty"`
+	CreatedBy         uid.ID          `db:"created_by"`
+	RuleName          string          `json:"rule_name"`
+	SourceGroupRegex  string          `json:"source_group_regex"`
+	DestinationType   DestinationType `json:"destination_type"`
+	NameTemplate      string          `json:"name_template"`
+	NamespaceTemplate *string         `json:"namespace_template,omitempty"`
+	RoleTemplate      *string         `json:"role_template,omitempty"`
+
+	UpdateIndex int64 `db:"-"`
 }
 
 func (g *GroupMapping) ToAPI() *api.GroupMapping {

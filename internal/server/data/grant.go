@@ -420,8 +420,7 @@ func ListAllGrants(tx ReadTxn, orgID uid.ID) ([]models.Grant, error) {
 	query.B(columnsForSelect(table))
 	query.B(", update_index")
 	query.B("FROM grants")
-	query.B("WHERE deleted_at is null AND organization_id = ?")
-	query.B(orgID)
+	query.B("WHERE deleted_at is null AND organization_id = ?", orgID)
 
 	rows, err := tx.Query(query.String(), query.Args...)
 	if err != nil {

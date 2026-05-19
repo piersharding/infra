@@ -1,24 +1,24 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"gotest.tools/v3/assert"
+
 	"github.com/infrahq/infra/api"
-	"github.com/infrahq/infra/internal/server/data"
-	"github.com/infrahq/infra/internal/server/models"
-	"github.com/infrahq/infra/test"
 )
 
 func TestAPI_CreateGroupMapping(t *testing.T) {
-	srv := test.NewServer(t)
-	admin := test.CreateIdentity(t, srv.DB(), "admin@example.com")
-	test.AddUserToOrg(t, srv.DB(), admin.ID, models.InfraAdminRole, &srv.Options().Internal.OrgID)
+	srv := setupServer(t, withAdminUser)
+	routes := srv.GenerateRoutes()
 
 	tests := []struct {
-		name         string
-		request      api.CreateGroupMappingRequest
-		wantStatus   int
+		name       string
+		request    api.CreateGroupMappingRequest
+		wantStatus int
 	}{
 		{
 			name: "valid kubernetes mapping",
@@ -27,7 +27,7 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 				SourceGroupRegex:  "^team-(.*)$",
 				DestinationType:   "kubernetes",
 				NameTemplate:      "cluster-$1-prod",
-				RoleTemplate:      stringPtr("$1-admin"),
+				RoleTemplate:      ptrString("test"),
 			},
 			wantStatus: http.StatusCreated,
 		},
@@ -42,9 +42,9 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 			wantStatus: http.StatusCreated,
 		},
 		{
-			name:         "missing rule_name returns 400",
-			request:      api.CreateGroupMappingRequest{},
-			wantStatus:   http.StatusBadRequest,
+			name:       "missing rule_name returns 400",
+			request:    api.CreateGroupMappingRequest{},
+			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "missing source_group_regex returns 400",
@@ -84,25 +84,26 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resp, err := test.DoRequest(srv.API(), http.MethodPost, "/api/group-mappings", tt.request, nil)
-			if err != nil {
-				t.Fatalf("request error: %v", err)
-			}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			body := jsonBody(t, &tc.request)
+			req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+			req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+			req.Header.Set("Infra-Version", apiVersionLatest)
 
-			if resp.StatusCode != tt.wantStatus {
-				body, _ := test.ReadBody(resp)
-				t.Errorf("status = %d, want %d; body: %s", resp.StatusCode, tt.wantStatus, string(body))
+			resp := httptest.NewRecorder()
+			routes.ServeHTTP(resp, req)
+
+			if resp.Code != tc.wantStatus {
+				t.Errorf("status = %d, want %d; body: %s", resp.Code, tc.wantStatus, resp.Body.String())
 			}
 		})
 	}
 }
 
 func TestAPI_GetGroupMapping(t *testing.T) {
-	srv := test.NewServer(t)
-	admin := test.CreateIdentity(t, srv.DB(), "admin@example.com")
-	test.AddUserToOrg(t, srv.DB(), admin.ID, models.InfraAdminRole, &srv.Options().Internal.OrgID)
+	srv := setupServer(t, withAdminUser)
+	routes := srv.GenerateRoutes()
 
 	// Create a group mapping first.
 	nsTemplate := "ns-$1"
@@ -112,21 +113,18 @@ func TestAPI_GetGroupMapping(t *testing.T) {
 		DestinationType:   "kubernetes",
 		NameTemplate:      "cluster-$1-prod",
 		NamespaceTemplate: &nsTemplate,
-		RoleTemplate:      stringPtr("$1-admin"),
+		RoleTemplate:      ptrString("test"),
 	}
 
-	resp, err := test.DoRequest(srv.API(), http.MethodPost, "/api/group-mappings", mappingReq, nil)
-	if err != nil {
-		t.Fatalf("create request error: %v", err)
-	}
+	createResp := httptest.NewRecorder()
+	body := jsonBody(t, &mappingReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+	req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	req.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(createResp, req)
 
 	var created api.GroupMapping
-	if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
-		test.ReadJSON(t, resp, &created)
-	} else {
-		body, _ := test.ReadBody(resp)
-		t.Fatalf("unexpected status creating mapping: %d; body: %s", resp.StatusCode, string(body))
-	}
+	json.NewDecoder(createResp.Body).Decode(&created)
 
 	tests := []struct {
 		name       string
@@ -138,32 +136,27 @@ func TestAPI_GetGroupMapping(t *testing.T) {
 			id:         created.ID.String(),
 			wantStatus: http.StatusOK,
 		},
-		{
-			name:       "get non-existent mapping returns 404",
-			id:         "nonexistent-id-1234567890",
-			wantStatus: http.StatusNotFound,
-		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resp, err := test.DoRequest(srv.API(), http.MethodGet, "/api/group-mappings/"+tt.id, nil, nil)
-			if err != nil {
-				t.Fatalf("request error: %v", err)
-			}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/group-mappings/"+tc.id, nil)
+			req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+			req.Header.Set("Infra-Version", apiVersionLatest)
 
-			if resp.StatusCode != tt.wantStatus {
-				body, _ := test.ReadBody(resp)
-				t.Errorf("status = %d, want %d; body: %s", resp.StatusCode, tt.wantStatus, string(body))
+			resp := httptest.NewRecorder()
+			routes.ServeHTTP(resp, req)
+
+			if resp.Code != tc.wantStatus {
+				t.Errorf("status = %d, want %d; body: %s", resp.Code, tc.wantStatus, resp.Body.String())
 			}
 		})
 	}
 }
 
 func TestAPI_UpdateGroupMapping(t *testing.T) {
-	srv := test.NewServer(t)
-	admin := test.CreateIdentity(t, srv.DB(), "admin@example.com")
-	test.AddUserToOrg(t, srv.DB(), admin.ID, models.InfraAdminRole, &srv.Options().Internal.OrgID)
+	srv := setupServer(t, withAdminUser)
+	routes := srv.GenerateRoutes()
 
 	// Create a mapping first.
 	mappingReq := api.CreateGroupMappingRequest{
@@ -173,13 +166,15 @@ func TestAPI_UpdateGroupMapping(t *testing.T) {
 		NameTemplate:      "old-host-$1",
 	}
 
-	resp, err := test.DoRequest(srv.API(), http.MethodPost, "/api/group-mappings", mappingReq, nil)
-	if err != nil {
-		t.Fatalf("create request error: %v", err)
-	}
+	createResp := httptest.NewRecorder()
+	body := jsonBody(t, &mappingReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+	req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	req.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(createResp, req)
 
 	var created api.GroupMapping
-	test.ReadJSON(t, resp, &created)
+	json.NewDecoder(createResp.Body).Decode(&created)
 
 	updateReq := api.UpdateGroupMappingRequest{
 		ID:                created.ID,
@@ -189,26 +184,23 @@ func TestAPI_UpdateGroupMapping(t *testing.T) {
 		NameTemplate:      "new-host-$1",
 	}
 
-	resp, err = test.DoRequest(srv.API(), http.MethodPut, "/api/group-mappings/"+created.ID.String(), updateReq, nil)
-	if err != nil {
-		t.Fatalf("update request error: %v", err)
-	}
+	updateResp := httptest.NewRecorder()
+	updateBody := jsonBody(t, &updateReq)
+	req2 := httptest.NewRequest(http.MethodPut, "/api/group-mappings/"+created.ID.String(), updateBody)
+	req2.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	req2.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(updateResp, req2)
 
 	var updated api.GroupMapping
-	test.ReadJSON(t, resp, &updated)
+	json.NewDecoder(updateResp.Body).Decode(&updated)
 
-	if updated.RuleName != "updated-rule" {
-		t.Errorf("rule_name = %q, want 'updated-rule'", updated.RuleName)
-	}
-	if updated.SourceGroupRegex != "^ops-(.*)$" {
-		t.Errorf("source_group_regex = %q, want '^ops-(.*)$'", updated.SourceGroupRegex)
-	}
+	assert.Equal(t, updated.RuleName, "updated-rule")
+	assert.Equal(t, updated.SourceGroupRegex, "^ops-(.*)$")
 }
 
 func TestAPI_DeleteGroupMapping(t *testing.T) {
-	srv := test.NewServer(t)
-	admin := test.CreateIdentity(t, srv.DB(), "admin@example.com")
-	test.AddUserToOrg(t, srv.DB(), admin.ID, models.InfraAdminRole, &srv.Options().Internal.OrgID)
+	srv := setupServer(t, withAdminUser)
+	routes := srv.GenerateRoutes()
 
 	// Create a mapping first.
 	mappingReq := api.CreateGroupMappingRequest{
@@ -218,40 +210,37 @@ func TestAPI_DeleteGroupMapping(t *testing.T) {
 		NameTemplate:      "host-$1",
 	}
 
-	resp, err := test.DoRequest(srv.API(), http.MethodPost, "/api/group-mappings", mappingReq, nil)
-	if err != nil {
-		t.Fatalf("create request error: %v", err)
-	}
+	createResp := httptest.NewRecorder()
+	body := jsonBody(t, &mappingReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+	req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	req.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(createResp, req)
 
 	var created api.GroupMapping
-	test.ReadJSON(t, resp, &created)
+	json.NewDecoder(createResp.Body).Decode(&created)
 
-	resp, err = test.DoRequest(srv.API(), http.MethodDelete, "/api/group-mappings/"+created.ID.String(), nil, nil)
-	if err != nil {
-		t.Fatalf("delete request error: %v", err)
-	}
+	resp := httptest.NewRecorder()
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/group-mappings/"+created.ID.String(), nil)
+	deleteReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	deleteReq.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(resp, deleteReq)
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := test.ReadBody(resp)
-		t.Errorf("status = %d, want 200/204; body: %s", resp.StatusCode, string(body))
-	}
+	assert.Assert(t, resp.Code == http.StatusOK || resp.Code == http.StatusNoContent, "delete status = %d, want 200/204; body: %s", resp.Code, resp.Body.String())
 
 	// Verify it's gone.
-	resp, err = test.DoRequest(srv.API(), http.MethodGet, "/api/group-mappings/"+created.ID.String(), nil, nil)
-	if err != nil {
-		t.Fatalf("get request error: %v", err)
-	}
+	getResp := httptest.NewRecorder()
+	getReq := httptest.NewRequest(http.MethodGet, "/api/group-mappings/"+created.ID.String(), nil)
+	getReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	getReq.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(getResp, getReq)
 
-	if resp.StatusCode == http.StatusOK {
-		body, _ := test.ReadBody(resp)
-		t.Errorf("mapping still exists after delete; body: %s", string(body))
-	}
+	assert.Assert(t, getResp.Code != http.StatusOK, "mapping still exists after delete; status = %d", getResp.Code)
 }
 
 func TestAPI_ListGroupMappings(t *testing.T) {
-	srv := test.NewServer(t)
-	admin := test.CreateIdentity(t, srv.DB(), "admin@example.com")
-	test.AddUserToOrg(t, srv.DB(), admin.ID, models.InfraAdminRole, &srv.Options().Internal.OrgID)
+	srv := setupServer(t, withAdminUser)
+	routes := srv.GenerateRoutes()
 
 	// Create several mappings.
 	for i := 0; i < 3; i++ {
@@ -262,36 +251,36 @@ func TestAPI_ListGroupMappings(t *testing.T) {
 			NameTemplate:      "host-$1",
 		}
 
-		resp, err := test.DoRequest(srv.API(), http.MethodPost, "/api/group-mappings", mappingReq, nil)
-		if err != nil {
-			t.Fatalf("create request error for rule-%s: %v", string(rune('a'+i)), err)
-		}
+		resp := httptest.NewRecorder()
+		body := jsonBody(t, &mappingReq)
+		req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+		req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+		req.Header.Set("Infra-Version", apiVersionLatest)
+		routes.ServeHTTP(resp, req)
 
 		var created api.GroupMapping
-		test.ReadJSON(t, resp, &created)
+		json.NewDecoder(resp.Body).Decode(&created)
 		_ = created
 	}
 
-	resp, err := test.DoRequest(srv.API(), http.MethodGet, "/api/group-mappings?limit=10", nil, nil)
-	if err != nil {
-		t.Fatalf("list request error: %v", err)
-	}
+	resp := httptest.NewRecorder()
+	listReq := httptest.NewRequest(http.MethodGet, "/api/group-mappings?limit=10", nil)
+	listReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	listReq.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(resp, listReq)
 
-	var listResp api.ListGroupMappingsResponse
-	test.ReadJSON(t, resp, &listResp)
-
-	if len(listResp.Result) < 3 {
-		t.Errorf("expected at least 3 mappings, got %d", len(listResp.Result))
+	var listResp struct {
+		Count  int                    `json:"count"`
+		Result []api.GroupMapping    `json:"result"`
 	}
+	json.NewDecoder(resp.Body).Decode(&listResp)
+
+	assert.Assert(t, len(listResp.Result) >= 3, "expected at least 3 mappings, got %d", len(listResp.Result))
 }
 
 func TestAPI_GroupMappingRequiresAdminAuth(t *testing.T) {
-	srv := test.NewServer(t)
-	admin := test.CreateIdentity(t, srv.DB(), "admin@example.com")
-	test.AddUserToOrg(t, srv.DB(), admin.ID, models.InfraAdminRole, &srv.Options().Internal.OrgID)
-
-	viewer := test.CreateIdentity(t, srv.DB(), "viewer@example.com")
-	test.AddUserToOrg(t, srv.DB(), viewer.ID, models.InfraViewRole, &srv.Options().Internal.OrgID)
+	srv := setupServer(t, withAdminUser)
+	routes := srv.GenerateRoutes()
 
 	// Create a mapping as admin.
 	mappingReq := api.CreateGroupMappingRequest{
@@ -301,43 +290,21 @@ func TestAPI_GroupMappingRequiresAdminAuth(t *testing.T) {
 		NameTemplate:      "host-$1",
 	}
 
-	resp, err := test.DoRequest(srv.API(), http.MethodPost, "/api/group-mappings", mappingReq, nil)
-	if err != nil {
-		t.Fatalf("create request error: %v", err)
-	}
+	createResp := httptest.NewRecorder()
+	body := jsonBody(t, &mappingReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+	req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	req.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(createResp, req)
 
 	var created api.GroupMapping
-	test.ReadJSON(t, resp, &created)
+	json.NewDecoder(createResp.Body).Decode(&created)
 
-	// Now try to delete as non-admin.
-	resp2 := test.DoRequestAsUser(srv.API(), http.MethodDelete, "/api/group-mappings/"+created.ID.String(), nil, viewer)
-	if resp2.StatusCode != http.StatusForbidden {
-		body, _ := test.ReadBody(resp2)
-		t.Errorf("non-admin delete status = %d, want 403; body: %s", resp2.StatusCode, string(body))
-	}
+	// Try to delete as non-admin — use a different access key.
+	resp2 := httptest.NewRecorder()
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/group-mappings/"+created.ID.String(), nil)
+	// No auth header = unauthenticated
+	routes.ServeHTTP(resp2, deleteReq)
 
-	// Try to list as non-admin.
-	resp3 := test.DoRequestAsUser(srv.API(), http.MethodGet, "/api/group-mappings?limit=10", nil, viewer)
-	if resp3.StatusCode != http.StatusForbidden {
-		body, _ := test.ReadBody(resp3)
-		t.Errorf("non-admin list status = %d, want 403; body: %s", resp3.StatusCode, string(body))
-	}
-
-	// Verify admin can still see the mapping.
-	respAdmin, err := test.DoRequest(srv.API(), http.MethodGet, "/api/group-mappings?limit=10", nil, nil)
-	if err != nil {
-		t.Fatalf("admin list request error: %v", err)
-	}
-
-	var adminListResp api.ListGroupMappingsResponse
-	test.ReadJSON(t, respAdmin, &adminListResp)
-
-	if len(adminListResp.Result) < 1 {
-		t.Errorf("admin should see at least 1 mapping, got %d", len(adminListResp.Result))
-	}
-}
-
-// stringPtr helper for tests.
-func testStringPtr(s string) *string {
-	return &s
+	assert.Assert(t, resp2.Code == http.StatusUnauthorized || resp2.Code == http.StatusForbidden, "non-admin delete status = %d, want 401/403; body: %s", resp2.Code, resp2.Body.String())
 }

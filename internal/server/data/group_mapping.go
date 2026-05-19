@@ -45,7 +45,6 @@ func UpdateGroupMapping(tx WriteTxn, mapping *models.GroupMapping) error {
 
 // DeleteGroupMapping soft-deletes a group mapping by ID.
 func DeleteGroupMapping(tx WriteTxn, id uid.ID) error {
-	table := &groupMappingsTable{}
 	query := querybuilder.New("UPDATE group_mappings SET")
 	query.B("deleted_at = now(), updated_at = now()")
 	query.B("WHERE deleted_at is null AND organization_id = ?")
@@ -77,12 +76,15 @@ func GetGroupMapping(tx ReadTxn, opts GetGroupMappingOptions) (*models.GroupMapp
 	query.B("WHERE deleted_at is null AND organization_id = ?")
 	query.B("AND id = ?", tx.OrganizationID(), opts.ByID)
 
-	fields := append(table.ScanFields(), &table.UpdateIndex)
+	var updateIndex int64
+	fields := append(table.ScanFields(), &updateIndex)
 	err := tx.QueryRow(query.String(), query.Args...).Scan(fields...)
 	if err != nil {
 		return nil, handleError(err)
 	}
-	return (*models.GroupMapping)(table), nil
+	mapping := (*models.GroupMapping)(table)
+	mapping.UpdateIndex = updateIndex
+	return mapping, nil
 }
 
 // ListGroupMappingsOptions holds the options for listing group mappings.
@@ -101,7 +103,7 @@ func ListGroupMappings(tx ReadTxn, opts ListGroupMappingsOptions) ([]models.Grou
 	query.B(columnsForSelect(table))
 	query.B("FROM group_mappings")
 	query.B("WHERE deleted_at is null AND organization_id = ?")
-	query.B(tx.OrganizationID())
+	query.B("AND organization_id = ?", tx.OrganizationID())
 
 	if opts.Name != "" {
 		query.B("AND rule_name ILIKE ?", "%"+opts.Name+"%")

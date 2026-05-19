@@ -540,7 +540,8 @@ func getFieldName(f reflect.StructField, parent reflect.Type) string {
 func validateFieldName(name string) {
 	// temporary allow list
 	switch name {
-	case "unique_id":
+	case "unique_id", "rule_name", "source_group_regex", "destination_type",
+		"name_template", "namespace_template", "role_template":
 		return
 	}
 

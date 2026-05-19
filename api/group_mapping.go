@@ -40,11 +40,21 @@ func (r CreateGroupMappingRequest) ValidationRules() []validate.ValidationRule {
 	}
 
 	if !isValidRegexp(r.SourceGroupRegex) {
-		rules = append(rules, validate.Fail("source_group_regex", "must be a valid regular expression"))
+		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
+			return &validate.Failure{
+				Name:     "source_group_regex",
+				Problems: []string{"must be a valid regular expression"},
+			}
+		}))
 	}
 
 	if r.DestinationType == "kubernetes" && (r.RoleTemplate == nil || *r.RoleTemplate == "") {
-		rules = append(rules, validate.Fail("role_template", "is required for kubernetes destinations"))
+		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
+			return &validate.Failure{
+				Name:     "role_template",
+				Problems: []string{"is required for kubernetes destinations"},
+			}
+		}))
 	}
 
 	return rules
@@ -71,11 +81,21 @@ func (r UpdateGroupMappingRequest) ValidationRules() []validate.ValidationRule {
 	}
 
 	if !isValidRegexp(r.SourceGroupRegex) {
-		rules = append(rules, validate.Fail("source_group_regex", "must be a valid regular expression"))
+		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
+			return &validate.Failure{
+				Name:     "source_group_regex",
+				Problems: []string{"must be a valid regular expression"},
+			}
+		}))
 	}
 
 	if r.DestinationType == "kubernetes" && (r.RoleTemplate == nil || *r.RoleTemplate == "") {
-		rules = append(rules, validate.Fail("role_template", "is required for kubernetes destinations"))
+		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
+			return &validate.Failure{
+				Name:     "role_template",
+				Problems: []string{"is required for kubernetes destinations"},
+			}
+		}))
 	}
 
 	return rules

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -15,7 +14,7 @@ import (
 // EvaluateGroupMappings is a BackgroundJobFunc that evaluates all group mappings
 // for every organization and creates/upgrades grants accordingly.
 func EvaluateGroupMappings(tx data.WriteTxn) error {
-	orgs, err := data.ListOrganizations(tx, nil)
+	orgs, err := data.ListOrganizations(tx, data.ListOrganizationsOptions{})
 	if err != nil {
 		return fmt.Errorf("list organizations: %w", err)
 	}
@@ -37,7 +36,7 @@ func evaluateMappingsForOrg(tx data.WriteTxn, orgID uid.ID) error {
 
 	var validMappings []models.GroupMapping
 	for _, m := range mappings {
-		if m.OrganizationID == orgID && m.DeletedAt == nil {
+		if m.OrganizationID == orgID && !m.DeletedAt.Valid {
 			validMappings = append(validMappings, m)
 		}
 	}
@@ -160,7 +159,8 @@ func applyTemplate(template, input string, re *regexp.Regexp) (string, error) {
 				}
 
 				i = numStart // skip past the number
-			} else if nextCh == '{' && i+2 < len(template) && template[i+2] == '}' {
+			} else if nextCh == '{' {
+				// Reject any ${...} pattern — only $N (bare number) syntax is supported
 				return "", fmt.Errorf("invalid template syntax: ${...} is not supported; use $N instead")
 			} else {
 				result.WriteByte(ch)
@@ -189,14 +189,13 @@ func parseCaptureRef(s string) (int, error) {
 
 // createOrUpdateGrant creates a grant for the given subject.
 func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
-	subjectKind := models.NewSubjectForGroup(subjectID).Kind
 	if err := data.CreateGrant(tx, &models.Grant{
-		Model:            models.Model{}, // will be set by OnInsert
+		Model:              models.Model{}, // will be set by OnInsert
 		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
-		CreatedBy:        models.CreatedBySystem,
-		Subject:          models.NewSubjectForGroup(subjectID),
-		Privilege:        privilege,
-		Resource:         resource,
+		CreatedBy:          models.CreatedBySystem,
+		Subject:            models.NewSubjectForGroup(subjectID),
+		Privilege:          privilege,
+		Resource:           resource,
 	}); err != nil {
 		return fmt.Errorf("create grant for subject %s (priv=%s, res=%s): %w", subjectID.String(), privilege, resource, err)
 	}
@@ -231,7 +230,7 @@ func cleanupStaleGrants(tx data.WriteTxn, orgID uid.ID) error {
 		}
 
 		for _, m := range mappings {
-			if m.OrganizationID == orgID && m.DeletedAt == nil {
+			if m.OrganizationID == orgID && !m.DeletedAt.Valid {
 				re, err := regexp.Compile(m.SourceGroupRegex)
 				if err != nil {
 					continue
@@ -254,7 +253,7 @@ func cleanupStaleGrants(tx data.WriteTxn, orgID uid.ID) error {
 
 // EvaluateGroupMappingForUser evaluates group mappings for a specific user's groups.
 func EvaluateGroupMappingForUser(tx data.WriteTxn, userID uid.ID) error {
-	orgs, err := data.ListOrganizations(tx, nil)
+	orgs, err := data.ListOrganizations(tx, data.ListOrganizationsOptions{})
 	if err != nil {
 		return fmt.Errorf("list organizations: %w", err)
 	}
@@ -276,7 +275,7 @@ func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID)
 
 	var validMappings []models.GroupMapping
 	for _, m := range mappings {
-		if m.OrganizationID == orgID && m.DeletedAt == nil {
+		if m.OrganizationID == orgID && !m.DeletedAt.Valid {
 			validMappings = append(validMappings, m)
 		}
 	}
@@ -356,12 +355,12 @@ func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID)
 
 func createOrUpdateUserGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
 	if err := data.CreateGrant(tx, &models.Grant{
-		Model:            models.Model{},
+		Model:              models.Model{},
 		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
-		CreatedBy:        models.CreatedBySystem,
-		Subject:          models.NewSubjectForUser(subjectID),
-		Privilege:        privilege,
-		Resource:         resource,
+		CreatedBy:          models.CreatedBySystem,
+		Subject:            models.NewSubjectForUser(subjectID),
+		Privilege:          privilege,
+		Resource:           resource,
 	}); err != nil {
 		return fmt.Errorf("create user grant for subject %s (priv=%s, res=%s): %w", subjectID.String(), privilege, resource, err)
 	}
