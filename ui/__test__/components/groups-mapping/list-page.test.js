@@ -1,18 +1,19 @@
 import { render, screen } from '@testing-library/react'
 import GroupsMapping from '../../pages/groups-mapping/index'
 
-// Mock SWR
+// Mock SWR to prevent actual API calls during tests
 jest.mock('swr', () => ({
   __esModule: true,
   default: jest.fn(() => ({})),
   mutate: jest.fn(),
 }))
 
-// Mock the useUser hook
+// Mock useUser so isAdmin is always true (test user has admin access)
 jest.mock('../../lib/hooks', () => ({
   useUser: () => ({ isAdmin: true, isAdminLoading: false }),
 }))
 
+// List page tests: verify table rendering and empty state.
 describe('Groups Mapping — list page', () => {
   it('renders table cells with mock data rows', async () => {
     const swr = require('swr')

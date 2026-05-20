@@ -98,12 +98,14 @@ func (s *Server) GenerateRoutes() Routes {
 	put(a, authn, "/api/providers/:id", a.UpdateProvider)
 	del(a, authn, "/api/providers/:id", a.DeleteProvider)
 
+	// Group mapping CRUD endpoints — admin-only access to manage rule-based grants.
 	get(a, authn, "/api/group-mappings", a.ListGroupMappings)
 	get(a, authn, "/api/group-mappings/:id", a.GetGroupMapping)
 	post(a, authn, "/api/group-mappings", a.CreateGroupMapping)
 	put(a, authn, "/api/group-mappings/:id", a.UpdateGroupMapping)
 	del(a, authn, "/api/group-mappings/:id", a.DeleteGroupMapping)
 
+	// End of group mapping routes — next route is destinations
 	get(a, authn, "/api/destinations", a.ListDestinations)
 	get(a, authn, "/api/destinations/:id", a.GetDestination)
 	post(a, authn, "/api/destinations", a.CreateDestination)

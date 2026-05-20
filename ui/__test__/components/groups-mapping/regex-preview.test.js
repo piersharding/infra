@@ -1,3 +1,5 @@
+// Tests for the exported pure functions: previewRegex and applyTemplatePreview.
+// These test the core logic without React dependencies.
 import { previewRegex, applyTemplatePreview } from '../../pages/groups-mapping/add'
 
 describe('Groups Mapping — regex preview', () => {
@@ -28,6 +30,7 @@ describe('Groups Mapping — regex preview', () => {
   })
 })
 
+// Template preview tests: verify that applyTemplatePreview handles edge cases safely.
 describe('Groups Mapping — template preview', () => {
   it('returns empty string for missing template', () => {
     const result = applyTemplatePreview('', 'team-platform')

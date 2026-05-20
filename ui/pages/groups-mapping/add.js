@@ -14,7 +14,9 @@ function jsonBody(res) {
   return res.json()
 }
 
-// Regex preview function (pure, testable)
+// previewRegex takes a regex string and an optional list of sample group names,
+// then returns the subset that matches. Used for live "Matches:" preview in the form.
+// pure function exportable to tests (no React dependencies).
 export function previewRegex(regex, sampleGroupNames = ['team-platform', 'ops-general', 'admin-dev']) {
   if (!regex) return []
   try {
@@ -25,7 +27,9 @@ export function previewRegex(regex, sampleGroupNames = ['team-platform', 'ops-ge
   }
 }
 
-// Template preview function (pure, testable)
+// applyTemplatePreview safely shows the raw template string without evaluating $N references
+// (to avoid unsafe eval). Returns empty string for invalid templates.
+// pure function exportable to tests (no React dependencies).
 export function applyTemplatePreview(template, groupName) {
   if (!template || !groupName) return ''
   try {
@@ -52,11 +56,13 @@ export default function AddGroupsMapping() {
   const [submitting, setSubmitting] = useState(false)
   const [notification, setNotification] = useState(null)
 
-  // Live preview of matching groups for the regex
+  // Memoized live-preview: evaluates sourceGroupRegex against sample group names
+  // to show the user which groups would match their regex pattern.
   const sampleGroups = ['team-platform', 'ops-general', 'admin-dev', 'infra-admins']
   const matchedGroups = useMemo(() => previewRegex(sourceGroupRegex), [sourceGroupRegex])
 
-  // Live template preview with a sample group name
+  // Memoized live-preview: shows what the name_template would produce using "team-platform" as input.
+  // Replaces $N references with [group-N] placeholders since we can't safely evaluate them client-side.
   const templatePreview = useMemo(() => {
     if (!nameTemplate) return ''
     let result = nameTemplate.replace(/\$([1-9]\d*)/g, (match, num) => {
@@ -72,8 +78,7 @@ export default function AddGroupsMapping() {
   async function handleSubmit(e) {
     e.preventDefault()
     
-    // Validate required fields
-    const newErrors = {}
+    // Client-side validation: check all required fields and regex validity before submitting.
     if (!ruleName.trim()) newErrors.rule_name = 'Rule name is required'
     if (!sourceGroupRegex.trim()) newErrors.source_group_regex = 'Source group regex is required'
     else {
@@ -106,12 +111,11 @@ export default function AddGroupsMapping() {
         role_template: destinationType === 'kubernetes' ? roleTemplate : null,
       }
 
-      if (namespaceTemplate) {
+      // Build the request body, conditionally including optional fields.
+      // For kubernetes: namespace_template is sent only if non-empty.
+      // For ssh: namespace_template is omitted entirely (not applicable).
+      if (namespaceTemplate && destinationType === 'kubernetes') {
         body.namespace_template = namespaceTemplate
-      } else if (destinationType === 'ssh') {
-        // SSH doesn't use namespace template — omit it
-      } else {
-        body.namespace_template = ''
       }
 
       const url = isEdit ? `/api/group-mappings/${router.query.id}` : '/api/group-mappings'

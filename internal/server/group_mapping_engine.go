@@ -192,7 +192,12 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 	return nil
 }
 
-// cleanupStaleGrants removes grants created by this engine that no longer have a matching rule.
+// cleanupStaleGrants runs after EvaluateGroupMappings to remove auto-granted access for rules
+// that are being removed or changed. It iterates all system-created grants and deletes those
+// whose resource name doesn't match the pattern of any active mapping rule.
+//
+// Key design: only grants with CreatedBy="system" are cleaned up. Manually created grants
+// (CreatedBy != "system") are always preserved — the engine never touches user-managed access.
 // It iterates over all system-created grants and deletes those whose resource doesn't match
 // any active mapping rule. Grants with CreatedBy != "system" are preserved (user-managed).
 func cleanupStaleGrants(tx data.WriteTxn) error {
@@ -235,7 +240,9 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 	return nil
 }
 
-// EvaluateGroupMappingForUser evaluates group mappings for a specific user's groups.
+// EvaluateGroupMappingForUser is called during token creation to compute per-user grants
+// in addition to the group-level grants computed by EvaluateGroupMappings.
+// It iterates all organizations and delegates to evaluateMappingsForUserInOrg().
 func EvaluateGroupMappingForUser(tx data.WriteTxn, userID uid.ID) error {
 	orgs, err := data.ListOrganizations(tx, data.ListOrganizationsOptions{})
 	if err != nil {
@@ -251,7 +258,9 @@ func EvaluateGroupMappingForUser(tx data.WriteTxn, userID uid.ID) error {
 	return nil
 }
 
-// evaluateMappingsForUserInOrg evaluates group mappings for a specific user within an organization.
+// evaluateMappingsForUserInOrg checks which mapping rules match groups that the given user belongs to,
+// and creates per-user grants (not just group-level ones). This ensures the user gets access
+// even if their token is being refreshed or first created.
 // It checks which groups the user belongs to and creates per-user grants where applicable.
 func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID) error {
 	mappings, err := data.ListGroupMappings(tx, data.ListGroupMappingsOptions{})
@@ -348,7 +357,8 @@ func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID)
 	return cleanupStaleUserGrants(tx, userID)
 }
 
-// createOrUpdateUserGrant creates or updates a grant for an individual user.
+// createOrUpdateUserGrant grants access directly to the specified userID (Subject.Kind=user)
+// rather than to the group. This supplements group-level grants with per-user access.
 // Unlike createOrUpdateGrant which grants access to the group itself,
 // this function grants direct access to the specified userID.
 func createOrUpdateUserGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
@@ -365,7 +375,8 @@ func createOrUpdateUserGrant(tx data.WriteTxn, orgID uid.ID, destType models.Des
 	return nil
 }
 
-// cleanupStaleUserGrants removes per-user grants created by this engine for a specific user
+// cleanupStaleUserGrants removes per-user auto-grants that no longer have matching rules.
+// Only system-created grants are cleaned up; manually-created grants survive.
 // that no longer have a matching mapping rule. Only system-created grants are cleaned up;
 // manually-created grants are preserved.
 func cleanupStaleUserGrants(tx data.WriteTxn, userID uid.ID) error {

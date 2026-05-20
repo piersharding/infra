@@ -67,7 +67,9 @@ func CreateToken(rCtx access.RequestContext, r *api.EmptyRequest) (*api.CreateTo
 		return nil, err
 	}
 
-	// Evaluate group mappings for the authenticated user to create per-user grants.
+	// When a user authenticates (creates a token), evaluate their group memberships
+	// against all mapping rules. This creates per-user grants so they get access immediately,
+	// supplementing any group-level grants that may already exist.
 	if err := EvaluateGroupMappingForUser(rCtx.DBTxn, rCtx.Authenticated.User.ID); err != nil {
 		logging.L.Warn().Err(err).Str("user", rCtx.Authenticated.User.ID.String()).Msg("error evaluating group mappings for user")
 	}

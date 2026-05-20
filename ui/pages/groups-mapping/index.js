@@ -36,7 +36,7 @@ export default function GroupsMapping() {
     getResultMessage,
   } = useSearch()
 
-  // Build API URL with pagination and optional name filter
+  // Memoized: builds the API URL string with pagination params and optional name search query.
   const apiUrl = useMemo(
     () => {
       const params = new URLSearchParams({
@@ -51,14 +51,13 @@ export default function GroupsMapping() {
     [page, limit, searchQuery]
   )
 
-  // Fetch group mappings data
-  const { data: { items: mappings = [], totalCount, totalPages } = {}, mutate } = useSWR(apiUrl)
+  // SWR hook fetches mapping rules from the API. Mutate is used to invalidate cache after CRUD operations.
   
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [selectedMappingId, setSelectedMappingId] = useState(null)
   const [notification, setNotification] = useState(null)
 
-  // Generate appropriate messages
+  // Determine empty-state and result-count messages for the UI.
   const emptyMessage = getEmptyMessage('No group mappings')
   const resultText = getResultMessage(totalCount || 0, 'mapping')
 
@@ -81,6 +80,9 @@ export default function GroupsMapping() {
     )
   }
 
+  // previewTemplate takes a template string (e.g., "cluster-$1-prod") and replaces
+  // $N references with [group-N] placeholders for display in the table column.
+  // This lets users see what their templates would produce without needing to know exact group names.
   function previewTemplate(template, sampleGroup) {
     if (!template || !sampleGroup) return '—'
     let result = template

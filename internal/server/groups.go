@@ -44,7 +44,8 @@ func (a *API) CreateGroup(rCtx access.RequestContext, r *api.CreateGroupRequest)
 		return nil, err
 	}
 
-	// A new group may match existing mapping rules — evaluate to create grants.
+	// A newly-created group can now match existing group mapping rules,
+	// so we re-evaluate the engine immediately to create access grants for it.
 	if err := EvaluateGroupMappings(rCtx.DBTxn); err != nil {
 		logging.L.Warn().Err(err).Str("group", r.Name).Msg("error evaluating group mappings after group creation")
 	}

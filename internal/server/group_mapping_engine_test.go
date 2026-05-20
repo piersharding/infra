@@ -1,3 +1,5 @@
+// Tests for the group mapping engine: template substitution, evaluation logic,
+// stale grant cleanup, and multi-tenant isolation.
 package server
 
 import (
@@ -12,6 +14,7 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
+// TestApplyTemplate verifies that template $N substitution works correctly.
 func TestApplyTemplate(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -57,7 +60,7 @@ func TestApplyTemplate(t *testing.T) {
 	}
 }
 
-// TestApplyTemplateEdgeCases tests edge cases for template substitution.
+// TestApplyTemplateEdgeCases covers: unmatched references (empty string), invalid ${...} syntax, and non-matching regex.
 func TestApplyTemplateEdgeCases(t *testing.T) {
 	re := mustCompileRegex("^team-(.*)$")
 

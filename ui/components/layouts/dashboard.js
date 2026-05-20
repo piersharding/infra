@@ -114,9 +114,10 @@ export default function Dashboard({ children }) {
       icon: UserGroupIcon,
     },
     {
+      // Groups Mapping — admin-only nav link to rule-based access management.
       name: 'Groups Mapping',
       href: '/groups-mapping',
-      admin: true,
+      admin: true,  // only visible to admins since rules control who gets access
       icon: Squares2X2Icon,
     },
     {

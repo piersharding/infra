@@ -1,17 +1,18 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import AddGroupsMapping from '../../pages/groups-mapping/add'
 
-// Mock fetch and router
+// Mock fetch to prevent actual API calls during tests. Returns a successful empty response.
 global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }))
 jest.mock('next/router', () => ({
   useRouter: () => ({ query: {}, push: jest.fn(), replace: jest.fn() }),
 }))
 
-// Mock useUser hook
+// Mock useUser so isAdmin is always true (test user has admin access)
 jest.mock('../../lib/hooks', () => ({
   useUser: () => ({ isAdmin: true, isAdminLoading: false }),
 }))
 
+// Form validation tests: ensure correct fields are shown/hidden and required field checks work.
 describe('Groups Mapping — create dialog form validation', () => {
   beforeEach(() => {
     global.fetch.mockClear()

@@ -8,6 +8,8 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
+// groupMappingsTable implements the Table interface for the "group_mappings" database table.
+// It maps between the models.GroupMapping struct and SQL operations (insert, update, scan).
 type groupMappingsTable models.GroupMapping
 
 func (g groupMappingsTable) Table() string {
@@ -26,6 +28,9 @@ func (g *groupMappingsTable) ScanFields() []any {
 	return []any{&g.CreatedAt, &g.CreatedBy, &g.DeletedAt, (*string)(&g.DestinationType), &g.ID, &g.NameTemplate, (**string)(&g.NamespaceTemplate), &g.OrganizationID, (**string)(&g.RoleTemplate), &g.RuleName, &g.SourceGroupRegex, &g.UpdatedAt}
 }
 
+// CreateGroupMapping validates and inserts a new group mapping record.
+// Validation ensures rule_name, source_group_regex, destination_type, name_template are non-empty,
+// and that role_template is provided for kubernetes destinations. OrganizationID is set from the transaction context.
 func CreateGroupMapping(tx WriteTxn, mapping *models.GroupMapping) error {
 	if err := validateGroupMapping(mapping); err != nil {
 		return err
@@ -35,6 +40,8 @@ func CreateGroupMapping(tx WriteTxn, mapping *models.GroupMapping) error {
 	return insert(tx, (*groupMappingsTable)(mapping))
 }
 
+// UpdateGroupMapping validates and updates an existing group mapping record.
+// Runs the same validation as Create to ensure consistency. The updated_at timestamp is set by OnUpdate().
 func UpdateGroupMapping(tx WriteTxn, mapping *models.GroupMapping) error {
 	if err := validateGroupMapping(mapping); err != nil {
 		return err
@@ -43,7 +50,8 @@ func UpdateGroupMapping(tx WriteTxn, mapping *models.GroupMapping) error {
 	return update(tx, (*groupMappingsTable)(mapping))
 }
 
-// DeleteGroupMapping soft-deletes a group mapping by ID.
+// DeleteGroupMapping performs a soft-delete on a group mapping (sets deleted_at).
+// Only deletes within the transaction's organization scope. Returns an error if no matching row is found.
 func DeleteGroupMapping(tx WriteTxn, id uid.ID) error {
 	query := querybuilder.New("UPDATE group_mappings SET")
 	query.B("deleted_at = now(), updated_at = now()")
@@ -67,6 +75,8 @@ type GetGroupMappingOptions struct {
 	ByID uid.ID
 }
 
+// GetGroupMapping fetches a single non-deleted group mapping within the transaction's org scope.
+// Returns an UpdateIndex from pg_notify to support real-time invalidation (used with LISTEN/NOTIFY).
 func GetGroupMapping(tx ReadTxn, opts GetGroupMappingOptions) (*models.GroupMapping, error) {
 	table := &groupMappingsTable{}
 	query := querybuilder.New("SELECT")
@@ -94,6 +104,8 @@ type ListGroupMappingsOptions struct {
 	Pagination *Pagination
 }
 
+// ListGroupMappings returns all non-deleted group mappings in the transaction's org scope,
+// optionally filtered by name and paginated. Results are ordered alphabetically by rule_name.
 func ListGroupMappings(tx ReadTxn, opts ListGroupMappingsOptions) ([]models.GroupMapping, error) {
 	table := groupMappingsTable{}
 	query := querybuilder.New("SELECT")
@@ -138,6 +150,11 @@ func ListGroupMappings(tx ReadTxn, opts ListGroupMappingsOptions) ([]models.Grou
 	return mappings, nil
 }
 
+// validateGroupMapping enforces business rules on the model before DB persistence:
+//   - rule_name and source_group_regex are required
+//   - destination_type must be "kubernetes" or "ssh"
+//   - name_template is required for all types
+//   - role_template is required when destination_type is "kubernetes" (needed to determine RBAC role)
 func validateGroupMapping(mapping *models.GroupMapping) error {
 	if mapping.RuleName == "" {
 		return fmt.Errorf("rule_name is required")

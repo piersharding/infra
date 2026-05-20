@@ -1,3 +1,5 @@
+// HTTP handler tests for group mapping CRUD endpoints.
+// Tests verify: validation rules, correct HTTP status codes, and admin-only access enforcement.
 package server
 
 import (
@@ -11,6 +13,7 @@ import (
 	"github.com/infrahq/infra/api"
 )
 
+// TestAPI_CreateGroupMapping verifies validation rules for creating group mappings.
 func TestAPI_CreateGroupMapping(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
@@ -101,6 +104,7 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 	}
 }
 
+// TestAPI_GetGroupMapping verifies fetching an existing mapping returns 200.
 func TestAPI_GetGroupMapping(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
@@ -154,6 +158,7 @@ func TestAPI_GetGroupMapping(t *testing.T) {
 	}
 }
 
+// TestAPI_UpdateGroupMapping verifies updating a rule and that EvaluateGroupMappings is triggered (indirectly via no error).
 func TestAPI_UpdateGroupMapping(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
@@ -198,6 +203,7 @@ func TestAPI_UpdateGroupMapping(t *testing.T) {
 	assert.Equal(t, updated.SourceGroupRegex, "^ops-(.*)$")
 }
 
+// TestAPI_DeleteGroupMapping verifies deletion returns 200/204 and the mapping is removed.
 func TestAPI_DeleteGroupMapping(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
@@ -238,6 +244,7 @@ func TestAPI_DeleteGroupMapping(t *testing.T) {
 	assert.Assert(t, getResp.Code != http.StatusOK, "mapping still exists after delete; status = %d", getResp.Code)
 }
 
+// TestAPI_ListGroupMappings verifies listing returns all created mappings with correct count.
 func TestAPI_ListGroupMappings(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
@@ -278,6 +285,7 @@ func TestAPI_ListGroupMappings(t *testing.T) {
 	assert.Assert(t, len(listResp.Result) >= 3, "expected at least 3 mappings, got %d", len(listResp.Result))
 }
 
+// TestAPI_GroupMappingRequiresAdminAuth verifies that non-admin requests are rejected (401/403).
 func TestAPI_GroupMappingRequiresAdminAuth(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
