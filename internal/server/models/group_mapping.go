@@ -19,9 +19,10 @@ const (
 // Workflow:
 // 1. A mapping's source_group_regex is matched against each group name from the IDP
 // 2. If it matches, templates are applied using $N capture-group references to produce:
-//    - Resource name (name_template) — e.g., "cluster-platform-prod"
-//    - Role name (role_template) for k8s — e.g., "platform-admin"  
-//    - Namespace (namespace_template, optional for k8s) — e.g., "platform-ns"
+//   - Resource name (name_template) — e.g., "cluster-platform-prod"
+//   - Role name (role_template) for k8s — e.g., "platform-admin"
+//   - Namespace (namespace_template, optional for k8s) — e.g., "platform-ns"
+//
 // 3. Grants are created with CreatedBy="system" so they can be cleaned up if rules change
 type GroupMapping struct {
 	Model
@@ -40,13 +41,13 @@ type GroupMapping struct {
 
 func (g *GroupMapping) ToAPI() *api.GroupMapping {
 	m := &api.GroupMapping{
-		ID:                g.ID,
-		Created:           api.Time(g.CreatedAt),
-		Updated:           api.Time(g.UpdatedAt),
-		RuleName:          g.RuleName,
-		SourceGroupRegex:  g.SourceGroupRegex,
-		DestinationType:   string(g.DestinationType),
-		NameTemplate:      g.NameTemplate,
+		ID:               g.ID,
+		Created:          api.Time(g.CreatedAt),
+		Updated:          api.Time(g.UpdatedAt),
+		RuleName:         g.RuleName,
+		SourceGroupRegex: g.SourceGroupRegex,
+		DestinationType:  string(g.DestinationType),
+		NameTemplate:     g.NameTemplate,
 	}
 
 	if g.NamespaceTemplate != nil {

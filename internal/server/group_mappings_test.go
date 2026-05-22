@@ -26,21 +26,21 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 		{
 			name: "valid kubernetes mapping",
 			request: api.CreateGroupMappingRequest{
-				RuleName:          "team-access",
-				SourceGroupRegex:  "^team-(.*)$",
-				DestinationType:   "kubernetes",
-				NameTemplate:      "cluster-$1-prod",
-				RoleTemplate:      ptrString("test"),
+				RuleName:         "team-access",
+				SourceGroupRegex: "^team-(.*)$",
+				DestinationType:  "kubernetes",
+				NameTemplate:     "cluster-$1-prod",
+				RoleTemplate:     ptrString("test"),
 			},
 			wantStatus: http.StatusCreated,
 		},
 		{
 			name: "valid SSH mapping",
 			request: api.CreateGroupMappingRequest{
-				RuleName:          "ssh-access",
-				SourceGroupRegex:  "^team-(.*)$",
-				DestinationType:   "ssh",
-				NameTemplate:      "my-ssh-host-$1",
+				RuleName:         "ssh-access",
+				SourceGroupRegex: "^team-(.*)$",
+				DestinationType:  "ssh",
+				NameTemplate:     "my-ssh-host-$1",
 			},
 			wantStatus: http.StatusCreated,
 		},
@@ -165,10 +165,10 @@ func TestAPI_UpdateGroupMapping(t *testing.T) {
 
 	// Create a mapping first.
 	mappingReq := api.CreateGroupMappingRequest{
-		RuleName:          "old-rule",
-		SourceGroupRegex:  "^team-(.*)$",
-		DestinationType:   "ssh",
-		NameTemplate:      "old-host-$1",
+		RuleName:         "old-rule",
+		SourceGroupRegex: "^team-(.*)$",
+		DestinationType:  "ssh",
+		NameTemplate:     "old-host-$1",
 	}
 
 	createResp := httptest.NewRecorder()
@@ -182,11 +182,11 @@ func TestAPI_UpdateGroupMapping(t *testing.T) {
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	updateReq := api.UpdateGroupMappingRequest{
-		ID:                created.ID,
-		RuleName:          "updated-rule",
-		SourceGroupRegex:  "^ops-(.*)$",
-		DestinationType:   "ssh",
-		NameTemplate:      "new-host-$1",
+		ID:               created.ID,
+		RuleName:         "updated-rule",
+		SourceGroupRegex: "^ops-(.*)$",
+		DestinationType:  "ssh",
+		NameTemplate:     "new-host-$1",
 	}
 
 	updateResp := httptest.NewRecorder()
@@ -210,10 +210,10 @@ func TestAPI_DeleteGroupMapping(t *testing.T) {
 
 	// Create a mapping first.
 	mappingReq := api.CreateGroupMappingRequest{
-		RuleName:          "delete-me",
-		SourceGroupRegex:  "^team-(.*)$",
-		DestinationType:   "ssh",
-		NameTemplate:      "host-$1",
+		RuleName:         "delete-me",
+		SourceGroupRegex: "^team-(.*)$",
+		DestinationType:  "ssh",
+		NameTemplate:     "host-$1",
 	}
 
 	createResp := httptest.NewRecorder()
@@ -252,10 +252,10 @@ func TestAPI_ListGroupMappings(t *testing.T) {
 	// Create several mappings.
 	for i := 0; i < 3; i++ {
 		mappingReq := api.CreateGroupMappingRequest{
-			RuleName:          "rule-" + string(rune('a'+i)),
-			SourceGroupRegex:  "^team-(.*)$",
-			DestinationType:   "ssh",
-			NameTemplate:      "host-$1",
+			RuleName:         "rule-" + string(rune('a'+i)),
+			SourceGroupRegex: "^team-(.*)$",
+			DestinationType:  "ssh",
+			NameTemplate:     "host-$1",
 		}
 
 		resp := httptest.NewRecorder()
@@ -277,8 +277,8 @@ func TestAPI_ListGroupMappings(t *testing.T) {
 	routes.ServeHTTP(resp, listReq)
 
 	var listResp struct {
-		Count  int                    `json:"count"`
-		Result []api.GroupMapping    `json:"result"`
+		Count  int                `json:"count"`
+		Result []api.GroupMapping `json:"result"`
 	}
 	json.NewDecoder(resp.Body).Decode(&listResp)
 
@@ -292,10 +292,10 @@ func TestAPI_GroupMappingRequiresAdminAuth(t *testing.T) {
 
 	// Create a mapping as admin.
 	mappingReq := api.CreateGroupMappingRequest{
-		RuleName:          "admin-rule",
-		SourceGroupRegex:  "^team-(.*)$",
-		DestinationType:   "ssh",
-		NameTemplate:      "host-$1",
+		RuleName:         "admin-rule",
+		SourceGroupRegex: "^team-(.*)$",
+		DestinationType:  "ssh",
+		NameTemplate:     "host-$1",
 	}
 
 	createResp := httptest.NewRecorder()

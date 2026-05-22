@@ -175,15 +175,15 @@ func TestEvaluateGroupMappingsSSH(t *testing.T) {
 
 	// Create a matching group.
 	group := models.Group{
-		Name:                 "team-platform",
-		OrganizationMember:   models.OrganizationMember{OrganizationID: orgID},
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
 	}
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
 	// Create a non-matching group.
 	group2 := models.Group{
-		Name:                 "ops-general",
-		OrganizationMember:   models.OrganizationMember{OrganizationID: orgID},
+		Name:               "ops-general",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
 	}
 	assert.NilError(t, data.CreateGroup(tx, &group2))
 
@@ -238,8 +238,8 @@ func TestCleanupStaleGrants(t *testing.T) {
 
 	// Create a matching group.
 	group := models.Group{
-		Name:                 "team-platform",
-		OrganizationMember:   models.OrganizationMember{OrganizationID: orgID},
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
 	}
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
@@ -300,8 +300,8 @@ func TestMultiOrgIsolation(t *testing.T) {
 
 	// Create a matching group.
 	group := models.Group{
-		Name:                 "team-platform",
-		OrganizationMember:   models.OrganizationMember{OrganizationID: org1ID},
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: org1ID},
 	}
 	assert.NilError(t, data.CreateGroup(tx1, &group))
 

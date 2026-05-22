@@ -29,19 +29,19 @@ type GroupMapping struct {
 // CreateGroupMappingRequest is the request body for creating a group mapping.
 // RoleTemplate and NamespaceTemplate are pointers to allow distinguishing "not set" from "empty string".
 type CreateGroupMappingRequest struct {
-	RuleName          string `json:"rule_name"`
-	SourceGroupRegex  string `json:"source_group_regex"`
-	DestinationType   string `json:"destination_type"`
-	NameTemplate      string `json:"name_template"`
+	RuleName          string  `json:"rule_name"`
+	SourceGroupRegex  string  `json:"source_group_regex"`
+	DestinationType   string  `json:"destination_type"`
+	NameTemplate      string  `json:"name_template"`
 	NamespaceTemplate *string `json:"namespace_template,omitempty"`
 	RoleTemplate      *string `json:"role_template,omitempty"`
 }
 
 // ValidationRules enforces:
 //
-//	- rule_name, source_group_regex, destination_type, and name_template are all non-empty
-//	- source_group_regex compiles as a valid Go regexp
-//	- for kubernetes destinations: role_template is required (needed to determine RBAC role)
+//   - rule_name, source_group_regex, destination_type, and name_template are all non-empty
+//   - source_group_regex compiles as a valid Go regexp
+//   - for kubernetes destinations: role_template is required (needed to determine RBAC role)
 func (r CreateGroupMappingRequest) ValidationRules() []validate.ValidationRule {
 	rules := []validate.ValidationRule{
 		validate.Required("rule_name", r.RuleName),
@@ -75,11 +75,11 @@ func (r CreateGroupMappingRequest) ValidationRules() []validate.ValidationRule {
 // UpdateGroupMappingRequest is the request body for updating an existing group mapping.
 // ID comes from the URL path; other fields mirror CreateGroupMappingRequest.
 type UpdateGroupMappingRequest struct {
-	ID                uid.ID `uri:"id" json:"-"`
-	RuleName          string `json:"rule_name"`
-	SourceGroupRegex  string `json:"source_group_regex"`
-	DestinationType   string `json:"destination_type"`
-	NameTemplate      string `json:"name_template"`
+	ID                uid.ID  `uri:"id" json:"-"`
+	RuleName          string  `json:"rule_name"`
+	SourceGroupRegex  string  `json:"source_group_regex"`
+	DestinationType   string  `json:"destination_type"`
+	NameTemplate      string  `json:"name_template"`
 	NamespaceTemplate *string `json:"namespace_template,omitempty"`
 	RoleTemplate      *string `json:"role_template,omitempty"`
 }
@@ -128,8 +128,8 @@ func (r ListGroupMappingsRequest) ValidationRules() []validate.ValidationRule {
 
 // ListGroupMappingsResponse is the response body for listing group mappings.
 type ListGroupMappingsResponse struct {
-	Count  int               `json:"count"`
-	Result []GroupMapping    `json:"result"`
+	Count  int            `json:"count"`
+	Result []GroupMapping `json:"result"`
 }
 
 // isValidRegexp checks whether a string compiles as a valid Go regular expression.
