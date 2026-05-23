@@ -13,19 +13,19 @@ import (
 	"github.com/infrahq/infra/api"
 )
 
-// TestAPI_CreateGroupMapping verifies validation rules for creating group mappings.
-func TestAPI_CreateGroupMapping(t *testing.T) {
+// TestAPI_CreateMappingRule verifies validation rules for creating group mappings.
+func TestAPI_CreateMappingRule(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
 
 	tests := []struct {
 		name       string
-		request    api.CreateGroupMappingRequest
+		request    api.CreateMappingRuleRequest
 		wantStatus int
 	}{
 		{
 			name: "valid kubernetes mapping",
-			request: api.CreateGroupMappingRequest{
+			request: api.CreateMappingRuleRequest{
 				RuleName:         "team-access",
 				SourceGroupRegex: "^team-(.*)$",
 				DestinationType:  "kubernetes",
@@ -36,7 +36,7 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 		},
 		{
 			name: "valid SSH mapping",
-			request: api.CreateGroupMappingRequest{
+			request: api.CreateMappingRuleRequest{
 				RuleName:         "ssh-access",
 				SourceGroupRegex: "^team-(.*)$",
 				DestinationType:  "ssh",
@@ -46,19 +46,19 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 		},
 		{
 			name:       "missing rule_name returns 400",
-			request:    api.CreateGroupMappingRequest{},
+			request:    api.CreateMappingRuleRequest{},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "missing source_group_regex returns 400",
-			request: api.CreateGroupMappingRequest{
+			request: api.CreateMappingRuleRequest{
 				RuleName: "test-rule",
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "missing name_template returns 400",
-			request: api.CreateGroupMappingRequest{
+			request: api.CreateMappingRuleRequest{
 				RuleName:         "test-rule",
 				SourceGroupRegex: "^team-(.*)$",
 				DestinationType:  "ssh",
@@ -67,7 +67,7 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 		},
 		{
 			name: "invalid regex returns 400",
-			request: api.CreateGroupMappingRequest{
+			request: api.CreateMappingRuleRequest{
 				RuleName:         "test-rule",
 				SourceGroupRegex: "[invalid(",
 				DestinationType:  "ssh",
@@ -77,7 +77,7 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 		},
 		{
 			name: "kubernetes without role_template returns 400",
-			request: api.CreateGroupMappingRequest{
+			request: api.CreateMappingRuleRequest{
 				RuleName:         "team-access",
 				SourceGroupRegex: "^team-(.*)$",
 				DestinationType:  "kubernetes",
@@ -90,7 +90,7 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			body := jsonBody(t, &tc.request)
-			req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+			req := httptest.NewRequest(http.MethodPost, "/api/mapping-rules", body)
 			req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 			req.Header.Set("Infra-Version", apiVersionLatest)
 
@@ -104,14 +104,14 @@ func TestAPI_CreateGroupMapping(t *testing.T) {
 	}
 }
 
-// TestAPI_GetGroupMapping verifies fetching an existing mapping returns 200.
-func TestAPI_GetGroupMapping(t *testing.T) {
+// TestAPI_GetMappingRule verifies fetching an existing mapping returns 200.
+func TestAPI_GetMappingRule(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
 
 	// Create a group mapping first.
 	nsTemplate := "ns-$1"
-	mappingReq := api.CreateGroupMappingRequest{
+	mappingReq := api.CreateMappingRuleRequest{
 		RuleName:          "test-rule",
 		SourceGroupRegex:  "^team-(.*)$",
 		DestinationType:   "kubernetes",
@@ -122,12 +122,12 @@ func TestAPI_GetGroupMapping(t *testing.T) {
 
 	createResp := httptest.NewRecorder()
 	body := jsonBody(t, &mappingReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/mapping-rules", body)
 	req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 	req.Header.Set("Infra-Version", apiVersionLatest)
 	routes.ServeHTTP(createResp, req)
 
-	var created api.GroupMapping
+	var created api.MappingRule
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	tests := []struct {
@@ -144,7 +144,7 @@ func TestAPI_GetGroupMapping(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/api/group-mappings/"+tc.id, nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/mapping-rules/"+tc.id, nil)
 			req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 			req.Header.Set("Infra-Version", apiVersionLatest)
 
@@ -158,13 +158,13 @@ func TestAPI_GetGroupMapping(t *testing.T) {
 	}
 }
 
-// TestAPI_UpdateGroupMapping verifies updating a rule and that EvaluateGroupMappings is triggered (indirectly via no error).
-func TestAPI_UpdateGroupMapping(t *testing.T) {
+// TestAPI_UpdateMappingRule verifies updating a rule and that EvaluateMappingRules is triggered (indirectly via no error).
+func TestAPI_UpdateMappingRule(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
 
 	// Create a mapping first.
-	mappingReq := api.CreateGroupMappingRequest{
+	mappingReq := api.CreateMappingRuleRequest{
 		RuleName:         "old-rule",
 		SourceGroupRegex: "^team-(.*)$",
 		DestinationType:  "ssh",
@@ -173,15 +173,15 @@ func TestAPI_UpdateGroupMapping(t *testing.T) {
 
 	createResp := httptest.NewRecorder()
 	body := jsonBody(t, &mappingReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/mapping-rules", body)
 	req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 	req.Header.Set("Infra-Version", apiVersionLatest)
 	routes.ServeHTTP(createResp, req)
 
-	var created api.GroupMapping
+	var created api.MappingRule
 	json.NewDecoder(createResp.Body).Decode(&created)
 
-	updateReq := api.UpdateGroupMappingRequest{
+	updateReq := api.UpdateMappingRuleRequest{
 		ID:               created.ID,
 		RuleName:         "updated-rule",
 		SourceGroupRegex: "^ops-(.*)$",
@@ -191,25 +191,25 @@ func TestAPI_UpdateGroupMapping(t *testing.T) {
 
 	updateResp := httptest.NewRecorder()
 	updateBody := jsonBody(t, &updateReq)
-	req2 := httptest.NewRequest(http.MethodPut, "/api/group-mappings/"+created.ID.String(), updateBody)
+	req2 := httptest.NewRequest(http.MethodPut, "/api/mapping-rules/"+created.ID.String(), updateBody)
 	req2.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 	req2.Header.Set("Infra-Version", apiVersionLatest)
 	routes.ServeHTTP(updateResp, req2)
 
-	var updated api.GroupMapping
+	var updated api.MappingRule
 	json.NewDecoder(updateResp.Body).Decode(&updated)
 
 	assert.Equal(t, updated.RuleName, "updated-rule")
 	assert.Equal(t, updated.SourceGroupRegex, "^ops-(.*)$")
 }
 
-// TestAPI_DeleteGroupMapping verifies deletion returns 200/204 and the mapping is removed.
-func TestAPI_DeleteGroupMapping(t *testing.T) {
+// TestAPI_DeleteMappingRule verifies deletion returns 200/204 and the mapping is removed.
+func TestAPI_DeleteMappingRule(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
 
 	// Create a mapping first.
-	mappingReq := api.CreateGroupMappingRequest{
+	mappingReq := api.CreateMappingRuleRequest{
 		RuleName:         "delete-me",
 		SourceGroupRegex: "^team-(.*)$",
 		DestinationType:  "ssh",
@@ -218,16 +218,16 @@ func TestAPI_DeleteGroupMapping(t *testing.T) {
 
 	createResp := httptest.NewRecorder()
 	body := jsonBody(t, &mappingReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/mapping-rules", body)
 	req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 	req.Header.Set("Infra-Version", apiVersionLatest)
 	routes.ServeHTTP(createResp, req)
 
-	var created api.GroupMapping
+	var created api.MappingRule
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	resp := httptest.NewRecorder()
-	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/group-mappings/"+created.ID.String(), nil)
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/mapping-rules/"+created.ID.String(), nil)
 	deleteReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 	deleteReq.Header.Set("Infra-Version", apiVersionLatest)
 	routes.ServeHTTP(resp, deleteReq)
@@ -236,7 +236,7 @@ func TestAPI_DeleteGroupMapping(t *testing.T) {
 
 	// Verify it's gone.
 	getResp := httptest.NewRecorder()
-	getReq := httptest.NewRequest(http.MethodGet, "/api/group-mappings/"+created.ID.String(), nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/api/mapping-rules/"+created.ID.String(), nil)
 	getReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 	getReq.Header.Set("Infra-Version", apiVersionLatest)
 	routes.ServeHTTP(getResp, getReq)
@@ -244,14 +244,14 @@ func TestAPI_DeleteGroupMapping(t *testing.T) {
 	assert.Assert(t, getResp.Code != http.StatusOK, "mapping still exists after delete; status = %d", getResp.Code)
 }
 
-// TestAPI_ListGroupMappings verifies listing returns all created mappings with correct count.
-func TestAPI_ListGroupMappings(t *testing.T) {
+// TestAPI_ListMappingRules verifies listing returns all created mappings with correct count.
+func TestAPI_ListMappingRules(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
 
 	// Create several mappings.
 	for i := 0; i < 3; i++ {
-		mappingReq := api.CreateGroupMappingRequest{
+		mappingReq := api.CreateMappingRuleRequest{
 			RuleName:         "rule-" + string(rune('a'+i)),
 			SourceGroupRegex: "^team-(.*)$",
 			DestinationType:  "ssh",
@@ -260,38 +260,38 @@ func TestAPI_ListGroupMappings(t *testing.T) {
 
 		resp := httptest.NewRecorder()
 		body := jsonBody(t, &mappingReq)
-		req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+		req := httptest.NewRequest(http.MethodPost, "/api/mapping-rules", body)
 		req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 		req.Header.Set("Infra-Version", apiVersionLatest)
 		routes.ServeHTTP(resp, req)
 
-		var created api.GroupMapping
+		var created api.MappingRule
 		json.NewDecoder(resp.Body).Decode(&created)
 		_ = created
 	}
 
 	resp := httptest.NewRecorder()
-	listReq := httptest.NewRequest(http.MethodGet, "/api/group-mappings?limit=10", nil)
+	listReq := httptest.NewRequest(http.MethodGet, "/api/mapping-rules?limit=10", nil)
 	listReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 	listReq.Header.Set("Infra-Version", apiVersionLatest)
 	routes.ServeHTTP(resp, listReq)
 
 	var listResp struct {
-		Count  int                `json:"count"`
-		Result []api.GroupMapping `json:"result"`
+		Count  int               `json:"count"`
+		Result []api.MappingRule `json:"result"`
 	}
 	json.NewDecoder(resp.Body).Decode(&listResp)
 
 	assert.Assert(t, len(listResp.Result) >= 3, "expected at least 3 mappings, got %d", len(listResp.Result))
 }
 
-// TestAPI_GroupMappingRequiresAdminAuth verifies that non-admin requests are rejected (401/403).
-func TestAPI_GroupMappingRequiresAdminAuth(t *testing.T) {
+// TestAPI_MappingRuleRequiresAdminAuth verifies that non-admin requests are rejected (401/403).
+func TestAPI_MappingRuleRequiresAdminAuth(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	routes := srv.GenerateRoutes()
 
 	// Create a mapping as admin.
-	mappingReq := api.CreateGroupMappingRequest{
+	mappingReq := api.CreateMappingRuleRequest{
 		RuleName:         "admin-rule",
 		SourceGroupRegex: "^team-(.*)$",
 		DestinationType:  "ssh",
@@ -300,17 +300,17 @@ func TestAPI_GroupMappingRequiresAdminAuth(t *testing.T) {
 
 	createResp := httptest.NewRecorder()
 	body := jsonBody(t, &mappingReq)
-	req := httptest.NewRequest(http.MethodPost, "/api/group-mappings", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/mapping-rules", body)
 	req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 	req.Header.Set("Infra-Version", apiVersionLatest)
 	routes.ServeHTTP(createResp, req)
 
-	var created api.GroupMapping
+	var created api.MappingRule
 	json.NewDecoder(createResp.Body).Decode(&created)
 
 	// Try to delete as non-admin — use a different access key.
 	resp2 := httptest.NewRecorder()
-	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/group-mappings/"+created.ID.String(), nil)
+	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/mapping-rules/"+created.ID.String(), nil)
 	// No auth header = unauthenticated
 	routes.ServeHTTP(resp2, deleteReq)
 

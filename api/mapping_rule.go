@@ -7,14 +7,14 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
-// GroupMapping represents a rule that matches groups to destinations.
+// MappingRule represents a rule that matches groups to destinations.
 // Each mapping defines:
 //   - source_group_regex: regex pattern to match against identity provider group names
 //   - destination_type: "kubernetes" or "ssh" — what kind of access to grant
 //   - name_template: template (with $N capture references) for the resource name
 //   - namespace_template (optional, k8s only): template for Kubernetes namespace scoping
 //   - role_template (required for k8s): template for the RBAC role name
-type GroupMapping struct {
+type MappingRule struct {
 	ID                uid.ID `json:"id"`
 	Created           Time   `json:"created"`
 	Updated           Time   `json:"updated"`
@@ -26,9 +26,9 @@ type GroupMapping struct {
 	RoleTemplate      string `json:"role_template,omitempty"`
 }
 
-// CreateGroupMappingRequest is the request body for creating a group mapping.
+// CreateMappingRuleRequest is the request body for creating a mapping rule.
 // RoleTemplate and NamespaceTemplate are pointers to allow distinguishing "not set" from "empty string".
-type CreateGroupMappingRequest struct {
+type CreateMappingRuleRequest struct {
 	RuleName          string  `json:"rule_name"`
 	SourceGroupRegex  string  `json:"source_group_regex"`
 	DestinationType   string  `json:"destination_type"`
@@ -42,7 +42,7 @@ type CreateGroupMappingRequest struct {
 //   - rule_name, source_group_regex, destination_type, and name_template are all non-empty
 //   - source_group_regex compiles as a valid Go regexp
 //   - for kubernetes destinations: role_template is required (needed to determine RBAC role)
-func (r CreateGroupMappingRequest) ValidationRules() []validate.ValidationRule {
+func (r CreateMappingRuleRequest) ValidationRules() []validate.ValidationRule {
 	rules := []validate.ValidationRule{
 		validate.Required("rule_name", r.RuleName),
 		validate.Required("source_group_regex", r.SourceGroupRegex),
@@ -72,9 +72,9 @@ func (r CreateGroupMappingRequest) ValidationRules() []validate.ValidationRule {
 	return rules
 }
 
-// UpdateGroupMappingRequest is the request body for updating an existing group mapping.
-// ID comes from the URL path; other fields mirror CreateGroupMappingRequest.
-type UpdateGroupMappingRequest struct {
+// UpdateMappingRuleRequest is the request body for updating an existing mapping rule.
+// ID comes from the URL path; other fields mirror CreateMappingRuleRequest.
+type UpdateMappingRuleRequest struct {
 	ID                uid.ID  `uri:"id" json:"-"`
 	RuleName          string  `json:"rule_name"`
 	SourceGroupRegex  string  `json:"source_group_regex"`
@@ -84,7 +84,7 @@ type UpdateGroupMappingRequest struct {
 	RoleTemplate      *string `json:"role_template,omitempty"`
 }
 
-func (r UpdateGroupMappingRequest) ValidationRules() []validate.ValidationRule {
+func (r UpdateMappingRuleRequest) ValidationRules() []validate.ValidationRule {
 	rules := []validate.ValidationRule{
 		validate.Required("rule_name", r.RuleName),
 		validate.Required("source_group_regex", r.SourceGroupRegex),
@@ -114,22 +114,22 @@ func (r UpdateGroupMappingRequest) ValidationRules() []validate.ValidationRule {
 	return rules
 }
 
-// ListGroupMappingsRequest provides optional name filter and pagination parameters
-// for listing group mapping rules.
+// ListMappingRulesRequest provides optional name filter and pagination parameters
+// for listing mapping rules.
 // The "name" query param triggers a case-insensitive substring match on rule_name.
-type ListGroupMappingsRequest struct {
+type ListMappingRulesRequest struct {
 	Name string `form:"name"`
 	PaginationRequest
 }
 
-func (r ListGroupMappingsRequest) ValidationRules() []validate.ValidationRule {
+func (r ListMappingRulesRequest) ValidationRules() []validate.ValidationRule {
 	return nil
 }
 
-// ListGroupMappingsResponse is the response body for listing group mappings.
-type ListGroupMappingsResponse struct {
-	Count  int            `json:"count"`
-	Result []GroupMapping `json:"result"`
+// ListMappingRulesResponse is the response body for listing mapping rules.
+type ListMappingRulesResponse struct {
+	Count  int           `json:"count"`
+	Result []MappingRule `json:"result"`
 }
 
 // isValidRegexp checks whether a string compiles as a valid Go regular expression.

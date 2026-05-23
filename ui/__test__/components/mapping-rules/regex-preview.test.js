@@ -1,6 +1,6 @@
 // Tests for the exported pure functions: previewRegex and applyTemplatePreview.
 // These test the core logic without React dependencies.
-import { previewRegex, applyTemplatePreview } from '../../pages/groups-mapping/add'
+import { previewRegex, applyTemplatePreview } from '../../pages/mapping-rules/add'
 
 describe('Groups Mapping — regex preview', () => {
   it('returns matching groups for a valid regex', () => {

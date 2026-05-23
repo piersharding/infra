@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react'
-import AddGroupsMapping from '../../pages/groups-mapping/add'
+import AddGroupsMapping from '../../pages/mapping-rules/add'
 
 // Mock fetch to prevent actual API calls during tests. Returns a successful empty response.
 global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }))
@@ -22,9 +22,9 @@ describe('Groups Mapping — create dialog form validation', () => {
     render(<AddGroupsMapping />)
 
     expect(screen.getByLabelText(/Rule Name/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/Source Group Regex/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Group Matching Regex/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Destination Type/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/Name Template/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Destination Name Template/i)).toBeInTheDocument()
     // Role template should be visible for kubernetes (default)
     expect(screen.getByLabelText(/Role Template/i)).toBeInTheDocument()
   })
@@ -57,8 +57,8 @@ describe('Groups Mapping — create dialog form validation', () => {
 
     // Should show validation errors for missing required fields
     expect(screen.queryByText(/Rule name is required/)).toBeInTheDocument()
-    expect(screen.queryByText(/Source group regex is required/)).toBeInTheDocument()
-    expect(screen.queryByText(/Name template is required/)).toBeInTheDocument()
+    expect(screen.queryByText(/Group matching regex is required/)).toBeInTheDocument()
+    expect(screen.queryByText(/Destination name template is required/)).toBeInTheDocument()
   })
 
   it('shows role template as visible and required for kubernetes destination', async () => {

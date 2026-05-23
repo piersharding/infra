@@ -28,6 +28,7 @@ type Grant struct {
 	// Resource identifies the resource the privilege applies to.
 	Resource    string
 	CreatedBy   uid.ID
+	AutoGrant   bool  // true if created by the mapping engine (auto-grant), false for bootstrap/manual grants
 	UpdateIndex int64 `db:"-"`
 }
 

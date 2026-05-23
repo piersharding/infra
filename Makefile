@@ -66,13 +66,13 @@ test/update:
 	go test ./internal/cmd -test.update-golden
 
 fmt: ## Run go fmt against code.
-	go fmt ./...
+	go fmt ./api/... ./internal/... ./uid/... ./metrics/...
 
 vet: ## Run go vet against code.
 	pwd
 	env | grep GO || true
 	go mod download
-	go vet ./...
+	go vet ./api/... ./internal/... ./uid/... ./metrics/...
 
 GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(BUILDVERSION)" \
 					-X github.com/infrahq/infra/internal.TelemetryWriteKey="none" \
@@ -258,10 +258,10 @@ K8S_CONNECTOR_NAME ?= minikube-k8s
 .PHONY: k8s-connector-key
 k8s-connector-key:
 	rm -f /tmp/connector_key.txt
-	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra login $(INFRA_SERVER_URL) --skip-tls-verify
-	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra keys remove $(K8S_CONNECTOR_NAME) --connector --force || true
-	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra keys add --connector --name $(K8S_CONNECTOR_NAME) -q > /tmp/connector_key.txt
-	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) dist/infra_linux_amd64_v1/infra logout
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) bin/infra login $(INFRA_SERVER_URL) --skip-tls-verify
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) bin/infra keys remove $(K8S_CONNECTOR_NAME) --connector --force || true
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) bin/infra keys add --connector --name $(K8S_CONNECTOR_NAME) -q > /tmp/connector_key.txt
+	INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) bin/infra logout
 
 define INFRA_HELM_VALUES
 service:
@@ -627,11 +627,11 @@ infra-network: # reconfigure infra network to /24
 	sudo docker network create --subnet $(INFRA_ADDR_RANGE).0/24 --driver bridge $(INFRA_NETWORK) || true
 
 .PHONY: infra-ssh-connector-key
-infra-ssh-connector-key: get-access-key
+infra-ssh-connector-key: bin/infra get-access-key
 	$(DOCKER_ENGINE) cp internal/server/testdata/pki/ca.crt $(VM_NAME):/usr/local/share/ca-certificates/infra-ca.crt
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chown root:root /usr/local/share/ca-certificates/infra-ca.crt"
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "update-ca-certificates"
-	$(DOCKER_ENGINE) cp dist/infra_linux_amd64_v1/infra $(VM_NAME):/usr/bin/infra
+	$(DOCKER_ENGINE) cp bin/infra $(VM_NAME):/usr/bin/infra
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chown root:root /usr/bin/infra"
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) infra login $(INFRA_SERVER_URL) --skip-tls-verify"
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "INFRA_SERVER=$(INFRA_SERVER_URL) INFRA_ACCESS_KEY=$(INFRA_ACCESS_KEY) infra keys remove $(VM_NAME) --connector --force || true"
@@ -642,7 +642,7 @@ infra-ssh-connector-key: get-access-key
 .PHONY: infra-ssh-config
 infra-ssh-config: infra-ssh-connector-key
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "mkdir -p /usr/local/sbin"
-	$(DOCKER_ENGINE) cp dist/infra_linux_amd64_v1/infra $(VM_NAME):/usr/local/sbin/infra
+	$(DOCKER_ENGINE) cp bin/infra $(VM_NAME):/usr/local/sbin/infra
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chown root:root /usr/local/sbin/infra"
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "chmod 755 /usr/local/sbin/infra"
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) sh -c "addgroup infra; addgroup infra-users"

@@ -11,17 +11,17 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
-// EvaluateGroupMappings evaluates all active mapping rules and creates or updates grants to match.
-// It iterates over group mappings, matches them against groups using regex patterns,
+// EvaluateMappingRules evaluates all active mapping rules and creates or updates grants to match.
+// It iterates over mapping rules, matches them against groups using regex patterns,
 // and creates group-level grants for SSH and Kubernetes destinations. Stale grants
 // (created by this engine that no longer have a matching rule) are cleaned up automatically.
-func EvaluateGroupMappings(tx data.WriteTxn) error {
-	mappings, err := data.ListGroupMappings(tx, data.ListGroupMappingsOptions{})
+func EvaluateMappingRules(tx data.WriteTxn) error {
+	mappings, err := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
 	if err != nil {
-		return fmt.Errorf("list group mappings: %w", err)
+		return fmt.Errorf("list mapping rules: %w", err)
 	}
 
-	var validMappings []models.GroupMapping
+	var validMappings []models.MappingRule
 	for _, m := range mappings {
 		if !m.DeletedAt.Valid {
 			validMappings = append(validMappings, m)
@@ -29,7 +29,9 @@ func EvaluateGroupMappings(tx data.WriteTxn) error {
 	}
 
 	if len(validMappings) == 0 {
-		return cleanupStaleGrants(tx)
+		// No active mapping rules — nothing to clean up against.
+		// Do not delete grants that were created through other flows (e.g., signup).
+		return nil
 	}
 
 	groups, err := data.ListGroups(tx, data.ListGroupsOptions{})
@@ -52,7 +54,7 @@ func EvaluateGroupMappings(tx data.WriteTxn) error {
 
 			resourceName, err := applyTemplate(mapping.NameTemplate, g.Name, re)
 			if err != nil {
-				logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to apply name template")
+				logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to apply destination name template")
 				continue
 			}
 
@@ -168,13 +170,14 @@ func parseCaptureRef(s string) (int, error) {
 }
 
 // createOrUpdateGrant creates or updates a grant with the specified privilege and resource
-// for the given destination type. Grants are created with CreatedBy = "system" so they can be
+// for the given destination type. Grants are created with CreatedBy="system" and AutoGrant=true so they can be
 // identified and cleaned up by cleanupStaleGrants.
 func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
 	if err := data.CreateGrant(tx, &models.Grant{
 		Model:              models.Model{}, // will be set by OnInsert
 		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
 		CreatedBy:          models.CreatedBySystem,
+		AutoGrant:          true, // marks this as a mapping-engine auto-grant (safe to clean up)
 		Subject:            models.NewSubjectForGroup(subjectID),
 		Privilege:          privilege,
 		Resource:           resource,
@@ -192,14 +195,13 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 	return nil
 }
 
-// cleanupStaleGrants runs after EvaluateGroupMappings to remove auto-granted access for rules
-// that are being removed or changed. It iterates all system-created grants and deletes those
-// whose resource name doesn't match the pattern of any active mapping rule.
+// cleanupStaleGrants runs after EvaluateMappingRules to remove auto-granted access for rules
+// that are being removed or changed. It iterates all grants and deletes only those with
+// CreatedBy="system" AND AutoGrant=true whose resource name doesn't match the pattern of any active mapping rule.
 //
-// Key design: only grants with CreatedBy="system" are cleaned up. Manually created grants
-// (CreatedBy != "system") are always preserved — the engine never touches user-managed access.
-// It iterates over all system-created grants and deletes those whose resource doesn't match
-// any active mapping rule. Grants with CreatedBy != "system" are preserved (user-managed).
+// Key design: only grants explicitly marked as auto-grants (AutoGrant=true) from previous mapping rules
+// are cleaned up. Bootstrap-created grants (CreatedBy="system", AutoGrant=false) and manually created grants
+// (CreatedBy != "system") are always preserved — the engine never touches user-managed access or initial admin setup.
 func cleanupStaleGrants(tx data.WriteTxn) error {
 	grants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	if err != nil {
@@ -211,9 +213,15 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 			continue // skip manually-created grants
 		}
 
+		// Only clean up auto-grants created by previous mapping rules.
+		// Grants with AutoGrant=false are bootstrap or manual access — always preserve them.
+		if !grant.AutoGrant {
+			continue
+		}
+
 		// Check if this grant's resource still matches any active mapping.
 		matched := false
-		mappings, err := data.ListGroupMappings(tx, data.ListGroupMappingsOptions{})
+		mappings, err := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
 		if err != nil {
 			return fmt.Errorf("list group mappings for cleanup: %w", err)
 		}
@@ -233,165 +241,6 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 		if !matched {
 			if err := data.DeleteGrants(tx, data.DeleteGrantsOptions{ByID: grant.ID}); err != nil {
 				logging.L.Warn().Err(err).Str("grant", grant.ID.String()).Msg("failed to delete stale auto-grant")
-			}
-		}
-	}
-
-	return nil
-}
-
-// EvaluateGroupMappingForUser is called during token creation to compute per-user grants
-// in addition to the group-level grants computed by EvaluateGroupMappings.
-// It iterates all organizations and delegates to evaluateMappingsForUserInOrg().
-func EvaluateGroupMappingForUser(tx data.WriteTxn, userID uid.ID) error {
-	orgs, err := data.ListOrganizations(tx, data.ListOrganizationsOptions{})
-	if err != nil {
-		return fmt.Errorf("list organizations: %w", err)
-	}
-
-	for _, org := range orgs {
-		if err := evaluateMappingsForUserInOrg(tx, userID, org.ID); err != nil {
-			logging.L.Warn().Err(err).Str("org_id", org.ID.String()).Msg("error evaluating user group mappings")
-		}
-	}
-
-	return nil
-}
-
-// evaluateMappingsForUserInOrg checks which mapping rules match groups that the given user belongs to,
-// and creates per-user grants (not just group-level ones). This ensures the user gets access
-// even if their token is being refreshed or first created.
-// It checks which groups the user belongs to and creates per-user grants where applicable.
-func evaluateMappingsForUserInOrg(tx data.WriteTxn, userID uid.ID, orgID uid.ID) error {
-	mappings, err := data.ListGroupMappings(tx, data.ListGroupMappingsOptions{})
-	if err != nil {
-		return fmt.Errorf("list group mappings: %w", err)
-	}
-
-	var validMappings []models.GroupMapping
-	for _, m := range mappings {
-		if m.OrganizationID == orgID && !m.DeletedAt.Valid {
-			validMappings = append(validMappings, m)
-		}
-	}
-
-	if len(validMappings) == 0 {
-		return cleanupStaleUserGrants(tx, userID)
-	}
-
-	groups, err := data.ListGroups(tx, data.ListGroupsOptions{})
-	if err != nil {
-		return fmt.Errorf("list groups: %w", err)
-	}
-
-	// Cache user's groups for O(1) membership lookup.
-	userGroups, err := data.ListGroupIDsForUser(tx, userID)
-	if err != nil {
-		return fmt.Errorf("list groups for user: %w", err)
-	}
-	groupSet := make(map[uid.ID]struct{}, len(userGroups))
-	for _, id := range userGroups {
-		groupSet[id] = struct{}{}
-	}
-
-	for _, mapping := range validMappings {
-		re, err := regexp.Compile(mapping.SourceGroupRegex)
-		if err != nil {
-			continue
-		}
-
-		for _, g := range groups {
-			matches := re.FindStringSubmatch(g.Name)
-			if matches == nil {
-				continue
-			}
-
-			// Check if this user is a member of the group.
-			if _, found := groupSet[g.ID]; !found {
-				continue
-			}
-
-			resourceName, err := applyTemplate(mapping.NameTemplate, g.Name, re)
-			if err != nil {
-				logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to apply name template")
-				continue
-			}
-
-			var privilege string
-			switch models.DestinationType(mapping.DestinationType) {
-			case models.DestinationTypeSSH:
-				privilege = "connect"
-			case models.DestinationTypeKubernetes:
-				if mapping.RoleTemplate != nil && *mapping.RoleTemplate != "" {
-					role, err := applyTemplate(*mapping.RoleTemplate, g.Name, re)
-					if err != nil {
-						logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to apply role template")
-						continue
-					}
-					privilege = role
-				} else {
-					privilege = "view"
-				}
-			default:
-				logging.L.Warn().Str("type", string(mapping.DestinationType)).Msg("unknown destination type")
-				continue
-			}
-
-			if err := createOrUpdateUserGrant(tx, orgID, mapping.DestinationType, userID, privilege, resourceName); err != nil {
-				logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("user", userID.String()).Msg("failed to create user grant")
-			}
-
-			if models.DestinationType(mapping.DestinationType) == models.DestinationTypeKubernetes && mapping.NamespaceTemplate != nil && *mapping.NamespaceTemplate != "" {
-				namespaceName, err := applyTemplate(*mapping.NamespaceTemplate, g.Name, re)
-				if err != nil {
-					continue
-				}
-
-				if err := createOrUpdateUserGrant(tx, orgID, mapping.DestinationType, userID, privilege, fmt.Sprintf("%s.%s", resourceName, namespaceName)); err != nil {
-					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("user", userID.String()).Msg("failed to create namespaced user grant")
-				}
-			}
-		}
-	}
-
-	return cleanupStaleUserGrants(tx, userID)
-}
-
-// createOrUpdateUserGrant grants access directly to the specified userID (Subject.Kind=user)
-// rather than to the group. This supplements group-level grants with per-user access.
-// Unlike createOrUpdateGrant which grants access to the group itself,
-// this function grants direct access to the specified userID.
-func createOrUpdateUserGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
-	if err := data.CreateGrant(tx, &models.Grant{
-		Model:              models.Model{},
-		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
-		CreatedBy:          models.CreatedBySystem,
-		Subject:            models.NewSubjectForUser(subjectID),
-		Privilege:          privilege,
-		Resource:           resource,
-	}); err != nil {
-		return fmt.Errorf("create user grant for subject %s (priv=%s, res=%s): %w", subjectID.String(), privilege, resource, err)
-	}
-	return nil
-}
-
-// cleanupStaleUserGrants removes per-user auto-grants that no longer have matching rules.
-// Only system-created grants are cleaned up; manually-created grants survive.
-// that no longer have a matching mapping rule. Only system-created grants are cleaned up;
-// manually-created grants are preserved.
-func cleanupStaleUserGrants(tx data.WriteTxn, userID uid.ID) error {
-	grants, err := data.ListGrants(tx, data.ListGrantsOptions{})
-	if err != nil {
-		return fmt.Errorf("list grants for user cleanup: %w", err)
-	}
-
-	for _, grant := range grants {
-		if grant.CreatedBy != models.CreatedBySystem {
-			continue
-		}
-		if grant.Subject.Kind == 0 && grant.Subject.ID == userID { // User subject kind = 0
-			if err := data.DeleteGrants(tx, data.DeleteGrantsOptions{ByID: grant.ID}); err != nil {
-				logging.L.Warn().Err(err).Str("grant", grant.ID.String()).Msg("failed to delete stale user auto-grant")
 			}
 		}
 	}

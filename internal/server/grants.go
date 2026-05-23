@@ -167,6 +167,9 @@ func getGrantFromGrantRequest(rCtx access.RequestContext, r api.GrantRequest) (*
 			}
 			return nil, err
 		}
+		if identity == nil {
+			return nil, fmt.Errorf("%w: couldn't find userName '%s'", internal.ErrBadRequest, r.UserName)
+		}
 		subject = models.NewSubjectForUser(identity.ID)
 	case r.GroupName != "":
 		group, err := access.GetGroup(rCtx, data.GetGroupOptions{ByName: r.GroupName})
@@ -175,6 +178,9 @@ func getGrantFromGrantRequest(rCtx access.RequestContext, r api.GrantRequest) (*
 				return nil, fmt.Errorf("%w: couldn't find groupName '%s'", internal.ErrBadRequest, r.GroupName)
 			}
 			return nil, err
+		}
+		if group == nil {
+			return nil, fmt.Errorf("%w: couldn't find groupName '%s'", internal.ErrBadRequest, r.GroupName)
 		}
 		subject = models.NewSubjectForGroup(group.ID)
 	case r.User != 0:

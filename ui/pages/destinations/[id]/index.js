@@ -774,6 +774,7 @@ export default function DestinationDetail() {
                   <ChevronDownIcon className='ml-1 h-4 w-4' />
                 </Popover.Button>
                 <Transition
+                  show={true}
                   as={Fragment}
                   enter='transition ease-out duration-100 origin-top-left md:origin-top-right'
                   enterFrom='transform opacity-0 scale-90 translate-y-0'

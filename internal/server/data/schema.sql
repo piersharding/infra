@@ -191,6 +191,7 @@ CREATE TABLE encryption_keys (
 
 CREATE TABLE grants (
     id bigint NOT NULL,
+    auto_grant boolean DEFAULT false,
     created_at timestamp with time zone,
     updated_at timestamp with time zone,
     deleted_at timestamp with time zone,
@@ -202,6 +203,22 @@ CREATE TABLE grants (
     subject_id bigint NOT NULL,
     subject_kind smallint NOT NULL
 );
+
+CREATE TABLE mapping_rules (
+    id             bigint PRIMARY KEY,
+    organization_id bigint NOT NULL,
+    created_at     timestamp with time zone,
+    updated_at     timestamp with time zone,
+    deleted_at     timestamp with time zone,
+    created_by     bigint NOT NULL,
+    rule_name      text NOT NULL,
+    source_group_regex text NOT NULL,
+    destination_type text NOT NULL CHECK (destination_type IN ('kubernetes', 'ssh')),
+    name_template  text NOT NULL,
+    namespace_template text,
+    role_template  text
+);
+CREATE UNIQUE INDEX idx_mapping_rules_rule_name_org_id ON mapping_rules (rule_name, organization_id) WHERE deleted_at IS NULL;
 
 CREATE TABLE groups (
     id bigint NOT NULL,

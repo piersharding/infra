@@ -91,8 +91,8 @@ func TestApplyTemplateEdgeCases(t *testing.T) {
 	}
 }
 
-// TestEvaluateGroupMappingsKubernetes tests k8s mapping with all four fields.
-func TestEvaluateGroupMappingsKubernetes(t *testing.T) {
+// TestEvaluateMappingRulesKubernetes tests k8s mapping with all four fields.
+func TestEvaluateMappingRulesKubernetes(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 
 	orgID := srv.db.DefaultOrg.ID
@@ -104,7 +104,7 @@ func TestEvaluateGroupMappingsKubernetes(t *testing.T) {
 
 	// Create a test group mapping for kubernetes.
 	namespaceTemplate := "ns-$1"
-	mapping := &models.GroupMapping{
+	mapping := &models.MappingRule{
 		Model:              models.Model{},
 		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
 		RuleName:           "team-access",
@@ -115,7 +115,7 @@ func TestEvaluateGroupMappingsKubernetes(t *testing.T) {
 		RoleTemplate:       ptrString("$1-admin"),
 	}
 
-	assert.NilError(t, data.CreateGroupMapping(tx, mapping))
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
 
 	// Create test groups.
 	groups := []models.Group{
@@ -130,7 +130,7 @@ func TestEvaluateGroupMappingsKubernetes(t *testing.T) {
 	}
 
 	// Run the engine.
-	assert.NilError(t, EvaluateGroupMappings(tx))
+	assert.NilError(t, EvaluateMappingRules(tx))
 
 	// Verify grants were created for matching groups only.
 	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
@@ -150,8 +150,8 @@ func TestEvaluateGroupMappingsKubernetes(t *testing.T) {
 	}
 }
 
-// TestEvaluateGroupMappingsSSH tests SSH mapping with only regex + name template.
-func TestEvaluateGroupMappingsSSH(t *testing.T) {
+// TestEvaluateMappingRulesSSH tests SSH mapping with only regex + Destination name Template.
+func TestEvaluateMappingRulesSSH(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 
 	orgID := srv.db.DefaultOrg.ID
@@ -162,7 +162,7 @@ func TestEvaluateGroupMappingsSSH(t *testing.T) {
 	defer func() { _ = tx.Rollback() }()
 
 	// Create SSH group mapping.
-	mapping := &models.GroupMapping{
+	mapping := &models.MappingRule{
 		Model:              models.Model{},
 		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
 		RuleName:           "ssh-access",
@@ -171,7 +171,7 @@ func TestEvaluateGroupMappingsSSH(t *testing.T) {
 		NameTemplate:       "my-ssh-host-$1",
 	}
 
-	assert.NilError(t, data.CreateGroupMapping(tx, mapping))
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
 
 	// Create a matching group.
 	group := models.Group{
@@ -193,7 +193,7 @@ func TestEvaluateGroupMappingsSSH(t *testing.T) {
 	assert.NilError(t, data.AddUsersToGroup(tx, group.ID, []uid.ID{user.ID}))
 
 	// Run the engine.
-	assert.NilError(t, EvaluateGroupMappings(tx))
+	assert.NilError(t, EvaluateMappingRules(tx))
 
 	// Verify grants were created with privilege = "connect".
 	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
@@ -225,7 +225,7 @@ func TestCleanupStaleGrants(t *testing.T) {
 	defer func() { _ = tx.Rollback() }()
 
 	// Create a group mapping.
-	mapping := &models.GroupMapping{
+	mapping := &models.MappingRule{
 		Model:              models.Model{},
 		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
 		RuleName:           "test-rule",
@@ -234,7 +234,7 @@ func TestCleanupStaleGrants(t *testing.T) {
 		NameTemplate:       "ssh-$1",
 	}
 
-	assert.NilError(t, data.CreateGroupMapping(tx, mapping))
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
 
 	// Create a matching group.
 	group := models.Group{
@@ -255,7 +255,7 @@ func TestCleanupStaleGrants(t *testing.T) {
 	assert.NilError(t, data.CreateGrant(tx, manualGrant))
 
 	// Run the engine (should clean up stale grants).
-	assert.NilError(t, EvaluateGroupMappings(tx))
+	assert.NilError(t, EvaluateMappingRules(tx))
 
 	// Verify manual grants survive.
 	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
@@ -287,7 +287,7 @@ func TestMultiOrgIsolation(t *testing.T) {
 	defer func() { _ = tx1.Rollback() }()
 
 	// Create mapping in org1 only.
-	mapping := &models.GroupMapping{
+	mapping := &models.MappingRule{
 		Model:              models.Model{},
 		OrganizationMember: models.OrganizationMember{OrganizationID: org1ID},
 		RuleName:           "org1-rule",
@@ -296,7 +296,7 @@ func TestMultiOrgIsolation(t *testing.T) {
 		NameTemplate:       "ssh-$1",
 	}
 
-	assert.NilError(t, data.CreateGroupMapping(tx1, mapping))
+	assert.NilError(t, data.CreateMappingRule(tx1, mapping))
 
 	// Create a matching group.
 	group := models.Group{
@@ -306,7 +306,7 @@ func TestMultiOrgIsolation(t *testing.T) {
 	assert.NilError(t, data.CreateGroup(tx1, &group))
 
 	// Run the engine.
-	assert.NilError(t, EvaluateGroupMappings(tx1))
+	assert.NilError(t, EvaluateMappingRules(tx1))
 
 	if err := tx1.Commit(); err != nil {
 		t.Fatalf("commit org1: %v", err)

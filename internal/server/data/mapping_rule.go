@@ -8,55 +8,55 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
-// groupMappingsTable implements the Table interface for the "group_mappings" database table.
-// It maps between the models.GroupMapping struct and SQL operations (insert, update, scan).
-type groupMappingsTable models.GroupMapping
+// mappingRulesTable implements the Table interface for the "mapping_rules" database table.
+// It maps between the models.MappingRule struct and SQL operations (insert, update, scan).
+type mappingRulesTable models.MappingRule
 
-func (g groupMappingsTable) Table() string {
-	return "group_mappings"
+func (g mappingRulesTable) Table() string {
+	return "mapping_rules"
 }
 
-func (g groupMappingsTable) Columns() []string {
+func (g mappingRulesTable) Columns() []string {
 	return []string{"created_at", "created_by", "deleted_at", "destination_type", "id", "name_template", "namespace_template", "organization_id", "role_template", "rule_name", "source_group_regex", "updated_at"}
 }
 
-func (g groupMappingsTable) Values() []any {
+func (g mappingRulesTable) Values() []any {
 	return []any{g.CreatedAt, g.CreatedBy, g.DeletedAt, string(g.DestinationType), g.ID, g.NameTemplate, optionalStringPtr(g.NamespaceTemplate), g.OrganizationID, optionalStringPtr(g.RoleTemplate), g.RuleName, g.SourceGroupRegex, g.UpdatedAt}
 }
 
-func (g *groupMappingsTable) ScanFields() []any {
+func (g *mappingRulesTable) ScanFields() []any {
 	return []any{&g.CreatedAt, &g.CreatedBy, &g.DeletedAt, (*string)(&g.DestinationType), &g.ID, &g.NameTemplate, (**string)(&g.NamespaceTemplate), &g.OrganizationID, (**string)(&g.RoleTemplate), &g.RuleName, &g.SourceGroupRegex, &g.UpdatedAt}
 }
 
-// CreateGroupMapping validates and inserts a new group mapping record.
+// CreateMappingRule validates and inserts a new mapping rule record.
 // Validation ensures rule_name, source_group_regex, destination_type, name_template are non-empty,
 // and that role_template is provided for kubernetes destinations. OrganizationID is set from the transaction context.
-func CreateGroupMapping(tx WriteTxn, mapping *models.GroupMapping) error {
-	if err := validateGroupMapping(mapping); err != nil {
+func CreateMappingRule(tx WriteTxn, mapping *models.MappingRule) error {
+	if err := validateMappingRule(mapping); err != nil {
 		return err
 	}
 	mapping.OnInsert()
 	setOrg(tx, mapping)
-	return insert(tx, (*groupMappingsTable)(mapping))
+	return insert(tx, (*mappingRulesTable)(mapping))
 }
 
-// UpdateGroupMapping validates and updates an existing group mapping record.
+// UpdateMappingRule validates and updates an existing mapping rule record.
 // Runs the same validation as Create to ensure consistency. The updated_at timestamp is set by OnUpdate().
-func UpdateGroupMapping(tx WriteTxn, mapping *models.GroupMapping) error {
-	if err := validateGroupMapping(mapping); err != nil {
+func UpdateMappingRule(tx WriteTxn, mapping *models.MappingRule) error {
+	if err := validateMappingRule(mapping); err != nil {
 		return err
 	}
 	mapping.OnUpdate()
-	return update(tx, (*groupMappingsTable)(mapping))
+	return update(tx, (*mappingRulesTable)(mapping))
 }
 
-// DeleteGroupMapping performs a soft-delete on a group mapping (sets deleted_at).
+// DeleteMappingRule performs a soft-delete on a mapping rule (sets deleted_at).
 // Only deletes within the transaction's organization scope. Returns an error if no matching row is found.
-func DeleteGroupMapping(tx WriteTxn, id uid.ID) error {
-	query := querybuilder.New("UPDATE group_mappings SET")
+func DeleteMappingRule(tx WriteTxn, id uid.ID) error {
+	query := querybuilder.New("UPDATE mapping_rules SET")
 	query.B("deleted_at = now(), updated_at = now()")
-	query.B("WHERE deleted_at is null AND organization_id = ?")
-	query.B("AND id = ?", tx.OrganizationID(), id)
+	query.B("WHERE deleted_at is null AND organization_id = ? AND id = ?",
+		tx.OrganizationID(), id)
 
 	result, err := tx.Exec(query.String(), query.Args...)
 	if err != nil {
@@ -65,26 +65,26 @@ func DeleteGroupMapping(tx WriteTxn, id uid.ID) error {
 
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		return fmt.Errorf("group mapping not found")
+		return fmt.Errorf("mapping rule not found")
 	}
 	return nil
 }
 
-// GetGroupMappingOptions holds the options for fetching a single group mapping.
-type GetGroupMappingOptions struct {
+// GetMappingRuleOptions holds the options for fetching a single mapping rule.
+type GetMappingRuleOptions struct {
 	ByID uid.ID
 }
 
-// GetGroupMapping fetches a single non-deleted group mapping within the transaction's org scope.
+// GetMappingRule fetches a single non-deleted mapping rule within the transaction's org scope.
 // Returns an UpdateIndex from pg_notify to support real-time invalidation (used with LISTEN/NOTIFY).
-func GetGroupMapping(tx ReadTxn, opts GetGroupMappingOptions) (*models.GroupMapping, error) {
-	table := &groupMappingsTable{}
+func GetMappingRule(tx ReadTxn, opts GetMappingRuleOptions) (*models.MappingRule, error) {
+	table := &mappingRulesTable{}
 	query := querybuilder.New("SELECT")
 	query.B(columnsForSelect(table))
 	query.B(", update_index")
-	query.B("FROM group_mappings")
-	query.B("WHERE deleted_at is null AND organization_id = ?")
-	query.B("AND id = ?", tx.OrganizationID(), opts.ByID)
+	query.B("FROM mapping_rules")
+	query.B("WHERE deleted_at is null AND organization_id = ? AND id = ?",
+		tx.OrganizationID(), opts.ByID)
 
 	var updateIndex int64
 	fields := append(table.ScanFields(), &updateIndex)
@@ -92,30 +92,29 @@ func GetGroupMapping(tx ReadTxn, opts GetGroupMappingOptions) (*models.GroupMapp
 	if err != nil {
 		return nil, handleError(err)
 	}
-	mapping := (*models.GroupMapping)(table)
+	mapping := (*models.MappingRule)(table)
 	mapping.UpdateIndex = updateIndex
 	return mapping, nil
 }
 
-// ListGroupMappingsOptions holds the options for listing group mappings.
-type ListGroupMappingsOptions struct {
+// ListMappingRulesOptions holds the options for listing mapping rules.
+type ListMappingRulesOptions struct {
 	Name string // filters by rule_name (contains match)
 
 	Pagination *Pagination
 }
 
-// ListGroupMappings returns all non-deleted group mappings in the transaction's org scope,
+// ListMappingRules returns all non-deleted mapping rules in the transaction's org scope,
 // optionally filtered by name and paginated. Results are ordered alphabetically by rule_name.
-func ListGroupMappings(tx ReadTxn, opts ListGroupMappingsOptions) ([]models.GroupMapping, error) {
-	table := groupMappingsTable{}
+func ListMappingRules(tx ReadTxn, opts ListMappingRulesOptions) ([]models.MappingRule, error) {
+	table := mappingRulesTable{}
 	query := querybuilder.New("SELECT")
+	query.B(columnsForSelect(table))
 	if opts.Pagination != nil {
 		query.B(", count(*) OVER()")
 	}
-	query.B(columnsForSelect(table))
-	query.B("FROM group_mappings")
-	query.B("WHERE deleted_at is null AND organization_id = ?")
-	query.B("AND organization_id = ?", tx.OrganizationID())
+	query.B("FROM mapping_rules")
+	query.B("WHERE deleted_at is null AND organization_id = ?", tx.OrganizationID())
 
 	if opts.Name != "" {
 		query.B("AND rule_name ILIKE ?", "%"+opts.Name+"%")
@@ -132,9 +131,9 @@ func ListGroupMappings(tx ReadTxn, opts ListGroupMappingsOptions) ([]models.Grou
 	}
 	defer rows.Close()
 
-	var mappings []models.GroupMapping
+	var mappings []models.MappingRule
 	for rows.Next() {
-		table := groupMappingsTable{}
+		table := mappingRulesTable{}
 		fields := table.ScanFields()
 		if opts.Pagination != nil {
 			fields = append(fields, &opts.Pagination.TotalCount)
@@ -143,19 +142,19 @@ func ListGroupMappings(tx ReadTxn, opts ListGroupMappingsOptions) ([]models.Grou
 		if err != nil {
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
-		mapping := (*models.GroupMapping)(&table)
+		mapping := (*models.MappingRule)(&table)
 		mappings = append(mappings, *mapping)
 	}
 
 	return mappings, nil
 }
 
-// validateGroupMapping enforces business rules on the model before DB persistence:
+// validateMappingRule enforces business rules on the model before DB persistence:
 //   - rule_name and source_group_regex are required
 //   - destination_type must be "kubernetes" or "ssh"
 //   - name_template is required for all types
 //   - role_template is required when destination_type is "kubernetes" (needed to determine RBAC role)
-func validateGroupMapping(mapping *models.GroupMapping) error {
+func validateMappingRule(mapping *models.MappingRule) error {
 	if mapping.RuleName == "" {
 		return fmt.Errorf("rule_name is required")
 	}

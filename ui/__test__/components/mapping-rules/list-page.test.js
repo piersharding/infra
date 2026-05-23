@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import GroupsMapping from '../../pages/groups-mapping/index'
+import GroupsMapping from '../../pages/mapping-rules/index'
 
 // Mock SWR to prevent actual API calls during tests
 jest.mock('swr', () => ({
@@ -41,6 +41,6 @@ describe('Groups Mapping — list page', () => {
 
     render(<GroupsMapping />)
 
-    expect(screen.getByText(/No group mappings/)).toBeInTheDocument()
+    expect(screen.getByText(/No mapping rules/)).toBeInTheDocument()
   })
 })

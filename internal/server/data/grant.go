@@ -20,15 +20,15 @@ func (g grantsTable) Table() string {
 }
 
 func (g grantsTable) Columns() []string {
-	return []string{"created_at", "created_by", "deleted_at", "id", "organization_id", "privilege", "resource", "subject_id", "subject_kind", "updated_at"}
+	return []string{"auto_grant", "created_at", "created_by", "deleted_at", "id", "organization_id", "privilege", "resource", "subject_id", "subject_kind", "updated_at"}
 }
 
 func (g grantsTable) Values() []any {
-	return []any{g.CreatedAt, g.CreatedBy, g.DeletedAt, g.ID, g.OrganizationID, g.Privilege, g.Resource, g.Subject.ID, g.Subject.Kind, g.UpdatedAt}
+	return []any{g.AutoGrant, g.CreatedAt, g.CreatedBy, g.DeletedAt, g.ID, g.OrganizationID, g.Privilege, g.Resource, g.Subject.ID, g.Subject.Kind, g.UpdatedAt}
 }
 
 func (g *grantsTable) ScanFields() []any {
-	return []any{&g.CreatedAt, &g.CreatedBy, &g.DeletedAt, &g.ID, &g.OrganizationID, &g.Privilege, &g.Resource, &g.Subject.ID, &g.Subject.Kind, &g.UpdatedAt}
+	return []any{&g.AutoGrant, &g.CreatedAt, &g.CreatedBy, &g.DeletedAt, &g.ID, &g.OrganizationID, &g.Privilege, &g.Resource, &g.Subject.ID, &g.Subject.Kind, &g.UpdatedAt}
 }
 
 func CreateGrant(tx WriteTxn, grant *models.Grant) error {

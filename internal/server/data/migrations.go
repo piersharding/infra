@@ -90,10 +90,15 @@ func migrations() []*migrator.Migration {
 		moveSettingsJWKOrganizations(),
 		addAccessKeyIssuedForKind(),
 		storeProviderUserGroupsArray(),
-		// Migration: creates the group_mappings table for rule-based access grants.
+		// Migration: creates the mapping_rules table for rule-based access grants.
 		// Each row defines a regex pattern to match IDP groups and templates for
 		// producing resource/role names in auto-granted access.
-		addGroupMappingsTable(),
+		addMappingRulesTable(),
+		// Migration: adds auto_grant column to grants table so the mapping engine can
+		// distinguish auto-grants (from previous rules) from bootstrap/manual grants.
+		// Only auto-grants are cleaned up by cleanupStaleGrants — protects initial admin
+		// access created during bootstrap from being deleted when no groups match.
+		addAutoGrantToGrants(),
 		// next one here, then run `go test -run TestMigrations ./internal/server/data -update`
 	}
 }
@@ -1387,29 +1392,43 @@ func storeProviderUserGroupsArray() *migrator.Migration {
 	}
 }
 
-// addGroupMappingsTable creates the group_mappings table and a unique index on
+// addMappingRulesTable creates the mapping_rules table and a unique index on
 // (rule_name, organization_id) to prevent duplicate rules within an org.
-func addGroupMappingsTable() *migrator.Migration {
+func addMappingRulesTable() *migrator.Migration {
 	return &migrator.Migration{
 		ID: "2024-05-19T12:00",
 		Migrate: func(tx migrator.DB) error {
 			_, err := tx.Exec(`
-			CREATE TABLE IF NOT EXISTS group_mappings (
-				id             uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- unique rule identifier
-				organization_id uuid NOT NULL, -- multi-tenant isolation
-				created_at     timestamptz NOT NULL DEFAULT now(),
-				updated_at     timestamptz NOT NULL DEFAULT now(),
-				deleted_at     timestamptz,  -- soft-delete for rule lifecycle
-				created_by     uuid NOT NULL,
-				rule_name      text NOT NULL, -- human-readable name for the mapping
-				source_group_regex text NOT NULL, -- regex to match against IDP group names
+			CREATE TABLE IF NOT EXISTS mapping_rules (
+				id             bigint PRIMARY KEY,
+				organization_id bigint NOT NULL,
+				created_at     timestamptz DEFAULT now(),
+				updated_at     timestamptz DEFAULT now(),
+				deleted_at     timestamptz,
+				created_by     bigint NOT NULL,
+				rule_name      text NOT NULL,
+				source_group_regex text NOT NULL,
 				destination_type text NOT NULL CHECK (destination_type IN ('kubernetes', 'ssh')),
-				name_template  text NOT NULL, -- template with $N refs for resource name
-				namespace_template text,     -- optional: namespace template for k8s-scoped grants
-				role_template  text          -- required for k8s: RBAC role template
+				name_template  text NOT NULL,
+				namespace_template text,
+				role_template  text
 			);
-			CREATE UNIQUE INDEX IF NOT EXISTS idx_group_mappings_rule_name_org_id ON group_mappings (rule_name, organization_id) WHERE deleted_at IS NULL;
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_mapping_rules_rule_name_org_id ON mapping_rules (rule_name, organization_id) WHERE deleted_at IS NULL;
 		`)
+			return err
+		},
+	}
+}
+
+// addAutoGrantToGrants adds an auto_grant column to the grants table.
+// This lets the mapping engine distinguish between:
+// - Auto-grants created by previous mapping rules (auto_grant=true) — safe to clean up
+// - Bootstrap/manual grants (auto_grant=false) — must be preserved
+func addAutoGrantToGrants() *migrator.Migration {
+	return &migrator.Migration{
+		ID: "2026-05-22T17:00",
+		Migrate: func(tx migrator.DB) error {
+			_, err := tx.Exec(`ALTER TABLE grants ADD COLUMN IF NOT EXISTS auto_grant boolean DEFAULT false`)
 			return err
 		},
 	}

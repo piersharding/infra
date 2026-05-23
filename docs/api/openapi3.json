@@ -423,7 +423,7 @@
           }
         }
       },
-      "GroupMapping": {
+      "MappingRule": {
         "properties": {
           "created": {
             "description": "formatted as an RFC3339 date-time",
@@ -865,7 +865,7 @@
           }
         }
       },
-      "ListResponse_GroupMapping": {
+      "ListResponse_MappingRule": {
         "properties": {
           "count": {
             "description": "Total number of items on the current page",
@@ -4139,8 +4139,8 @@
     },
     "/api/group-mappings": {
       "get": {
-        "description": "ListGroupMappings",
-        "operationId": "ListGroupMappings",
+        "description": "ListMappingRules",
+        "operationId": "ListMappingRules",
         "parameters": [
           {
             "in": "header",
@@ -4254,21 +4254,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListResponse_GroupMapping"
+                  "$ref": "#/components/schemas/ListResponse_MappingRule"
                 }
               }
             },
             "description": "Success"
           }
         },
-        "summary": "ListGroupMappings",
+        "summary": "ListMappingRules",
         "tags": [
           "Groups"
         ]
       },
       "post": {
-        "description": "CreateGroupMapping",
-        "operationId": "CreateGroupMapping",
+        "description": "CreateMappingRule",
+        "operationId": "CreateMappingRule",
         "parameters": [
           {
             "in": "header",
@@ -4387,14 +4387,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GroupMapping"
+                  "$ref": "#/components/schemas/MappingRule"
                 }
               }
             },
             "description": "Success"
           }
         },
-        "summary": "CreateGroupMapping",
+        "summary": "CreateMappingRule",
         "tags": [
           "Groups"
         ]
@@ -4402,8 +4402,8 @@
     },
     "/api/group-mappings/{id}": {
       "delete": {
-        "description": "DeleteGroupMapping",
-        "operationId": "DeleteGroupMapping",
+        "description": "DeleteMappingRule",
+        "operationId": "DeleteMappingRule",
         "parameters": [
           {
             "in": "header",
@@ -4501,14 +4501,14 @@
             "description": "Success"
           }
         },
-        "summary": "DeleteGroupMapping",
+        "summary": "DeleteMappingRule",
         "tags": [
           "Groups"
         ]
       },
       "get": {
-        "description": "GetGroupMapping",
-        "operationId": "GetGroupMapping",
+        "description": "GetMappingRule",
+        "operationId": "GetMappingRule",
         "parameters": [
           {
             "in": "header",
@@ -4599,21 +4599,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GroupMapping"
+                  "$ref": "#/components/schemas/MappingRule"
                 }
               }
             },
             "description": "Success"
           }
         },
-        "summary": "GetGroupMapping",
+        "summary": "GetMappingRule",
         "tags": [
           "Groups"
         ]
       },
       "put": {
-        "description": "UpdateGroupMapping",
-        "operationId": "UpdateGroupMapping",
+        "description": "UpdateMappingRule",
+        "operationId": "UpdateMappingRule",
         "parameters": [
           {
             "in": "header",
@@ -4743,14 +4743,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GroupMapping"
+                  "$ref": "#/components/schemas/MappingRule"
                 }
               }
             },
             "description": "Success"
           }
         },
-        "summary": "UpdateGroupMapping",
+        "summary": "UpdateMappingRule",
         "tags": [
           "Groups"
         ]

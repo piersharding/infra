@@ -1,19 +1,18 @@
 const fetch = global.fetch
 
-const base = '0.19.1'
+const base = '0.21.13'
 
 // Patch the global fetch to include our base API
-// version for requests to the same domain
+// version for requests to the same domain. Headers are merged so that
+// caller-provided headers (e.g., Content-Type) do not overwrite Infra-Version.
 global.fetch = (resource, info) =>
   fetch(resource, {
-    ...(resource.startsWith('/')
-      ? {
-          headers: {
-            'Infra-Version': base,
-          },
-        }
-      : {}),
+    ...(resource.startsWith('/') ? { headers: { 'Infra-Version': base } } : {}),
     ...info,
+    headers: {
+      ...(resource.startsWith('/') ? { 'Infra-Version': base } : {}),
+      ...info?.headers,
+    },
   })
 
 // jsonBody returns a js object or throws an error matching the {code: x, message: y} format, where x is a number and y is a string.

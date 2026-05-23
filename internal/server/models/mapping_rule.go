@@ -13,7 +13,7 @@ const (
 	DestinationTypeSSH        DestinationType = "ssh"
 )
 
-// GroupMapping defines a rule that matches identity provider groups (via regex) to
+// MappingRule defines a rule that matches identity provider groups (via regex) to
 // destinations, automatically creating grants with templated resource/role names.
 //
 // Workflow:
@@ -24,7 +24,7 @@ const (
 //   - Namespace (namespace_template, optional for k8s) — e.g., "platform-ns"
 //
 // 3. Grants are created with CreatedBy="system" so they can be cleaned up if rules change
-type GroupMapping struct {
+type MappingRule struct {
 	Model
 	OrganizationMember
 
@@ -39,8 +39,8 @@ type GroupMapping struct {
 	UpdateIndex int64 `db:"-"`
 }
 
-func (g *GroupMapping) ToAPI() *api.GroupMapping {
-	m := &api.GroupMapping{
+func (g *MappingRule) ToAPI() *api.MappingRule {
+	m := &api.MappingRule{
 		ID:               g.ID,
 		Created:          api.Time(g.CreatedAt),
 		Updated:          api.Time(g.UpdatedAt),

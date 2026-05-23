@@ -281,9 +281,9 @@ func (s *Server) Run(ctx context.Context) error {
 	if beginErr != nil {
 		return fmt.Errorf("failed to start transaction for group mapping evaluation: %w", beginErr)
 	}
-	if err := EvaluateGroupMappings(tx); err != nil {
+	if err := EvaluateMappingRules(tx); err != nil {
 		_ = tx.Rollback()
-		logging.L.Warn().Err(err).Msg("error evaluating group mappings at startup")
+		logging.L.Warn().Err(err).Msg("error evaluating mapping rules at startup")
 	} else {
 		_ = tx.Commit()
 	}

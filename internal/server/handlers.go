@@ -14,7 +14,6 @@ import (
 	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/internal"
 	"github.com/infrahq/infra/internal/access"
-	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/internal/openapi3"
 	"github.com/infrahq/infra/internal/server/authn"
 	"github.com/infrahq/infra/internal/server/data"
@@ -65,13 +64,6 @@ func CreateToken(rCtx access.RequestContext, r *api.EmptyRequest) (*api.CreateTo
 	token, err := data.CreateIdentityToken(rCtx.DBTxn, rCtx.Authenticated.Organization, rCtx.Authenticated.User)
 	if err != nil {
 		return nil, err
-	}
-
-	// When a user authenticates (creates a token), evaluate their group memberships
-	// against all mapping rules. This creates per-user grants so they get access immediately,
-	// supplementing any group-level grants that may already exist.
-	if err := EvaluateGroupMappingForUser(rCtx.DBTxn, rCtx.Authenticated.User.ID); err != nil {
-		logging.L.Warn().Err(err).Str("user", rCtx.Authenticated.User.ID.String()).Msg("error evaluating group mappings for user")
 	}
 
 	return &api.CreateTokenResponse{Token: token.Token, Expires: api.Time(token.Expires)}, nil
