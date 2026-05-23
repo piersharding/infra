@@ -189,6 +189,7 @@ export default function GroupsMapping() {
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [selectedMappingId, setSelectedMappingId] = useState(null)
+  const [selectedMappingName, setSelectedMappingName] = useState('')
   const [showNotification, setShowNotification] = useState(false)
   const [notificationMessage, setNotificationMessage] = useState('')
   const [addOpen, setAddOpen] = useState(false)
@@ -208,6 +209,7 @@ export default function GroupsMapping() {
       setShowNotification(true)
       setNotificationMessage(e.message || 'Failed to delete mapping rule')
     }
+    closeModal()
   }
 
   // previewTemplate takes a template string and replaces $N references with [group-N] placeholders.
@@ -225,14 +227,17 @@ export default function GroupsMapping() {
     return result
   }
 
-  function handleDeleteClick(id) {
-    setSelectedMappingId(id)
+  async function handleRowDeleteClick(row) {
+    const original = row.original
+    setSelectedMappingId(original.id)
+    setSelectedMappingName(original.ruleName || '')
     setDeleteModalOpen(true)
   }
 
   function closeModal() {
     setDeleteModalOpen(false)
     setSelectedMappingId(null)
+    setSelectedMappingName('')
   }
 
   // Clear notification after 5 seconds
@@ -310,6 +315,23 @@ export default function GroupsMapping() {
             { header: () => <span>Destination Name Template</span>, accessorKey: 'nameTemplatePreview' },
             { header: () => <span>Role Template</span>, accessorKey: 'roleTemplatePreview' },
             { header: () => <span>Namespace Template</span>, accessorKey: 'namespaceTemplatePreview' },
+            {
+              id: 'delete',
+              cell: function Cell(info) {
+                return (
+                  <div className='group invisible rounded-md bg-transparent group-hover:visible'>
+                    <button
+                      type='button'
+                      onClick={() => handleRowDeleteClick(info.row)}
+                      className='flex items-center text-xs font-medium text-red-500 hover:text-red-400'
+                    >
+                      <TrashIcon className='mr-2 h-3.5 w-3.5' />
+                      <span className='hidden sm:block'>Remove</span>
+                    </button>
+                  </div>
+                )
+              },
+            },
           ]}
         />
       )}
@@ -338,9 +360,9 @@ export default function GroupsMapping() {
       <DeleteModal
         open={deleteModalOpen}
         setOpen={setDeleteModalOpen}
-        onConfirm={() => handleDelete(selectedMappingId)}
-        title='Delete Group Mapping Rule'
-        message={`Are you sure you want to delete the mapping "${selectedMappingId}"? This action cannot be undone.`}
+        onSubmit={() => handleDelete(selectedMappingId)}
+        title='Delete Mapping Rule'
+        message={<>{`Are you sure you want to delete the mapping "${selectedMappingName}"? This will remove any auto-granted access created by this rule.`}</>}
       />
 
       {/* Add Rule Modal */}

@@ -13,9 +13,9 @@ jest.mock('../../lib/hooks', () => ({
   useUser: () => ({ isAdmin: true, isAdminLoading: false }),
 }))
 
-// List page tests: verify table rendering and empty state.
+// List page tests: verify table rendering, delete button, and empty state.
 describe('Groups Mapping — list page', () => {
-  it('renders table cells with mock data rows', async () => {
+  it('renders a Remove button on each mapping rule row', async () => {
     const swr = require('swr')
     swr.default.mockReturnValue({
       data: {
@@ -28,9 +28,14 @@ describe('Groups Mapping — list page', () => {
 
     render(<GroupsMapping />)
 
+    // Verify data cells are rendered
     expect(screen.getByText('team-access')).toBeInTheDocument()
     expect(screen.getByText('^team-(.*)$')).toBeInTheDocument()
     expect(screen.getByText('Kubernetes')).toBeInTheDocument()
+
+    // Verify Remove buttons exist for each row
+    const removeButtons = screen.getAllByText(/Remove/)
+    expect(removeButtons).toHaveLength(2)
   })
 
   it('shows empty message when no mappings exist', async () => {
