@@ -19,6 +19,14 @@ export default function AddGroupsMapping() {
   const router = useRouter()
   const isEdit = !!router.query.id
 
+  const { user, isAdmin } = useUser()
+
+  // Hide from non-admins — mapping rules control group access policies.
+  if (user && !isAdmin) {
+    router.replace('/')
+    return null
+  }
+
   const [ruleName, setRuleName] = useState('')
   const [sourceGroupRegex, setSourceGroupRegex] = useState('')
   const [destinationType, setDestinationType] = useState('kubernetes')

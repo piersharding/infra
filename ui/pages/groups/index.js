@@ -10,6 +10,7 @@ import Table from '../../components/table'
 import Dashboard from '../../components/layouts/dashboard'
 import SearchInput from '../../components/search-input'
 import Transition from '../../components/ui/transition'
+import { useUser } from '../../lib/hooks'
 import { useSearch } from '../../lib/useSearch'
 
 function AddGroupsDialog({ setOpen }) {
@@ -100,6 +101,14 @@ export default function Groups() {
   const router = useRouter()
   const page = Math.max(parseInt(router.query.p) || 1, 1)
   const limit = 50
+
+  const { user, isAdmin } = useUser()
+
+  // Hide from non-admins — groups control access policies.
+  if (user && !isAdmin) {
+    router.replace('/')
+    return null
+  }
 
   // Search functionality
   const {

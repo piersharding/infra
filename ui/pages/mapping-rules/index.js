@@ -301,7 +301,13 @@ export default function GroupsMapping() {
   const page = Math.max(parseInt(router.query.p) || 1, 1)
   const limit = 50
 
-  const { isAdmin } = useUser()
+  const { user, loading, isAdmin, isAdminLoading } = useUser()
+
+  // Hide from non-admins — mapping rules control group access policies.
+  if (user && !isAdmin) {
+    router.replace('/')
+    return null
+  }
 
   // Search functionality
   const {
