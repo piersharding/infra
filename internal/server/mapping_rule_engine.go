@@ -65,7 +65,7 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 					}
 					privilege = role
 				} else {
-					privilege = "view" // fallback for k8s with no role_template
+					privilege = "view" // Infra requires a valid RBAC role; "view" is the least-privileged option
 				}
 			default:
 				logging.L.Warn().Str("type", string(mapping.DestinationType)).Msg("unknown destination type")
@@ -76,7 +76,11 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 				logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create grant")
 			}
 
-			// For kubernetes with namespace_template, also create a namespaced grant.
+			// Kubernetes destinations can be scoped to specific namespaces via NamespaceTemplate.
+			// When set, the engine creates TWO grants per matched group:
+			//   1. A cluster-level grant (resource = NameTemplate result)
+			//   2. A namespace-scoped grant (resource = "NameTemplateResult.NamespaceTemplateResult")
+			// Both grants use the same privilege (RoleTemplate or fallback).
 			if models.DestinationType(mapping.DestinationType) == models.DestinationTypeKubernetes && mapping.NamespaceTemplate != nil && *mapping.NamespaceTemplate != "" {
 				namespaceName, err := applyTemplate(*mapping.NamespaceTemplate, g.Name, re)
 				if err != nil {
@@ -105,7 +109,8 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 }
 
 // applyTemplate substitutes $N references in a template string with the Nth capture group
-// from a regex match on the given input.
+// from a regex match on the given input. Supports multi-digit references ($10, $25).
+// Only bare numeric references like $1 are supported — ${...} syntax is rejected.
 func applyTemplate(template, input string, re *regexp.Regexp) (string, error) {
 	matches := re.FindStringSubmatch(input)
 	if matches == nil || len(matches) == 0 {
@@ -149,6 +154,9 @@ func applyTemplate(template, input string, re *regexp.Regexp) (string, error) {
 	return result.String(), nil
 }
 
+// parseCaptureRef converts a digit string like "2" or "10" into its integer value.
+// Returns an error if the string contains non-digit characters or is "0"
+// (capture references are 1-indexed per regexp.SubexpIndex).
 func parseCaptureRef(s string) (int, error) {
 	var n int
 	for _, ch := range s {
@@ -163,8 +171,14 @@ func parseCaptureRef(s string) (int, error) {
 	return n, nil
 }
 
-// createOrUpdateGrant creates or updates a grant with the specified privilege and resource.
-// If autoGrant is true and a pre-existing matching grant exists, it's marked as an auto-grant.
+// createOrUpdateGrant ensures a grant exists for the given subject, privilege, and resource name.
+// It first checks if a matching grant already exists (same group + privilege + resource).
+// If found, it marks the existing grant as auto-granted and returns early — avoiding duplicate grants
+// when EvaluateMappingRules is called multiple times. Otherwise it creates a new grant with:
+//
+//  - CreatedBy = "system"   (distinguishes engine-created grants from user-managed ones)
+//  - AutoGrant = true       (marks this as safe for cleanupStaleGrants to remove)
+//  - Subject = Group(subjectID)  (mapping rules always grant access to groups, not individual users)
 func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
 	preExisting, err := data.GetGrant(tx, data.GetGrantOptions{
 		BySubject:   models.NewSubjectForGroup(subjectID),
