@@ -39,8 +39,6 @@ Local testing of all components needs Docker for Postgres, Infra Server and Infr
 Once you have Docker and a Minikube instance running, use the following to launch the entire stack:
 
 ```bash
-make build
-make docker-build
 make dev-oci
 make dev-connector
 ```
