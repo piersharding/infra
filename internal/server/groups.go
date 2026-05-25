@@ -62,7 +62,14 @@ func (a *API) UpdateUsersInGroup(rCtx access.RequestContext, r *api.UpdateUsersI
 }
 
 // GetUsersInGroup returns all user IDs that are members of the group with ID r.ID.
+// Requires InfraAdminRole or InfraConnectorRole — connectors need this to resolve
+// group-based access grants into individual user grants for SSH/K8s destinations.
 func (a *API) GetUsersInGroup(rCtx access.RequestContext, r *api.Resource) (*api.GetUsersInGroupResponse, error) {
+	roles := []string{models.InfraAdminRole, models.InfraConnectorRole}
+	if err := access.IsAuthorized(rCtx, roles...); err != nil {
+		return nil, access.HandleAuthErr(err, "group", "get users", roles...)
+	}
+
 	users, err := data.GetUsersInGroup(rCtx.DBTxn, r.ID)
 	if err != nil {
 		return nil, err

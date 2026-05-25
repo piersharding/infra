@@ -65,10 +65,12 @@ func (a *API) CreateMappingRule(rCtx access.RequestContext, r *api.CreateMapping
 	}
 
 	// A new mapping rule can match already-existing groups, so we re-evaluate to
-	// immediately create the corresponding access grants. Errors are logged but not returned.
-	// The mapping is still saved; a subsequent evaluation will catch up.
+	// immediately create the corresponding access grants. If evaluation fails,
+	// the mapping is still saved but an error is returned so the caller knows
+	// the grants may not have been created (a subsequent evaluation will catch up).
 	if err := EvaluateMappingRules(rCtx.DBTxn); err != nil {
 		logging.L.Warn().Err(err).Str("rule", r.RuleName).Msg("error evaluating group mappings after creating mapping")
+		return mapping.ToAPI(), fmt.Errorf("mapping rule created but grant evaluation failed: %w", err)
 	}
 
 	return mapping.ToAPI(), nil
@@ -94,9 +96,11 @@ func (a *API) UpdateMappingRule(rCtx access.RequestContext, r *api.UpdateMapping
 	mapping.ID = r.ID
 
 	// The updated mapping may now match different groups or produce different resource names,
-	// so we re-evaluate to update the grant set accordingly. Errors are logged but not returned.
+	// so we re-evaluate to update the grant set accordingly. If evaluation fails, the
+	// mapping is still saved but an error is returned.
 	if err := EvaluateMappingRules(rCtx.DBTxn); err != nil {
 		logging.L.Warn().Err(err).Str("rule", r.RuleName).Msg("error evaluating group mappings after updating mapping")
+		return mapping.ToAPI(), fmt.Errorf("mapping rule updated but grant evaluation failed: %w", err)
 	}
 
 	return mapping.ToAPI(), nil
@@ -114,6 +118,7 @@ func (a *API) DeleteMappingRule(rCtx access.RequestContext, r *api.Resource) (*a
 	// immediately re-run the engine which will detect and remove stale auto-grants.
 	if err := EvaluateMappingRules(rCtx.DBTxn); err != nil {
 		logging.L.Warn().Err(err).Str("mapping_id", r.ID.String()).Msg("error evaluating group mappings after deleting mapping")
+		return &api.EmptyResponse{}, fmt.Errorf("mapping rule deleted but grant cleanup failed: %w", err)
 	}
 
 	return &api.EmptyResponse{}, nil

@@ -1,6 +1,9 @@
 // Tests for the exported pure functions: previewRegex and applyTemplatePreview.
 // These test the core logic without React dependencies.
-import { previewRegex, applyTemplatePreview } from '../../pages/mapping-rules/add'
+import {
+  previewRegex,
+  previewTemplate as applyTemplatePreview,
+} from '../../../lib/mappingRules'
 
 describe('Groups Mapping — regex preview', () => {
   it('returns matching groups for a valid regex', () => {
@@ -20,21 +23,27 @@ describe('Groups Mapping — regex preview', () => {
   })
 
   it('returns empty array for no match', () => {
-    const result = previewRegex('^admin-(.*)$', ['team-platform', 'ops-general'])
+    const result = previewRegex('^admin-(.*)$', [
+      'team-platform',
+      'ops-general',
+    ])
     expect(result).toEqual([])
   })
 
   it('handles multiple capture groups in regex', () => {
-    const result = previewRegex('^(.+)-(.+)$', ['team-platform-dev', 'ops-admin-production'])
+    const result = previewRegex('^(.+)-(.+)$', [
+      'team-platform-dev',
+      'ops-admin-production',
+    ])
     expect(result).toHaveLength(2)
   })
 })
 
 // Template preview tests: verify that applyTemplatePreview handles edge cases safely.
 describe('Groups Mapping — template preview', () => {
-  it('returns empty string for missing template', () => {
+  it('returns em-dash for missing template', () => {
     const result = applyTemplatePreview('', 'team-platform')
-    expect(result).toBe('')
+    expect(result).toBe('\u2014')
   })
 
   it('returns the raw template when no $N references exist', () => {
@@ -42,14 +51,15 @@ describe('Groups Mapping — template preview', () => {
     expect(result).toBe('static-name')
   })
 
-  it('handles valid $1 reference in template', () => {
+  it('replaces $N with [group-N] placeholders', () => {
     const result = applyTemplatePreview('$1-admin', 'team-platform')
-    // Returns the raw template for safe preview (no unsafe eval)
-    expect(result).toContain('$1')
+    // Replaces $1 with [group-1] placeholder
+    expect(result).toBe('[group-1]-admin')
   })
 
-  it('returns empty string for invalid regex-like templates', () => {
+  it('passes through ${...} unchanged (no $N patterns to replace)', () => {
     const result = applyTemplatePreview('${invalid}', 'anything')
-    expect(result).toBe('')
+    // ${invalid} is not a valid $N reference, so it passes through
+    expect(result).toBe('${invalid}')
   })
 })

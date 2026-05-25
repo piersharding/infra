@@ -10,8 +10,8 @@ global.fetch = (resource, info) =>
     ...(resource.startsWith('/') ? { headers: { 'Infra-Version': base } } : {}),
     ...info,
     headers: {
-      ...(resource.startsWith('/') ? { 'Infra-Version': base } : {}),
       ...info?.headers,
+      ...(resource.startsWith('/') ? { 'Infra-Version': base } : {}),
     },
   })
 

@@ -49,25 +49,14 @@ func (r UpdateUsersInGroupRequest) ValidationRules() []validate.ValidationRule {
 	}
 }
 
+// GetUsersInGroupResponse is the response for GET /api/groups/{id}/users.
+type GetUsersInGroupResponse struct {
+	Users []uid.ID `json:"users" note:"List of user IDs that are members of this group"`
+}
+
 func (req ListGroupsRequest) SetPage(page int) Paginatable {
 
 	req.PaginationRequest.Page = page
 
 	return req
-}
-
-// GetUsersInGroupRequest is used to request user IDs for a group.
-type GetUsersInGroupRequest struct {
-	ID uid.ID `uri:"id" json:"-"`
-}
-
-func (r GetUsersInGroupRequest) ValidationRules() []validate.ValidationRule {
-	return []validate.ValidationRule{
-		validate.Required("id", r.ID),
-	}
-}
-
-// GetUsersInGroupResponse is the response for GET /api/groups/{id}/users.
-type GetUsersInGroupResponse struct {
-	Users []uid.ID `json:"users" note:"List of user IDs that are members of this group"`
 }

@@ -207,7 +207,8 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 
 // cleanupStaleGrants runs after EvaluateMappingRules to remove auto-granted access for rules
 // that are being removed or changed. It iterates all grants and deletes only those with
-// CreatedBy="system" AND AutoGrant=true whose resource name doesn't match the pattern of any active mapping rule.
+// CreatedBy == models.CreatedBySystem ("system") AND AutoGrant=true whose resource name
+// doesn't match the pattern of any active mapping rule.
 //
 // Key design: only grants explicitly marked as auto-grants (AutoGrant=true) from previous mapping rules
 // are cleaned up. Bootstrap-created grants (CreatedBy="system", AutoGrant=false) and manually created grants
@@ -216,6 +217,12 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 	grants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	if err != nil {
 		return fmt.Errorf("list grants for cleanup: %w", err)
+	}
+
+	// Fetch mappings once — avoiding a database query per grant.
+	mappings, err := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
+	if err != nil {
+		return fmt.Errorf("list group mappings for cleanup: %w", err)
 	}
 
 	for _, grant := range grants {
@@ -231,10 +238,6 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 
 		// Check if the group that owns this grant is still covered by an active mapping rule.
 		matched := false
-		mappings, err := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
-		if err != nil {
-			return fmt.Errorf("list group mappings for cleanup: %w", err)
-		}
 
 		// Get the group name to check against mapping rule patterns.
 		grpName := ""

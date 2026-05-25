@@ -1,47 +1,84 @@
 import { render, screen } from '@testing-library/react'
-import GroupsMapping from '../../pages/mapping-rules/index'
+import GroupsMapping from '../../../pages/mapping-rules/index'
 
-// Mock SWR to prevent actual API calls during tests
-jest.mock('swr', () => ({
-  __esModule: true,
-  default: jest.fn(() => ({})),
-  mutate: jest.fn(),
+// Mock dependencies at module level (Jest hoists jest.mock() calls).
+jest.mock('next/router', () => ({
+  useRouter: jest.fn(),
 }))
 
-// Mock useUser so isAdmin is always true (test user has admin access)
-jest.mock('../../lib/hooks', () => ({
+jest.mock('../../../lib/hooks', () => ({
   useUser: () => ({ isAdmin: true, isAdminLoading: false }),
 }))
 
-// List page tests: verify table rendering, delete button, and empty state.
+// SWR mock — set up in beforeEach to avoid Jest hoisting TDZ issues.
+
 describe('Groups Mapping — list page', () => {
+  let swrSpy = null
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    // Reset SWR mock to return empty data by default.
+    const fn = jest.fn().mockReturnValue({ data: null })
+    swrSpy = jest.spyOn(require('swr'), 'default').mockImplementation(fn)
+  })
+
   it('renders a Remove button on each mapping rule row', async () => {
-    const swr = require('swr')
-    swr.default.mockReturnValue({
-      data: {
-        items: [
-          { id: '1', rule_name: 'team-access', source_group_regex: '^team-(.*)$', destination_type: 'kubernetes' },
-          { id: '2', rule_name: 'ssh-rules', source_group_regex: '^ops-(.*)$', destination_type: 'ssh' },
-        ],
-      },
+    let callCount = 0
+    const mockFn = jest.fn(_key => {
+      if (callCount === 0) {
+        callCount++
+        return {
+          data: {
+            items: [
+              {
+                id: '1',
+                rule_name: 'team-access',
+                source_group_regex: '^team-(.*)$',
+                destination_type: 'kubernetes',
+              },
+              {
+                id: '2',
+                rule_name: 'ssh-rules',
+                source_group_regex: '^ops-(.*)$',
+                destination_type: 'ssh',
+              },
+            ],
+            totalCount: 2,
+            totalPages: 1,
+          },
+        }
+      }
+      // Second call (/api/groups) returns empty.
+      return { data: null }
+    })
+
+    swrSpy.mockImplementation(mockFn)
+
+    const useRouter = require('next/router').useRouter
+    useRouter.mockReturnValue({
+      query: {},
+      push: jest.fn(),
+      replace: jest.fn(),
     })
 
     render(<GroupsMapping />)
 
-    // Verify data cells are rendered
+    // Verify data cells are rendered.
     expect(screen.getByText('team-access')).toBeInTheDocument()
     expect(screen.getByText('^team-(.*)$')).toBeInTheDocument()
     expect(screen.getByText('Kubernetes')).toBeInTheDocument()
 
-    // Verify Remove buttons exist for each row
+    // Verify Remove buttons exist for each row.
     const removeButtons = screen.getAllByText(/Remove/)
     expect(removeButtons).toHaveLength(2)
   })
 
   it('shows empty message when no mappings exist', async () => {
-    const swr = require('swr')
-    swr.default.mockReturnValue({
-      data: { items: [], totalCount: 0 },
+    const useRouter = require('next/router').useRouter
+    useRouter.mockReturnValue({
+      query: {},
+      push: jest.fn(),
+      replace: jest.fn(),
     })
 
     render(<GroupsMapping />)
