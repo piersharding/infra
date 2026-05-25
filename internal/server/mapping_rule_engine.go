@@ -176,9 +176,9 @@ func parseCaptureRef(s string) (int, error) {
 // If found, it marks the existing grant as auto-granted and returns early — avoiding duplicate grants
 // when EvaluateMappingRules is called multiple times. Otherwise it creates a new grant with:
 //
-//  - CreatedBy = "system"   (distinguishes engine-created grants from user-managed ones)
-//  - AutoGrant = true       (marks this as safe for cleanupStaleGrants to remove)
-//  - Subject = Group(subjectID)  (mapping rules always grant access to groups, not individual users)
+//   - CreatedBy = "system"   (distinguishes engine-created grants from user-managed ones)
+//   - AutoGrant = true       (marks this as safe for cleanupStaleGrants to remove)
+//   - Subject = Group(subjectID)  (mapping rules always grant access to groups, not individual users)
 func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
 	preExisting, err := data.GetGrant(tx, data.GetGrantOptions{
 		BySubject:   models.NewSubjectForGroup(subjectID),

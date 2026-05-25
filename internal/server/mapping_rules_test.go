@@ -277,12 +277,12 @@ func TestAPI_ListMappingRules(t *testing.T) {
 	routes.ServeHTTP(resp, listReq)
 
 	var listResp struct {
-		Count  int               `json:"count"`
-		Result []api.MappingRule `json:"result"`
+		Count int               `json:"count"`
+		Items []api.MappingRule `json:"items"`
 	}
 	json.NewDecoder(resp.Body).Decode(&listResp)
 
-	assert.Assert(t, len(listResp.Result) >= 3, "expected at least 3 mappings, got %d", len(listResp.Result))
+	assert.Assert(t, len(listResp.Items) >= 3, "expected at least 3 mappings, got %d", len(listResp.Items))
 }
 
 // TestAPI_MappingRuleRequiresAdminAuth verifies that non-admin requests are rejected (401/403).
@@ -308,11 +308,181 @@ func TestAPI_MappingRuleRequiresAdminAuth(t *testing.T) {
 	var created api.MappingRule
 	json.NewDecoder(createResp.Body).Decode(&created)
 
-	// Try to delete as non-admin — use a different access key.
+	// Try to delete as non-admin — no auth header at all.
 	resp2 := httptest.NewRecorder()
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/mapping-rules/"+created.ID.String(), nil)
+	deleteReq.Header.Set("Infra-Version", apiVersionLatest)
 	// No auth header = unauthenticated
 	routes.ServeHTTP(resp2, deleteReq)
 
 	assert.Assert(t, resp2.Code == http.StatusUnauthorized || resp2.Code == http.StatusForbidden, "non-admin delete status = %d, want 401/403; body: %s", resp2.Code, resp2.Body.String())
+}
+
+// TestAPI_CreateMappingRuleDuplicateName verifies whether duplicate rule_name values are allowed or rejected.
+func TestAPI_CreateMappingRuleDuplicateName(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	routes := srv.GenerateRoutes()
+
+	// Create first mapping rule.
+	firstReq := api.CreateMappingRuleRequest{
+		RuleName:         "duplicate-name",
+		SourceGroupRegex: "^team-(.*)$",
+		DestinationType:  "ssh",
+		NameTemplate:     "host-$1",
+	}
+
+	createResp := httptest.NewRecorder()
+	body := jsonBody(t, &firstReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/mapping-rules", body)
+	req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	req.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(createResp, req)
+
+	assert.Assert(t, createResp.Code == http.StatusCreated || createResp.Code == http.StatusOK,
+		"first rule creation status = %d", createResp.Code)
+
+	var firstMapping api.MappingRule
+	json.NewDecoder(createResp.Body).Decode(&firstMapping)
+
+	// Create second mapping with the SAME name.
+	secondReq := api.CreateMappingRuleRequest{
+		RuleName:         "duplicate-name", // same as first!
+		SourceGroupRegex: "^ops-(.*)$",
+		DestinationType:  "ssh",
+		NameTemplate:     "host-$1",
+	}
+
+	createResp2 := httptest.NewRecorder()
+	body2 := jsonBody(t, &secondReq)
+	req2 := httptest.NewRequest(http.MethodPost, "/api/mapping-rules", body2)
+	req2.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	req2.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(createResp2, req2)
+
+	// Document the current behavior: either 409 Conflict (duplicate rejected) or 201/200 (allowed).
+	if createResp2.Code == http.StatusConflict || createResp2.Code == http.StatusBadRequest {
+		t.Logf("duplicate rule_name correctly rejected with status %d", createResp2.Code)
+	} else if createResp2.Code == http.StatusCreated || createResp2.Code == http.StatusOK {
+		var secondMapping api.MappingRule
+		json.NewDecoder(createResp2.Body).Decode(&secondMapping)
+		t.Logf("duplicate rule_name allowed — created id=%s (same name as %s)", secondMapping.ID.String(), firstMapping.ID.String())
+
+		// Verify both rules exist and are retrievable.
+		resp := httptest.NewRecorder()
+		listReq := httptest.NewRequest(http.MethodGet, "/api/mapping-rules?limit=10", nil)
+		listReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+		listReq.Header.Set("Infra-Version", apiVersionLatest)
+		routes.ServeHTTP(resp, listReq)
+
+		var listResp struct {
+			Count int               `json:"count"`
+			Items []api.MappingRule `json:"items"`
+		}
+		json.NewDecoder(resp.Body).Decode(&listResp)
+		assert.Assert(t, len(listResp.Items) >= 2, "expected at least 2 rules with same name, got %d", len(listResp.Items))
+
+		var foundFirst, foundSecond bool
+		for _, r := range listResp.Items {
+			if r.ID.String() == firstMapping.ID.String() {
+				foundFirst = true
+			}
+			if r.ID.String() == secondMapping.ID.String() {
+				foundSecond = true
+			}
+		}
+		assert.Assert(t, foundFirst && foundSecond, "both rules should be retrievable by ID despite duplicate names")
+	} else {
+		t.Errorf("unexpected status for duplicate rule_name: %d — body: %s", createResp2.Code, createResp2.Body.String())
+	}
+}
+
+// TestAPI_ListMappingRulesByNameFilter verifies the name query parameter filters results via ILIKE match.
+func TestAPI_ListMappingRulesByNameFilter(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	routes := srv.GenerateRoutes()
+
+	// Create 3 rules with distinct names.
+	names := []string{"alpha-team-access", "beta-ops-policy", "gamma-admin-rules"}
+	for _, name := range names {
+		req := api.CreateMappingRuleRequest{
+			RuleName:         name,
+			SourceGroupRegex: "^team-(.*)$",
+			DestinationType:  "ssh",
+			NameTemplate:     "host-$1",
+		}
+
+		resp := httptest.NewRecorder()
+		body := jsonBody(t, &req)
+		httpReq := httptest.NewRequest(http.MethodPost, "/api/mapping-rules", body)
+		httpReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+		httpReq.Header.Set("Infra-Version", apiVersionLatest)
+		routes.ServeHTTP(resp, httpReq)
+
+		assert.Assert(t, resp.Code == http.StatusCreated || resp.Code == http.StatusOK,
+			"create status = %d for rule %s; body: %s", resp.Code, name, resp.Body.String())
+	}
+
+	// List all — should return 3.
+	resp := httptest.NewRecorder()
+	listReq := httptest.NewRequest(http.MethodGet, "/api/mapping-rules?limit=10", nil)
+	listReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	listReq.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(resp, listReq)
+
+	var allListResp struct {
+		Count int               `json:"count"`
+		Items []api.MappingRule `json:"items"`
+	}
+	json.NewDecoder(resp.Body).Decode(&allListResp)
+	assert.Assert(t, len(allListResp.Items) >= 3, "expected at least 3 rules total, got %d", len(allListResp.Items))
+
+	// Filter by name containing "alpha" — should return only alpha-team-access.
+	respAlpha := httptest.NewRecorder()
+	alphaReq := httptest.NewRequest(http.MethodGet, "/api/mapping-rules?name=alpha&limit=10", nil)
+	alphaReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	alphaReq.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(respAlpha, alphaReq)
+
+	var alphaListResp struct {
+		Count int               `json:"count"`
+		Items []api.MappingRule `json:"items"`
+	}
+	json.NewDecoder(respAlpha.Body).Decode(&alphaListResp)
+	assert.Assert(t, len(alphaListResp.Items) == 1, "expected exactly 1 rule matching 'alpha', got %d; result: %+v", len(alphaListResp.Items), alphaListResp.Items)
+
+	if len(alphaListResp.Items) > 0 {
+		assert.Equal(t, alphaListResp.Items[0].RuleName, "alpha-team-access")
+	}
+
+	// Filter by name containing "ops" — should return only beta-ops-policy.
+	respOps := httptest.NewRecorder()
+	opsReq := httptest.NewRequest(http.MethodGet, "/api/mapping-rules?name=ops&limit=10", nil)
+	opsReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	opsReq.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(respOps, opsReq)
+
+	var opsListResp struct {
+		Count int               `json:"count"`
+		Items []api.MappingRule `json:"items"`
+	}
+	json.NewDecoder(respOps.Body).Decode(&opsListResp)
+	assert.Assert(t, len(opsListResp.Items) == 1, "expected exactly 1 rule matching 'ops', got %d", len(opsListResp.Items))
+
+	if len(opsListResp.Items) > 0 {
+		assert.Equal(t, opsListResp.Items[0].RuleName, "beta-ops-policy")
+	}
+
+	// Filter by name containing non-matching string — should return empty.
+	respNone := httptest.NewRecorder()
+	noneReq := httptest.NewRequest(http.MethodGet, "/api/mapping-rules?name=nonexistent&limit=10", nil)
+	noneReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	noneReq.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(respNone, noneReq)
+
+	var noneListResp struct {
+		Count int               `json:"count"`
+		Items []api.MappingRule `json:"items"`
+	}
+	json.NewDecoder(respNone.Body).Decode(&noneListResp)
+	assert.Equal(t, len(noneListResp.Items), 0, "expected 0 rules matching 'nonexistent', got %d", len(noneListResp.Items))
 }

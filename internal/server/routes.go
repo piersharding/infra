@@ -80,6 +80,7 @@ func (s *Server) GenerateRoutes() Routes {
 	get(a, authn, "/api/groups/:id", a.GetGroup)
 	del(a, authn, "/api/groups/:id", a.DeleteGroup)
 	patch(a, authn, "/api/groups/:id/users", a.UpdateUsersInGroup)
+	get(a, authn, "/api/groups/:id/users", a.GetUsersInGroup)
 
 	get(a, authn, "/api/organizations", a.ListOrganizations)
 	post(a, authn, "/api/organizations", a.CreateOrganization)

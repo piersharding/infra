@@ -60,3 +60,12 @@ func (a *API) DeleteGroup(rCtx access.RequestContext, r *api.Resource) (*api.Emp
 func (a *API) UpdateUsersInGroup(rCtx access.RequestContext, r *api.UpdateUsersInGroupRequest) (*api.EmptyResponse, error) {
 	return nil, access.UpdateUsersInGroup(rCtx, r.GroupID, r.UserIDsToAdd, r.UserIDsToRemove)
 }
+
+// GetUsersInGroup returns all user IDs that are members of the group with ID r.ID.
+func (a *API) GetUsersInGroup(rCtx access.RequestContext, r *api.Resource) (*api.GetUsersInGroupResponse, error) {
+	users, err := data.GetUsersInGroup(rCtx.DBTxn, r.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &api.GetUsersInGroupResponse{Users: users}, nil
+}

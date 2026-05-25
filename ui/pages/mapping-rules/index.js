@@ -196,7 +196,7 @@ export default function GroupsMapping() {
 
   // Determine empty-state and result-count messages for the UI.
   const emptyMessage = getEmptyMessage('No mapping rules')
-  const resultText = getResultMessage(totalCount || 0, 'mapping')
+  const resultText = getResultMessage(totalCount || 0, 'mapping rules')
 
   async function handleDelete(id) {
     try {

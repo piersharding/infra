@@ -76,24 +76,20 @@ type GetMappingRuleOptions struct {
 }
 
 // GetMappingRule fetches a single non-deleted mapping rule within the transaction's org scope.
-// Returns an UpdateIndex from pg_notify to support real-time invalidation (used with LISTEN/NOTIFY).
 func GetMappingRule(tx ReadTxn, opts GetMappingRuleOptions) (*models.MappingRule, error) {
 	table := &mappingRulesTable{}
 	query := querybuilder.New("SELECT")
 	query.B(columnsForSelect(table))
-	query.B(", update_index")
 	query.B("FROM mapping_rules")
 	query.B("WHERE deleted_at is null AND organization_id = ? AND id = ?",
 		tx.OrganizationID(), opts.ByID)
 
-	var updateIndex int64
-	fields := append(table.ScanFields(), &updateIndex)
+	fields := table.ScanFields()
 	err := tx.QueryRow(query.String(), query.Args...).Scan(fields...)
 	if err != nil {
 		return nil, handleError(err)
 	}
 	mapping := (*models.MappingRule)(table)
-	mapping.UpdateIndex = updateIndex
 	return mapping, nil
 }
 

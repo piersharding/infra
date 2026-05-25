@@ -210,3 +210,28 @@ func countUsersInGroup(tx ReadTxn, groupID uid.ID) (int64, error) {
 func CountAllGroups(tx ReadTxn) (int64, error) {
 	return countRows(tx, groupsTable{})
 }
+
+// GetUsersInGroup returns all user IDs that are members of the group with ID groupID.
+func GetUsersInGroup(tx ReadTxn, groupID uid.ID) ([]uid.ID, error) {
+	query := querybuilder.New(`SELECT DISTINCT identity_id FROM identities_groups WHERE group_id = ?`)
+	rows, err := tx.Query(query.String(), groupID)
+	if err != nil {
+		return nil, handleError(err)
+	}
+	defer rows.Close()
+
+	var userIDs []uid.ID
+	for rows.Next() {
+		var id uid.ID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan identity_id: %w", err)
+		}
+		userIDs = append(userIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, handleError(err)
+	}
+
+	return userIDs, nil
+}

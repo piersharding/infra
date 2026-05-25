@@ -131,6 +131,9 @@ type apiClient interface {
 	// the name of the group or user in the ListGrants response.
 	GetGroup(ctx context.Context, id uid.ID) (*api.Group, error)
 	GetUser(ctx context.Context, id uid.ID) (*api.User, error)
+
+	// GetUsersInGroup returns all user IDs that are members of a group.
+	GetUsersInGroup(ctx context.Context, id uid.ID) ([]uid.ID, error)
 }
 
 type kubeClient interface {
