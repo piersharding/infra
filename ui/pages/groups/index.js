@@ -104,7 +104,7 @@ export default function Groups() {
 
   const { user, isAdmin } = useUser()
 
-  // Hide from non-admins — groups control access policies.
+  // Hide from non-admins — requires admin role to manage group membership.
   if (user && !isAdmin) {
     router.replace('/')
     return null

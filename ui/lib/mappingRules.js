@@ -26,10 +26,11 @@ export function previewTemplate(template, sampleGroup = 'team-platform') {
   if (!template || !sampleGroup) return '\u2014'
 
   const parts = sampleGroup.split('-')
-  let result = template.replace(/\$([1-9]\d*)/g, (_, num) => {
-    const n = parseInt(num, 10)
-    // Use sample group parts as a rough preview — +2 allows for common capture patterns
-    if (n <= parts.length + 2) return `[group-${num}]`
+  let result = template.replace(/\$([1-9]\d*)/g, (_, numStr) => {
+    const n = parseInt(numStr, 10)
+    // Use sample group parts as a rough preview — +2 allows for common capture patterns.
+    // Supports multi-digit references ($10, $25+) matching the backend's applyTemplate.
+    if (n <= parts.length + 2 && n > 0) return `[group-${numStr}]`
     return ''
   })
 

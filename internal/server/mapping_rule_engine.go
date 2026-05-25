@@ -1,10 +1,12 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 
+	"github.com/infrahq/infra/internal"
 	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/internal/server/data"
 	"github.com/infrahq/infra/internal/server/models"
@@ -77,10 +79,9 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 			}
 
 			// Kubernetes destinations can be scoped to specific namespaces via NamespaceTemplate.
-			// When set, the engine creates TWO grants per matched group:
-			//   1. A cluster-level grant (resource = NameTemplate result)
-			//   2. A namespace-scoped grant (resource = "NameTemplateResult.NamespaceTemplateResult")
-			// Both grants use the same privilege (RoleTemplate or fallback).
+			// When set, the engine creates a second namespace-scoped grant:
+			//   resource = "NameTemplateResult.NamespaceTemplateResult"
+			// This uses the same privilege (RoleTemplate or fallback) as the cluster-level grant.
 			if models.DestinationType(mapping.DestinationType) == models.DestinationTypeKubernetes && mapping.NamespaceTemplate != nil && *mapping.NamespaceTemplate != "" {
 				namespaceName, err := applyTemplate(*mapping.NamespaceTemplate, g.Name, re)
 				if err != nil {
@@ -91,15 +92,6 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 				nsResource := fmt.Sprintf("%s.%s", resourceName, namespaceName)
 				if err := createOrUpdateGrant(tx, tx.OrganizationID(), mapping.DestinationType, g.ID, privilege, nsResource); err != nil {
 					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create namespaced grant")
-				}
-			}
-
-			// For SSH destinations with matched groups, also create a group-level
-			// grant (same pattern as Kubernetes). Grants are given to the group,
-			// not individual members — access flows through group membership.
-			if models.DestinationType(mapping.DestinationType) == models.DestinationTypeSSH {
-				if err := createOrUpdateGrant(tx, tx.OrganizationID(), mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
-					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create group SSH grant")
 				}
 			}
 		}
@@ -185,7 +177,15 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 		ByPrivilege: privilege,
 		ByResource:  resource,
 	})
-	if err == nil && preExisting != nil {
+	found := true
+	if err != nil {
+		if errors.Is(err, internal.ErrNotFound) {
+			found = false // No existing grant — proceed to create one below.
+		} else {
+			return fmt.Errorf("check existing grant for subject %s (priv=%s, res=%s): %w", subjectID.String(), privilege, resource, err)
+		}
+	}
+	if found {
 		_, _ = tx.Exec(`UPDATE grants SET auto_grant = true WHERE id = ?`, preExisting.ID)
 		return nil // grant already covers this subject → nothing to do
 	}
@@ -225,6 +225,14 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 		return fmt.Errorf("list group mappings for cleanup: %w", err)
 	}
 
+	// Pre-compile all mapping rule regexes to avoid recompiling them per-grant.
+	precompiled := make(map[string]*regexp.Regexp, len(mappings))
+	for _, m := range mappings {
+		if re, err := regexp.Compile(m.SourceGroupRegex); err == nil {
+			precompiled[m.RuleName] = re
+		}
+	}
+
 	for _, grant := range grants {
 		if grant.CreatedBy != models.CreatedBySystem {
 			continue // skip manually-created grants
@@ -250,8 +258,8 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 
 		for _, m := range mappings {
 			if m.OrganizationID == tx.OrganizationID() && !m.DeletedAt.Valid {
-				re, err2 := regexp.Compile(m.SourceGroupRegex)
-				if err2 != nil || grpName == "" {
+				re, ok := precompiled[m.RuleName]
+				if !ok || grpName == "" {
 					continue
 				}
 				// If this grant's group matches the rule pattern and would produce a matching resource,
