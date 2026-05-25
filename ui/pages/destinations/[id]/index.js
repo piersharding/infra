@@ -392,6 +392,14 @@ function AccessTable({
       return g.user === subject || g.group === subject
     })
 
+    // Track whether any grant for this subject is auto-granted.
+    let hasAutoGrant = false
+    grantArray.forEach(g => {
+      if (g.autoGrant) {
+        hasAutoGrant = true
+      }
+    })
+
     const resourcePrivilegeMap = new Map()
     grantArray.forEach(g => {
       if (resourcePrivilegeMap.has(g.resource)) {
@@ -411,6 +419,7 @@ function AccessTable({
     if (grantArray.length === 1) {
       grantArray[0].resourcePrivilegeMap = resourcePrivilegeMap
       grantArray[0].name = name
+      grantArray[0].hasAutoGrant = hasAutoGrant
       grantsList = [...grantsList, ...grantArray]
     } else {
       grantsList.push({
@@ -418,6 +427,7 @@ function AccessTable({
         [type]: subject,
         id: grantArray.map(g => g.id),
         resourcePrivilegeMap,
+        hasAutoGrant,
       })
     }
   })
@@ -448,7 +458,7 @@ function AccessTable({
                     </div>
                     <div className='text-2xs text-gray-500'>
                       {users?.find(u => u.id === grant.user) && 'User'}
-                      {groups?.find(g => g.id === grant.group)?.name && 'Group'}
+                      {groups?.find(g => g.id === grant.group)?.name && (grant.hasAutoGrant ? 'Group (Auto)' : 'Group')}
                     </div>
                   </div>
                 </td>

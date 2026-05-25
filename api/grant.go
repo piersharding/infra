@@ -20,6 +20,8 @@ type Grant struct {
 	Group     uid.ID `json:"group,omitempty" note:"GroupID for a group being granted access" example:"3zMaadcd2U"`
 	Privilege string `json:"privilege" note:"a role or permission" example:"admin"`
 	Resource  string `json:"resource" note:"a resource name in Infra's Universal Resource Notation" example:"production.namespace"`
+
+	AutoGrant bool `json:"autoGrant,omitempty" note:"true if this grant was created automatically by a mapping rule"`
 }
 
 type CreateGrantResponse struct {

@@ -216,6 +216,7 @@ func (a *API) addPreviousVersionHandlersGrants() {
 		Group     uid.ID   `json:"group,omitempty"`
 		Privilege string   `json:"privilege"`
 		Resource  string   `json:"resource"`
+		AutoGrant bool     `json:"auto_grant,omitempty"`
 	}
 
 	newGrantsV0_18_1FromLatest := func(latest *api.Grant) *grantV0_18_1 {
@@ -231,6 +232,7 @@ func (a *API) addPreviousVersionHandlersGrants() {
 			Group:     latest.Group,
 			Privilege: latest.Privilege,
 			Resource:  latest.Resource,
+			AutoGrant: latest.AutoGrant,
 		}
 	}
 

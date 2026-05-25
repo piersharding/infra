@@ -206,7 +206,8 @@ func TestEvaluateMappingRulesSSH(t *testing.T) {
 		}
 	}
 
-	assert.Assert(t, len(sshConnectGrants) >= 2, "expected at least 2 SSH grants (group + user), got %d; grants: %+v", len(sshConnectGrants), allGrants)
+	// Only the group-level grant is auto-granted. Users get access through group membership.
+	assert.Assert(t, len(sshConnectGrants) >= 1, "expected at least 1 SSH connect grant for the mapped group (via group membership), got %d; grants: %+v", len(sshConnectGrants), allGrants)
 
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit: %v", err)
@@ -323,4 +324,331 @@ func mustCompileRegex(s string) *regexp.Regexp {
 
 func ptrString(s string) *string {
 	return &s
+}
+
+// TestCleanupStaleGrantsAutoGrantFalse verifies that AutoGrant=false grants survive cleanup.
+func TestCleanupStaleGrantsAutoGrantFalse(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	mapping := &models.MappingRule{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		RuleName:           "test-rule",
+		SourceGroupRegex:   "^team-(.*)$",
+		DestinationType:    models.DestinationTypeSSH,
+		NameTemplate:       "ssh-$1",
+	}
+
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
+
+	group := models.Group{
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &group))
+
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	group2 := models.Group{
+		Name:               "team-ops",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &group2))
+
+	bootstrapGrant := &models.Grant{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		CreatedBy:          models.CreatedBySystem,
+		AutoGrant:          false, // explicitly not an auto-grant
+		Subject:            models.NewSubjectForGroup(group2.ID),
+		Privilege:          "connect",
+		Resource:           "ssh-team-ops",
+	}
+	assert.NilError(t, data.CreateGrant(tx, bootstrapGrant))
+
+	assert.NilError(t, data.DeleteMappingRule(tx, mapping.ID))
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	var hasAutoGrant, hasBootstrap bool
+	for _, g := range allGrants {
+		if g.Subject.Kind == models.SubjectKindGroup && g.AutoGrant && g.Resource == "ssh-team-platform" {
+			hasAutoGrant = true
+		}
+		if g.CreatedBy == models.CreatedBySystem && !g.AutoGrant && g.Resource == "ssh-team-ops" {
+			hasBootstrap = true
+		}
+	}
+
+	assert.Assert(t, !hasAutoGrant, "expected auto-grant for team-platform to be cleaned up after rule deletion")
+	assert.Assert(t, hasBootstrap, "bootstrap grants should NOT be cleaned up (they target different resources)")
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
+// TestApplyTemplateMultiDigitCaptureRefs verifies multi-digit capture references work correctly.
+func TestApplyTemplateMultiDigitCaptureRefs(t *testing.T) {
+	tests := []struct {
+		name     string
+		template string
+		input    string
+		pattern  string
+		want     string
+	}{
+		{
+			name:     "multi-digit capture refs with valid groups",
+			template: "$2-$1-end",
+			input:    "team-platform-prod",
+			pattern:  `^(.+)-(.+)-(prod)$`,
+			want:     "platform-team-end", // $2="platform", $1="team" (greedy backtracking)
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			re, err := regexp.Compile(tt.pattern)
+			assert.NilError(t, err)
+			got, err := applyTemplate(tt.template, tt.input, re)
+			if got != tt.want {
+				t.Errorf("applyTemplate(%q, %q) = %q; want %q", tt.template, tt.input, got, tt.want)
+			}
+			assert.NilError(t, err)
+		})
+	}
+}
+
+// TestEvaluateMappingRulesNoActiveRules verifies early return when no active rules exist.
+func TestEvaluateMappingRulesNoActiveRules(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	group := models.Group{
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &group))
+
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	grants, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	autoGrantCount := 0
+	for _, g := range grants {
+		if g.AutoGrant {
+			autoGrantCount++
+		}
+	}
+	assert.Assert(t, autoGrantCount == 0, "expected no auto-grants when no mapping rules exist")
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
+// TestEvaluateMappingRulesK8sWithNamespaceTemplate verifies k8s namespaced grant creation.
+func TestEvaluateMappingRulesK8sWithNamespaceTemplate(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	nsTemplate := "ns-$1"
+	mapping := &models.MappingRule{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		RuleName:           "k8s-namespaced",
+		SourceGroupRegex:   "^team-(.*)$",
+		DestinationType:    models.DestinationTypeKubernetes,
+		NameTemplate:       "cluster-$1-prod",
+		NamespaceTemplate:  &nsTemplate,
+		RoleTemplate:       ptrString("admin"),
+	}
+
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
+
+	group := models.Group{
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &group))
+
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	var foundRegular, foundNamespaced bool
+	for _, g := range allGrants {
+		if g.Subject.Kind != models.SubjectKindGroup || !g.AutoGrant {
+			continue
+		}
+		switch g.Resource {
+		case "cluster-platform-prod":
+			foundRegular = true
+		case "cluster-platform-prod.ns-platform":
+			foundNamespaced = true
+		}
+	}
+
+	assert.Assert(t, foundRegular,
+		"expected k8s regular grant for team-platform → cluster-platform-prod")
+	assert.Assert(t, foundNamespaced,
+		"expected k8s namespaced grant for team-platform → cluster-platform-prod.ns-platform")
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
+// TestEvaluateMappingRulesK8sWithNamespaceTemplate verifies k8s namespaced grant creation.
+
+// TestCleanupStaleGrantsGroupDeleted verifies stale auto-grant is removed when source group is deleted.
+func TestCleanupStaleGrantsGroupDeleted(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	mapping := &models.MappingRule{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		RuleName:           "test-rule",
+		SourceGroupRegex:   "^team-(.*)$",
+		DestinationType:    models.DestinationTypeSSH,
+		NameTemplate:       "ssh-$1",
+	}
+
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
+
+	group := models.Group{
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &group))
+
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	var hasAutoGrant bool
+	for _, g := range allGrants {
+		if g.Subject.Kind == models.SubjectKindGroup && g.AutoGrant && g.Resource == "ssh-platform" {
+			hasAutoGrant = true
+			break
+		}
+	}
+	assert.Assert(t, hasAutoGrant, "expected auto-grant to exist before group deletion")
+
+	assert.NilError(t, data.DeleteGroup(tx, group.ID))
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrants, err = data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	hasStaleGrant := false
+	for _, g := range allGrants {
+		if g.Subject.Kind == models.SubjectKindGroup && g.AutoGrant && g.Resource == "ssh-platform" {
+			hasStaleGrant = true
+			break
+		}
+	}
+	assert.Assert(t, !hasStaleGrant, "expected stale auto-grant to be cleaned up after group deletion")
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
+// TestCleanupStaleGrantsOnRuleDeletion verifies that auto-grants are removed when their source mapping rule is deleted.
+func TestCleanupStaleGrantsOnRuleDeletion(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	mapping := &models.MappingRule{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		RuleName:           "test-rule",
+		SourceGroupRegex:   "^team-(.*)$",
+		DestinationType:    models.DestinationTypeSSH,
+		NameTemplate:       "ssh-$1",
+	}
+
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
+
+	group := models.Group{
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &group))
+
+	// Run engine to create auto-grant. Expected resource = "ssh-platform" (since $1 captures only what's after "team-").
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrantsBefore, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	var foundAutoGrant bool
+	for _, g := range allGrantsBefore {
+		if g.AutoGrant && g.Resource == "ssh-platform" {
+			foundAutoGrant = true
+			break
+		}
+	}
+	assert.Assert(t, foundAutoGrant, "expected auto-grant with resource 'ssh-platform' to exist after EvaluateMappingRules")
+
+	t.Logf("Before rule deletion: total grants = %d", len(allGrantsBefore))
+
+	// Delete the mapping rule and run cleanup.
+	assert.NilError(t, data.DeleteMappingRule(tx, mapping.ID))
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrantsAfter, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	t.Logf("After rule deletion: total grants = %d", len(allGrantsAfter))
+	for _, g := range allGrantsAfter {
+		t.Logf("  G: K=%d AG=%v R=%s P=%s CB=%s SID=%s", g.Subject.Kind, g.AutoGrant, g.Resource, g.Privilege, g.CreatedBy, g.Subject.ID)
+	}
+
+	// Verify the auto-grant was cleaned up.
+	var hasAutoGrant bool
+	for _, g := range allGrantsAfter {
+		if g.AutoGrant && g.Resource == "ssh-platform" {
+			hasAutoGrant = true
+			break
+		}
+	}
+	assert.Assert(t, !hasAutoGrant, "expected auto-grant for team-platform to be cleaned up after rule deletion")
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
 }

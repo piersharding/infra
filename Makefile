@@ -461,6 +461,11 @@ create-users: get-access-key ## Create test users in current dev deployment
 	  -H 'Infra-Version: 0.18.1' \
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
 	  -d '{ "name": "dev@example.com" }' | jq -r '.id'
+	@curl -X POST http://$(INFRA_URL)/api/users \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "name": "test02@local.net" }' | jq -r '.id'
 
 .PHONY: get-users
 get-users: get-access-key ## Get users from current dev deployment
@@ -470,6 +475,7 @@ get-users: get-access-key ## Get users from current dev deployment
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' | jq -r '.items[]'
 
 USER_NAME ?= dev@example.com
+GROUP_NAME ?= Example
 .PHONY: get-user
 get-user: get-access-key
 	$(eval USER_ID:=$(shell curl -s -X GET "http://$(INFRA_URL)/api/users" \
@@ -485,6 +491,11 @@ create-groups: get-access-key ## Create test groups in current dev deployment
 	  -H 'Infra-Version: 0.18.1' \
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
 	  -d '{ "name": "Example" }' | jq -r '.id'
+	@curl -X POST http://$(INFRA_URL)/api/groups \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "name": "ssh-connect-ssh01-infra" }' | jq -r '.id'
 
 .PHONY: get-groups
 get-groups: get-access-key ## Get groups from current dev deployment
@@ -498,7 +509,7 @@ get-group: get-access-key
 	$(eval GROUP_ID:=$(shell curl -s -X GET http://$(INFRA_URL)/api/groups \
 	  -H 'Content-Type: application/json' \
 	  -H 'Infra-Version: 0.18.1' \
-	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)'  | jq -r '.items[] | select( .name | contains("Example") ) | .id'))
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' | jq -r '.items[] | select( .name | contains("$(GROUP_NAME)") ) | .id'))
 	@echo "GROUP_ID=$(GROUP_ID)"
 
 .PHONY: add-user-group
@@ -527,6 +538,14 @@ add-grants: get-access-key ## Add grants to group in current dev deployment
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
 	  -d '{ "grantsToAdd": [{ "userName": "test01@local.net", "privilege": "connect", "resource": "ssh01" }] }'
 
+.PHONY: create-mapping-rule
+create-mapping-rule: get-access-key ## Create mapping rule for Rules Mapping test data
+	curl -v -X POST http://$(INFRA_URL)/api/mapping-rules \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "rule_name": "SSH Mapping Rule", "source_group_regex": "ssh-connect-([a-z0-9]+)-infra", "destination_type": "ssh", "name_template": "$$1" }'
+
 
 .PHONY: create-destination
 create-destination: get-access-key ## Create test destination in current dev deployment
@@ -537,8 +556,9 @@ create-destination: get-access-key ## Create test destination in current dev dep
 	  -d '{ "connection": { "ca": "-----BEGIN CERTIFICATE-----\nMIIDNTCCAh2gAwIBAgIRALRetnpcTo9O3V2fAK3ix+c\n-----END CERTIFICATE-----\n", "url": "aa60eexample.us-west-2.elb.amazonaws.com"}, "kind": "kubernetes", "name": "production" }'
 
 .PHONY: test-data
-test-data: create-users create-groups add-user-group create-destination add-grants
+test-data: create-users create-groups add-user-group create-destination add-grants create-mapping-rule
 	make add-user-group USER_NAME=test01@local.net
+	make add-user-group USER_NAME=test02@local.net GROUP_NAME=ssh-connect-ssh01-infra 
 
 define INFRA_SSHD_CONFIG
 Match group infra-users

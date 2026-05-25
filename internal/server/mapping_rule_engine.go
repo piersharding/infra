@@ -28,12 +28,6 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 		}
 	}
 
-	if len(validMappings) == 0 {
-		// No active mapping rules — nothing to clean up against.
-		// Do not delete grants that were created through other flows (e.g., signup).
-		return nil
-	}
-
 	groups, err := data.ListGroups(tx, data.ListGroupsOptions{})
 	if err != nil {
 		return fmt.Errorf("list groups: %w", err)
@@ -169,10 +163,19 @@ func parseCaptureRef(s string) (int, error) {
 	return n, nil
 }
 
-// createOrUpdateGrant creates or updates a grant with the specified privilege and resource
-// for the given destination type. Grants are created with CreatedBy="system" and AutoGrant=true so they can be
-// identified and cleaned up by cleanupStaleGrants.
+// createOrUpdateGrant creates or updates a grant with the specified privilege and resource.
+// If autoGrant is true and a pre-existing matching grant exists, it's marked as an auto-grant.
 func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege, resource string) error {
+	preExisting, err := data.GetGrant(tx, data.GetGrantOptions{
+		BySubject:   models.NewSubjectForGroup(subjectID),
+		ByPrivilege: privilege,
+		ByResource:  resource,
+	})
+	if err == nil && preExisting != nil {
+		_, _ = tx.Exec(`UPDATE grants SET auto_grant = true WHERE id = ?`, preExisting.ID)
+		return nil // grant already covers this subject → nothing to do
+	}
+
 	if err := data.CreateGrant(tx, &models.Grant{
 		Model:              models.Model{}, // will be set by OnInsert
 		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
@@ -183,13 +186,6 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 		Resource:           resource,
 	}); err != nil {
 		return fmt.Errorf("create grant for subject %s (priv=%s, res=%s): %w", subjectID.String(), privilege, resource, err)
-	}
-
-	if destType == models.DestinationTypeKubernetes {
-		// For k8s, the connector polls grants by group name and cluster name.
-		// The grant's Subject.ID is the group ID; Resource is the cluster name or cluster.namespace.
-	} else if destType == models.DestinationTypeSSH {
-		// For SSH, privilege must be "connect" and resource is the destination Name.
 	}
 
 	return nil
@@ -219,22 +215,41 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 			continue
 		}
 
-		// Check if this grant's resource still matches any active mapping.
+		// Check if the group that owns this grant is still covered by an active mapping rule.
 		matched := false
 		mappings, err := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
 		if err != nil {
 			return fmt.Errorf("list group mappings for cleanup: %w", err)
 		}
 
+		// Get the group name to check against mapping rule patterns.
+		grpName := ""
+		if grant.Subject.Kind == models.SubjectKindGroup && grant.Subject.ID != 0 {
+			grp, err2 := data.GetGroup(tx, data.GetGroupOptions{ByID: grant.Subject.ID})
+			if err2 == nil && grp != nil {
+				grpName = grp.Name
+			}
+		}
+
 		for _, m := range mappings {
 			if m.OrganizationID == tx.OrganizationID() && !m.DeletedAt.Valid {
-				re, err := regexp.Compile(m.SourceGroupRegex)
-				if err != nil {
+				re, err2 := regexp.Compile(m.SourceGroupRegex)
+				if err2 != nil || grpName == "" {
 					continue
 				}
-				// If the grant resource matches what this mapping would generate, keep it.
-				ok := re.FindStringSubmatch(grant.Resource)
-				matched = matched || (ok != nil && len(ok) > 0)
+				// If this grant's group matches the rule pattern and would produce a matching resource,
+				// keep it. For namespaced K8s grants (resource.namespace), check the base resource.
+				if re.MatchString(grpName) {
+					// For namespaced K8s grants (resource.namespace), extract base resource by removing last dot suffix.
+					baseResource := grant.Resource
+					if idx := strings.LastIndex(grant.Resource, "."); idx != -1 {
+						baseResource = grant.Resource[:idx]
+					}
+					matchedRes, err3 := applyTemplate(m.NameTemplate, grpName, re)
+					if err3 == nil && baseResource == matchedRes {
+						matched = true
+					}
+				}
 			}
 		}
 

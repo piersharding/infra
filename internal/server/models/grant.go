@@ -63,6 +63,7 @@ func (r *Grant) ToAPI() *api.Grant {
 		CreatedBy: r.CreatedBy,
 		Privilege: r.Privilege,
 		Resource:  r.Resource,
+		AutoGrant: r.AutoGrant,
 	}
 
 	switch r.Subject.Kind {
