@@ -224,8 +224,8 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 
 // cleanupStaleGrants runs after EvaluateMappingRules to remove stale auto-granted access
 // for rules that are being removed or changed. It queries only grants with AutoGrant=true
-// (set exclusively by the mapping engine, alongside CreatedBy=system) whose resource name
-// doesn't match any active mapping rule.
+// (set exclusively by the mapping engine) whose resource name doesn't match any active
+// mapping rule.
 //
 // Key design: only grants marked as auto-grants can be cleaned up — bootstrap/manual grants
 // always have AutoGrant=false and are never touched by the engine.
@@ -250,10 +250,6 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 	}
 
 	for _, grant := range grants {
-		if grant.CreatedBy != models.CreatedBySystem {
-			continue // skip manually-created grants
-		}
-
 		// Only clean up auto-grants created by previous mapping rules.
 		// Grants with AutoGrant=false are bootstrap or manual access — always preserve them.
 		if !grant.AutoGrant {

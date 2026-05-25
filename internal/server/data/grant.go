@@ -391,8 +391,8 @@ func deleteGrantsBulk(tx WriteTxn, grants []*models.Grant) error {
 }
 
 // ListAutoGrants returns all grants with AutoGrant=true for a given organization.
-// By convention, only the mapping engine sets auto_grant=true (and it always does so
-// alongside CreatedBy=system), so this query effectively finds stale auto-granted access.
+// Only the mapping engine sets auto_grant=true, so this query finds engine-created
+// grants eligible for cleanup.
 func ListAutoGrants(tx ReadTxn) ([]models.Grant, error) {
 	table := grantsTable{}
 	query := querybuilder.New("SELECT")

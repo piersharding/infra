@@ -383,7 +383,7 @@ func TestCleanupStaleGrantsAutoGrantFalse(t *testing.T) {
 		if g.Subject.Kind == models.SubjectKindGroup && g.AutoGrant && g.Resource == "ssh-team-platform" {
 			hasAutoGrant = true
 		}
-		if g.CreatedBy == models.CreatedBySystem && !g.AutoGrant && g.Resource == "ssh-team-ops" {
+		if !g.AutoGrant && g.Resource == "ssh-team-ops" {
 			hasBootstrap = true
 		}
 	}

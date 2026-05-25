@@ -79,7 +79,7 @@ func TestIntegrationCreateMappingRuleAndEvaluate(t *testing.T) {
 			// Verify the grant is marked as auto-granted by the engine.
 			assert.Assert(t, grant.AutoGrant, "grant for group %s should have AutoGrant=true", grp.Name)
 
-			// Verify CreatedBy is system (the mapping engine's signature).
+			// Verify CreatedBy is system (the mapping engine's signature, implied by AutoGrant).
 			assert.Assert(t, grant.CreatedBy == models.CreatedBySystem, "grant for group %s should have CreatedBy=system", grp.Name)
 		}
 	}
@@ -129,7 +129,7 @@ func TestIntegrationDeleteMappingRuleAndCleanup(t *testing.T) {
 	assert.NilError(t, err)
 	var autoGrantCountBefore int
 	for _, g := range grantsBefore {
-		if g.AutoGrant && g.CreatedBy == models.CreatedBySystem {
+		if g.AutoGrant {
 			autoGrantCountBefore++
 		}
 	}
@@ -146,7 +146,7 @@ func TestIntegrationDeleteMappingRuleAndCleanup(t *testing.T) {
 	assert.NilError(t, err)
 	var autoGrantCountAfter int
 	for _, g := range grantsAfter {
-		if g.AutoGrant && g.CreatedBy == models.CreatedBySystem {
+		if g.AutoGrant {
 			autoGrantCountAfter++
 		}
 	}
@@ -156,7 +156,7 @@ func TestIntegrationDeleteMappingRuleAndCleanup(t *testing.T) {
 }
 
 // TestIntegrationManualGrantsSurviveCleanup verifies that manually created grants
-// (AutoGrant=false or CreatedBy != system) survive the engine's cleanup pass.
+// (AutoGrant=false) survive the engine's cleanup pass.
 func TestIntegrationManualGrantsSurviveCleanup(t *testing.T) {
 	srv, orgID := setupMappingRuleIntegrationTest(t)
 
@@ -250,7 +250,7 @@ func TestIntegrationMultiOrgIsolation(t *testing.T) {
 
 	var orgAGrants int64
 	for _, g := range grantsA {
-		if g.AutoGrant && g.CreatedBy == models.CreatedBySystem {
+		if g.AutoGrant {
 			orgAGrants++
 		}
 	}
@@ -279,7 +279,7 @@ func TestIntegrationMultiOrgIsolation(t *testing.T) {
 
 	var orgBGrants int64
 	for _, g := range grantsB {
-		if g.AutoGrant && g.CreatedBy == models.CreatedBySystem {
+		if g.AutoGrant {
 			orgBGrants++
 		}
 	}
@@ -335,7 +335,7 @@ func TestIntegrationInvalidRegexGracefulDegradation(t *testing.T) {
 
 	var autoGrantCount int
 	for _, g := range grants {
-		if g.AutoGrant && g.CreatedBy == models.CreatedBySystem {
+		if g.AutoGrant {
 			autoGrantCount++
 		}
 	}
