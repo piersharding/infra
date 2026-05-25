@@ -17,7 +17,24 @@ import (
 // It iterates over mapping rules, matches them against groups using regex patterns,
 // and creates group-level grants for SSH and Kubernetes destinations. Stale grants
 // (created by this engine that no longer have a matching rule) are cleaned up automatically.
+// EvaluateMappingRules evaluates all active mapping rules and creates or updates grants to match.
+// It uses a database-level advisory lock (scoped by organization_id) to prevent concurrent
+// evaluations from racing on grant creation. If the lock cannot be acquired immediately,
+// the function returns nil (another evaluation is in progress doing the same work).
 func EvaluateMappingRules(tx data.WriteTxn) error {
+	// Acquire an xact-scoped advisory lock keyed by organization ID.
+	// pg_try_advisory_xact_lock auto-releases on transaction end, so no explicit unlock needed.
+	lockKey := int64(tx.OrganizationID())
+	var locked bool
+	if err := tx.QueryRow("SELECT pg_try_advisory_xact_lock($1)", lockKey).Scan(&locked); err != nil {
+		return fmt.Errorf("acquire advisory lock: %w", err)
+	}
+	if !locked {
+		// Another evaluation is in progress for this org — skip to avoid race.
+		logging.L.Debug().Msg("skipping EvaluateMappingRules: another instance holds the lock")
+		return nil
+	}
+
 	mappings, err := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
 	if err != nil {
 		return fmt.Errorf("list mapping rules: %w", err)
@@ -205,21 +222,20 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 	return nil
 }
 
-// cleanupStaleGrants runs after EvaluateMappingRules to remove auto-granted access for rules
-// that are being removed or changed. It iterates all grants and deletes only those with
-// CreatedBy == models.CreatedBySystem ("system") AND AutoGrant=true whose resource name
-// doesn't match the pattern of any active mapping rule.
+// cleanupStaleGrants runs after EvaluateMappingRules to remove stale auto-granted access
+// for rules that are being removed or changed. It queries only grants with AutoGrant=true
+// (set exclusively by the mapping engine, alongside CreatedBy=system) whose resource name
+// doesn't match any active mapping rule.
 //
-// Key design: only grants explicitly marked as auto-grants (AutoGrant=true) from previous mapping rules
-// are cleaned up. Bootstrap-created grants (CreatedBy="system", AutoGrant=false) and manually created grants
-// (CreatedBy != "system") are always preserved — the engine never touches user-managed access or initial admin setup.
+// Key design: only grants marked as auto-grants can be cleaned up — bootstrap/manual grants
+// always have AutoGrant=false and are never touched by the engine.
 func cleanupStaleGrants(tx data.WriteTxn) error {
-	grants, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	grants, err := data.ListAutoGrants(tx)
 	if err != nil {
-		return fmt.Errorf("list grants for cleanup: %w", err)
+		return fmt.Errorf("list auto-grants for cleanup: %w", err)
 	}
 
-	// Fetch mappings once — avoiding a database query per grant.
+	// Fetch active mappings once — avoiding a database query per grant.
 	mappings, err := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
 	if err != nil {
 		return fmt.Errorf("list group mappings for cleanup: %w", err)

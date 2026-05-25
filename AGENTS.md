@@ -590,3 +590,104 @@ Detailed structured documentation is available in `.sop/summary/`:
 | `.sop/summary/workflows.md` | Sequence diagrams: login, K8s access grant, IDP sync, SSH, startup |
 | `.sop/summary/dependencies.md` | All Go + frontend dependencies with versions |
 | `.sop/summary/review_notes.md` | Known documentation gaps and recommendations |
+
+---
+
+## Group Mapping Rules
+
+Group Mapping Rules is a rule-based engine that automatically creates access grants based on IDP group membership. The feature spans the full stack: DB migrations, domain model, data layer, authorization, HTTP handlers, a regex-based mapping engine, SSH connector integration, and an admin UI.
+
+### Architecture
+
+```
+Admin UI (/mapping-rules) → API handlers (mapping_rules.go)
+  → access layer (access/mapping_rule.go, InfraAdminRole)
+    → data layer (data/mapping_rule.go)
+      → EvaluateMappingRules (mapping_rule_engine.go)
+        → createOrUpdateGrant + cleanupStaleGrants
+```
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `api/mapping_rule.go` | Request/response types + validation (regex compile check, enum, conditional required) |
+| `internal/server/models/mapping_rule.go` | `MappingRule` domain model, `DestinationType` enum, `ToAPI()` converter |
+| `internal/server/data/mapping_rule.go` | Data layer CRUD + `mappingRulesTable` implementing the `Table` interface |
+| `internal/server/mapping_rules.go` | HTTP handlers (List/Get/Create/Update/Delete), each triggers `EvaluateMappingRules` |
+| `internal/server/mapping_rule_engine.go` | Core engine: `EvaluateMappingRules`, `applyTemplate`, `createOrUpdateGrant`, `cleanupStaleGrants` |
+| `internal/access/mapping_rule.go` | Authorization: List/Get require `InfraViewRole`, mutations require `InfraAdminRole` |
+| `internal/server/data/migrations.go` | Migrations: `mapping_rules` table + `auto_grant` column on `grants` + partial index |
+| `internal/server/data/schema.sql` | `mapping_rules` DDL with unique partial index |
+| `internal/connector/ssh.go` | `resolveUsersFromGrants`: resolves group-based grants to individual users |
+| `ui/pages/mapping-rules/index.js` | List page with inline add dialog, pagination, search, live regex preview |
+| `ui/pages/mapping-rules/add.js` | Add/edit form with live regex/template preview, unsaved changes warning |
+| `ui/lib/mappingRules.js` | Client-side `previewRegex()` and `previewTemplate()` utilities |
+| `docs/mapping-rules.md` | End-user documentation with examples and template syntax reference |
+
+### Engine Behavior
+
+- **Triggered by**: rule CRUD (create/update/delete), group creation, server startup
+- **Locking**: `pg_try_advisory_xact_lock(orgID)` prevents concurrent evaluation races
+- **Idempotent**: `createOrUpdateGrant` checks for existing grants before creating; marks pre-existing matches as `auto_grant=true`
+- **Auto-grant safety**: Only grants with `AutoGrant=true` AND `CreatedBy=system` are cleaned up. Manually-created grants are never touched.
+- **Graceful degradation**: Invalid regex or template errors are logged and skipped — one bad rule does not crash the engine
+- **Cross-org isolation**: All queries are scoped by `organization_id`
+
+### Adding a Mapping Rule (Developer Guide)
+
+1. **Model**: Already exists in `internal/server/models/mapping_rule.go` — add fields to `MappingRule` struct
+2. **API types**: Define/update request/response in `api/mapping_rule.go`
+3. **Data layer**: Update `mappingRulesTable` in `internal/server/data/mapping_rule.go` — columns, values, scan fields
+4. **Migration**: Add migration in `internal/server/data/migrations.go` + update `schema.sql`
+5. **Run**: `go generate ./internal/server/data`
+6. **Handlers**: Add/update in `internal/server/mapping_rules.go`
+7. **Access**: Update `internal/access/mapping_rule.go` for any permission changes
+8. **Routes**: Registered in `internal/server/routes.go` (get/post/put/del for `/api/mapping-rules`)
+9. **Engine**: If changing evaluation logic, update `internal/server/mapping_rule_engine.go`
+10. **Tests**: Add tests at every layer (engine, handlers, access, data, integration)
+11. **Frontend**: Update `ui/pages/mapping-rules/` and `ui/lib/mappingRules.js`
+12. **Docs**: Update `docs/mapping-rules.md`
+
+### API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/mapping-rules` | InfraViewRole | List rules (paginated, filterable by name) |
+| GET | `/api/mapping-rules/:id` | InfraViewRole | Get single rule |
+| POST | `/api/mapping-rules` | InfraAdminRole | Create rule (triggers engine) |
+| PUT | `/api/mapping-rules/:id` | InfraAdminRole | Update rule (triggers engine) |
+| DELETE | `/api/mapping-rules/:id` | InfraAdminRole | Delete rule (triggers engine) |
+
+### Important Gotchas
+
+- **Mutation of existing grants**: `createOrUpdateGrant` marks pre-existing matching grants as `auto_grant=true`. This is intentional — if a user creates a mapping rule that matches an existing manual grant, the user intends for the rule to manage that grant going forward.
+- **SSH privilege is always "connect"**: The engine hardcodes `privilege = "connect"` for SSH destinations. Role template is not used for SSH.
+- **Kubernetes fallback**: When no `RoleTemplate` is set for a Kubernetes rule, the engine falls back to `"view"` (least-privilege valid RBAC role).
+- **Cleanup scope**: `cleanupStaleGrants` only removes grants where `AutoGrant=true` AND `CreatedBy=system`. Bootstrap grants (`AutoGrant=false`, `CreatedBy=system`) and user-created grants (`CreatedBy != system`) are preserved.
+- **Template syntax**: Only `$N` (bare number) is supported. `${...}` syntax is explicitly rejected with an error. Use `$1`, `$2`, etc. for capture group references.
+
+### Test Commands
+
+```bash
+# Engine unit tests
+go test ./internal/server/ -run TestEvaluateMappingRules -v
+
+# HTTP handler tests
+go test ./internal/server/ -run TestAPI_MappingRule -v
+
+# Data layer validation tests
+go test ./internal/server/data/ -run TestValidateMappingRule -v
+
+# Access control tests
+go test ./internal/access/ -run TestMappingRule -v
+
+# Integration tests (requires PostgreSQL)
+go test ./internal/server/ -run TestIntegrationMappingRule -v
+
+# Migration tests (requires PostgreSQL)
+go test ./internal/server/data/ -run TestMigrations -v
+
+# Frontend tests
+cd ui && npm test -- --testPathPattern=mapping-rules
+```

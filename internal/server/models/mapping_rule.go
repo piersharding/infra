@@ -35,8 +35,6 @@ type MappingRule struct {
 	NameTemplate      string          `json:"name_template"`
 	NamespaceTemplate *string         `json:"namespace_template,omitempty"`
 	RoleTemplate      *string         `json:"role_template,omitempty"`
-
-	UpdateIndex int64 `db:"-"`
 }
 
 func (g *MappingRule) ToAPI() *api.MappingRule {

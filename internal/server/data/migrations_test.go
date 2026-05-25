@@ -1246,6 +1246,48 @@ INSERT INTO providers(id, name) VALUES (12345, 'okta');
 				assert.DeepEqual(t, expectedKey, providerUser)
 			},
 		},
+		{
+			label: testCaseLine("2024-05-19T12:00"), // addMappingRulesTable
+			expected: func(t *testing.T, tx WriteTxn) {
+				// Verify the mapping_rules table was created with correct structure
+				var tableName string
+				err := tx.QueryRow(`SELECT tablename FROM pg_tables WHERE tablename = 'mapping_rules'`).Scan(&tableName)
+				assert.NilError(t, err)
+				assert.Equal(t, "mapping_rules", tableName)
+
+				// Verify the CHECK constraint exists on destination_type
+				var hasConstraint bool
+				err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid = 'mapping_rules'::regclass AND contype = 'c')`).Scan(&hasConstraint)
+				assert.NilError(t, err)
+				assert.Equal(t, true, hasConstraint)
+			},
+		},
+		{
+			label: testCaseLine("2026-05-22T17:00"), // addAutoGrantToGrants
+			expected: func(t *testing.T, tx WriteTxn) {
+				// Verify the auto_grant column was added to grants table with default false
+				var colExists bool
+				err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name = 'grants' AND column_name = 'auto_grant')`).Scan(&colExists)
+				assert.NilError(t, err)
+				assert.Equal(t, true, colExists)
+
+				// Verify default value is false
+				var defaultValue string
+				err = tx.QueryRow(`SELECT column_default FROM information_schema.columns WHERE table_name = 'grants' AND column_name = 'auto_grant'`).Scan(&defaultValue)
+				assert.NilError(t, err)
+				assert.Equal(t, "false", defaultValue)
+			},
+		},
+		{
+			label: testCaseLine(addIndexOnGrantsAutoGrant().ID),
+			expected: func(t *testing.T, tx WriteTxn) {
+				// Verify the index was created
+				var idxExists bool
+				err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE tablename = 'grants' AND indexname = 'idx_grants_auto_grant')`).Scan(&idxExists)
+				assert.NilError(t, err)
+				assert.Equal(t, true, idxExists)
+			},
+		},
 	}
 
 	ids := make(map[string]struct{}, len(testCases))

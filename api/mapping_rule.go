@@ -7,6 +7,14 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
+// ptrVal returns the string value of a pointer, or "" if nil.
+func ptrVal(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
 // MappingRule represents a rule that matches groups to destinations.
 // Each mapping defines:
 //   - source_group_regex: regex pattern to match against identity provider group names
@@ -43,33 +51,14 @@ type CreateMappingRuleRequest struct {
 //   - source_group_regex compiles as a valid Go regexp
 //   - for kubernetes destinations: role_template is required (needed to determine RBAC role)
 func (r CreateMappingRuleRequest) ValidationRules() []validate.ValidationRule {
-	rules := []validate.ValidationRule{
-		validate.Required("rule_name", r.RuleName),
-		validate.Required("source_group_regex", r.SourceGroupRegex),
-		validate.Required("destination_type", r.DestinationType),
-		validate.Enum("destination_type", r.DestinationType, []string{"kubernetes", "ssh"}),
-		validate.Required("name_template", r.NameTemplate),
-	}
-
-	if !isValidRegexp(r.SourceGroupRegex) {
-		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
-			return &validate.Failure{
-				Name:     "source_group_regex",
-				Problems: []string{"must be a valid regular expression"},
-			}
-		}))
-	}
-
-	if r.DestinationType == "kubernetes" && (r.RoleTemplate == nil || *r.RoleTemplate == "") {
-		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
-			return &validate.Failure{
-				Name:     "role_template",
-				Problems: []string{"is required for kubernetes destinations"},
-			}
-		}))
-	}
-
-	return rules
+	return validateMappingRuleRequest(MappingRule{
+		RuleName:          r.RuleName,
+		SourceGroupRegex:  r.SourceGroupRegex,
+		DestinationType:   r.DestinationType,
+		NameTemplate:      r.NameTemplate,
+		NamespaceTemplate: ptrVal(r.NamespaceTemplate),
+		RoleTemplate:      ptrVal(r.RoleTemplate),
+	})
 }
 
 // UpdateMappingRuleRequest is the request body for updating an existing mapping rule.
@@ -85,33 +74,14 @@ type UpdateMappingRuleRequest struct {
 }
 
 func (r UpdateMappingRuleRequest) ValidationRules() []validate.ValidationRule {
-	rules := []validate.ValidationRule{
-		validate.Required("rule_name", r.RuleName),
-		validate.Required("source_group_regex", r.SourceGroupRegex),
-		validate.Required("destination_type", r.DestinationType),
-		validate.Enum("destination_type", r.DestinationType, []string{"kubernetes", "ssh"}),
-		validate.Required("name_template", r.NameTemplate),
-	}
-
-	if !isValidRegexp(r.SourceGroupRegex) {
-		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
-			return &validate.Failure{
-				Name:     "source_group_regex",
-				Problems: []string{"must be a valid regular expression"},
-			}
-		}))
-	}
-
-	if r.DestinationType == "kubernetes" && (r.RoleTemplate == nil || *r.RoleTemplate == "") {
-		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
-			return &validate.Failure{
-				Name:     "role_template",
-				Problems: []string{"is required for kubernetes destinations"},
-			}
-		}))
-	}
-
-	return rules
+	return validateMappingRuleRequest(MappingRule{
+		RuleName:          r.RuleName,
+		SourceGroupRegex:  r.SourceGroupRegex,
+		DestinationType:   r.DestinationType,
+		NameTemplate:      r.NameTemplate,
+		NamespaceTemplate: ptrVal(r.NamespaceTemplate),
+		RoleTemplate:      ptrVal(r.RoleTemplate),
+	})
 }
 
 // ListMappingRulesRequest provides optional name filter and pagination parameters
@@ -130,6 +100,38 @@ func (r ListMappingRulesRequest) ValidationRules() []validate.ValidationRule {
 type ListMappingRulesResponse struct {
 	Count  int           `json:"count"`
 	Result []MappingRule `json:"result"`
+}
+
+// validateMappingRuleRequest validates common MappingRule fields and returns validation rules.
+// Both Create and Update request types delegate to this shared function to avoid duplication.
+func validateMappingRuleRequest(rule MappingRule) []validate.ValidationRule {
+	rules := []validate.ValidationRule{
+		validate.Required("rule_name", rule.RuleName),
+		validate.Required("source_group_regex", rule.SourceGroupRegex),
+		validate.Required("destination_type", rule.DestinationType),
+		validate.Enum("destination_type", rule.DestinationType, []string{"kubernetes", "ssh"}),
+		validate.Required("name_template", rule.NameTemplate),
+	}
+
+	if !isValidRegexp(rule.SourceGroupRegex) {
+		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
+			return &validate.Failure{
+				Name:     "source_group_regex",
+				Problems: []string{"must be a valid regular expression"},
+			}
+		}))
+	}
+
+	if rule.DestinationType == "kubernetes" && (rule.RoleTemplate == "") {
+		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
+			return &validate.Failure{
+				Name:     "role_template",
+				Problems: []string{"is required for kubernetes destinations"},
+			}
+		}))
+	}
+
+	return rules
 }
 
 // isValidRegexp checks whether a string compiles as a valid Go regular expression.

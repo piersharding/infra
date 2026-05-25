@@ -99,6 +99,10 @@ func migrations() []*migrator.Migration {
 		// Only auto-grants are cleaned up by cleanupStaleGrants — protects initial admin
 		// access created during bootstrap from being deleted when no groups match.
 		addAutoGrantToGrants(),
+		// Migration: adds a partial index on grants(auto_grant) to optimize
+		// cleanupStaleGrants queries. Since auto_grant=true always implies CreatedBy=system,
+		// filtering on created_by is redundant.
+		addIndexOnGrantsAutoGrant(),
 		// next one here, then run `go test -run TestMigrations ./internal/server/data -update`
 	}
 }
@@ -1429,6 +1433,21 @@ func addAutoGrantToGrants() *migrator.Migration {
 		ID: "2026-05-22T17:00",
 		Migrate: func(tx migrator.DB) error {
 			_, err := tx.Exec(`ALTER TABLE grants ADD COLUMN IF NOT EXISTS auto_grant boolean DEFAULT false`)
+			return err
+		},
+	}
+}
+
+// addIndexOnGrantsAutoGrant adds a partial index to speed up cleanupStaleGrants.
+// The index covers only auto-granted rows, making the mapping engine's cleanup query
+// use an index scan instead of a sequential scan on large grants tables.
+func addIndexOnGrantsAutoGrant() *migrator.Migration {
+	return &migrator.Migration{
+		ID: "2026-05-25T12:00",
+		Migrate: func(tx migrator.DB) error {
+			_, err := tx.Exec(`
+				CREATE INDEX IF NOT EXISTS idx_grants_auto_grant ON grants (auto_grant) WHERE auto_grant = true;
+			`)
 			return err
 		},
 	}

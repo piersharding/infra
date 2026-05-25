@@ -391,6 +391,10 @@ CREATE UNIQUE INDEX idx_grants_subject_privilege_resource ON grants USING btree 
 
 CREATE INDEX idx_grants_update_index ON grants USING btree (organization_id, update_index);
 
+-- Partial index to optimize cleanupStaleGrants. Since auto_grant=true implies CreatedBy=system,
+-- filtering on created_by is redundant — only the auto_grant column is needed.
+CREATE INDEX idx_grants_auto_grant ON grants (auto_grant) WHERE auto_grant = true;
+
 CREATE UNIQUE INDEX idx_groups_name ON groups USING btree (organization_id, name) WHERE (deleted_at IS NULL);
 
 CREATE UNIQUE INDEX idx_identities_name ON identities USING btree (organization_id, name) WHERE (deleted_at IS NULL);

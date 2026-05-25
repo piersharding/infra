@@ -84,3 +84,63 @@ The frontend is available at http://localhost:3000 and proxies API calls to the 
    ```
 
 Once the connector pod is healthy, a new destination should appear under **Destinations** in the Infra UI.
+
+---
+
+## Group Mapping Rules
+
+Group Mapping Rules automatically create access grants based on identity provider group membership. When a user belongs to an IDP group whose name matches a rule's regex pattern, Infra creates a grant using templated resource and role names.
+
+### How It Works
+
+1. An admin creates a mapping rule with a regex pattern (e.g., `^team-(.*)$`) and templates for the destination name and role
+2. On every group sync, IDP event, and server startup, the engine evaluates all active rules against all groups
+3. Groups matching the regex get auto-grants created with `$N` capture group substitution
+4. When a rule is deleted or changed, the engine cleans up stale auto-grants automatically
+
+### Creating a Mapping Rule
+
+Navigate to **Settings → Mapping Rules** in the admin UI (admin access required). Each rule has:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Rule Name** | Yes | Unique identifier within your organization |
+| **Source Group Regex** | Yes | Go regex to match against IDP group names |
+| **Destination Type** | Yes | `kubernetes` or `ssh` |
+| **Name Template** | Yes | Template for the resource name (supports `$N` captures) |
+| **Role Template** | For k8s | Template for the RBAC role (required for Kubernetes) |
+| **Namespace Template** | For k8s | Optional Kubernetes namespace scoping |
+
+### Template Syntax
+
+Templates use `$N` syntax to reference regex capture groups:
+- `$1`, `$2`, etc. — 1-indexed capture group references
+- Multi-digit references supported (`$10`, `$25`)
+- `${...}` syntax is NOT supported
+
+### Example
+
+Given a rule with `^team-(.+)-(.+)$` and input group `team-platform-dev`:
+
+| Template | Output |
+|----------|--------|
+| `cluster-$1` | `cluster-platform` |
+| `cluster-$1.$2` | `cluster-platform.dev` |
+| `$1-$2-admin` | `platform-dev-admin` |
+
+### Engine Behavior
+
+- **Auto-grant safe**: Engine-created grants are marked `auto_grant=true` and are the only grants eligible for cleanup
+- **Idempotent**: Running the engine multiple times does not create duplicate grants
+- **Graceful degradation**: Invalid regex or template in one rule does not affect other rules
+- **Concurrency-safe**: Uses PostgreSQL advisory locks to prevent race conditions during evaluation
+- **Cross-org isolation**: Rules only affect their own organization
+- **Manual grants preserved**: Grants created manually (via UI/API) are never touched by the engine
+
+### Local Test Data
+
+```bash
+make create-mapping-rule
+```
+
+This creates a sample SSH mapping rule matching groups named `ssh-connect-{name}-infra` and mapping them to SSH host `{name}`.

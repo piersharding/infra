@@ -2,7 +2,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import useSWR, { mutate } from 'swr'
 import { useRouter } from 'next/router'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 
 import {
   PlusIcon,
@@ -34,6 +34,19 @@ function AddMappingRuleDialog({ open, setOpen, groups, onMutate }) {
   const [roleTemplate, setRoleTemplate] = useState('')
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
+  // Warn user if they try to navigate away with unsaved changes.
+  const hasUnsavedChanges = ruleName || sourceGroupRegex || nameTemplate
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault()
+      e.returnValue = '' // Required for Chrome to show the dialog.
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges])
+
 
   const matchedGroups = useMemo(() => {
     if (!sourceGroupRegex || !groups?.length) return []
@@ -451,13 +464,14 @@ export default function GroupsMapping() {
               m.destination_type === 'kubernetes' ? 'Kubernetes' : 'SSH',
             nameTemplatePreview: previewTemplate(
               m.name_template,
-              'team-platform'
+              'team-platform',
+              m.source_group_regex
             ),
             roleTemplatePreview: m.role_template
-              ? previewTemplate(m.role_template, 'team-platform')
+              ? previewTemplate(m.role_template, 'team-platform', m.source_group_regex)
               : '-',
             namespaceTemplatePreview: m.namespace_template
-              ? previewTemplate(m.namespace_template, 'team-platform')
+              ? previewTemplate(m.namespace_template, 'team-platform', m.source_group_regex)
               : '-',
           }))}
           columns={[

@@ -1,7 +1,7 @@
 import Head from 'next/head'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 
@@ -37,6 +37,18 @@ export default function AddGroupsMapping() {
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [notification, setNotification] = useState(null)
+  // Warn user if they try to navigate away with unsaved changes.
+  const hasUnsavedChanges = ruleName || sourceGroupRegex || nameTemplate
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+
+    const handleBeforeUnload = (e) => {
+      e.preventDefault()
+      e.returnValue = '' // Required for Chrome to show the dialog.
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges])
 
   // Memoized live-preview: evaluates sourceGroupRegex against sample group names
   // to show the user which groups would match their regex pattern.
@@ -55,7 +67,7 @@ export default function AddGroupsMapping() {
   // Replaces $N references with [group-N] placeholders since we can't safely evaluate them client-side.
   const templatePreview = useMemo(() => {
     if (!nameTemplate) return ''
-    return previewTemplate(nameTemplate, 'team-platform')
+    return previewTemplate(nameTemplate, 'team-platform', sourceGroupRegex)
   }, [nameTemplate])
 
   async function handleSubmit(e) {

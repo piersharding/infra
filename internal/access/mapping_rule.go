@@ -7,19 +7,21 @@ import (
 )
 
 // ListMappingRules checks authorization for listing mapping rules.
-// Requires InfraAdminRole — only admins can view mapping rules since they define access policies.
+// Requires InfraViewRole or InfraAdminRole — viewers can see the list of rules,
+// but only admins can modify them.
 func ListMappingRules(rCtx RequestContext) error {
-	if err := IsAuthorized(rCtx, models.InfraAdminRole); err != nil {
-		return HandleAuthErr(err, "mapping rule", "list", models.InfraAdminRole)
+	if err := IsAuthorized(rCtx, models.InfraViewRole, models.InfraAdminRole); err != nil {
+		return HandleAuthErr(err, "mapping rule", "list", models.InfraViewRole)
 	}
 	return nil
 }
 
 // GetMappingRule checks authorization and fetches a single mapping rule by ID.
-// Requires InfraAdminRole. Returns the model directly (no RBAC check on individual rules needed).
+// Requires InfraViewRole or InfraAdminRole — viewers can see individual rules,
+// but only admins can modify them.
 func GetMappingRule(rCtx RequestContext, id uid.ID) (*models.MappingRule, error) {
-	if err := IsAuthorized(rCtx, models.InfraAdminRole); err != nil {
-		return nil, HandleAuthErr(err, "mapping rule", "get", models.InfraAdminRole)
+	if err := IsAuthorized(rCtx, models.InfraViewRole, models.InfraAdminRole); err != nil {
+		return nil, HandleAuthErr(err, "mapping rule", "get", models.InfraViewRole)
 	}
 
 	opts := data.GetMappingRuleOptions{ByID: id}
