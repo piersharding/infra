@@ -1,6 +1,6 @@
 const fetch = global.fetch
 
-const base = '0.21.13'
+const base = '0.19.1'
 
 // Patch the global fetch to include our base API
 // version for requests to the same domain. Headers are merged so that
