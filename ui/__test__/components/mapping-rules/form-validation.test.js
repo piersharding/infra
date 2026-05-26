@@ -21,7 +21,9 @@ describe('Groups Mapping — create dialog form validation', () => {
 
   beforeEach(() => {
     global.fetch.mockClear()
-    user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime })
+    // Use real timers — the project does not enable fakeTimers globally,
+    // so passing jest.advanceTimersByTime triggers a Jest warning.
+    user = userEvent.setup({ advanceTimers: Date.now })
   })
 
   it('renders required fields for kubernetes destination type', async () => {
@@ -54,7 +56,9 @@ describe('Groups Mapping — create dialog form validation', () => {
     await user.selectOptions(select, 'ssh')
 
     // Namespace regex should be hidden for SSH
-    expect(screen.queryByLabelText(/Namespace Template Regex/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText(/Namespace Template Regex/i)
+    ).not.toBeInTheDocument()
   })
 
   it('rejects empty required fields on submit', async () => {
