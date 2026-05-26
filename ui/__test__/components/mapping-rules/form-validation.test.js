@@ -47,16 +47,14 @@ describe('Groups Mapping — create dialog form validation', () => {
     expect(screen.queryByLabelText(/Role Template/i)).not.toBeInTheDocument()
   })
 
-  it('shows namespace template only when destination type is kubernetes', async () => {
+  it('shows namespace template regex only when destination type is kubernetes', async () => {
     render(<AddGroupsMapping />)
 
     const select = screen.getByLabelText(/Destination Type/i)
     await user.selectOptions(select, 'ssh')
 
-    // Namespace template should be hidden for SSH
-    expect(
-      screen.queryByLabelText(/Namespace Template/i)
-    ).not.toBeInTheDocument()
+    // Namespace regex should be hidden for SSH
+    expect(screen.queryByLabelText(/Namespace Template Regex/i)).not.toBeInTheDocument()
   })
 
   it('rejects empty required fields on submit', async () => {

@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"regexp"
+	"strings"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -143,7 +144,8 @@ func TestEvaluateMappingRulesKubernetes(t *testing.T) {
 		}
 	}
 
-	assert.Assert(t, len(k8sGroupGrants) >= 2, "expected at least 2 kubernetes group grants, got %d; grants: %+v", len(k8sGroupGrants), allGrants)
+	// With no K8s destination registered for namespace expansion, only the cluster-level grant is created.
+	assert.Assert(t, len(k8sGroupGrants) >= 1, "expected at least 1 kubernetes group grant (cluster-level), got %d; grants: %+v", len(k8sGroupGrants), allGrants)
 
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit: %v", err)
@@ -489,6 +491,16 @@ func TestEvaluateMappingRulesK8sWithNamespaceTemplate(t *testing.T) {
 		Name:               "team-platform",
 		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
 	}
+	// Create a K8s destination with namespaces for namespace expansion.
+	k8sDestForNsExp := &models.Destination{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		Name:               "cluster-platform-prod",
+		Kind:               models.DestinationKindKubernetes,
+		Resources:          []string{"default", "kube-system", "ns-platform"},
+	}
+	assert.NilError(t, data.CreateDestination(tx, k8sDestForNsExp))
+
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
 	assert.NilError(t, EvaluateMappingRules(tx))
@@ -546,6 +558,16 @@ func TestCleanupStaleGrantsGroupDeleted(t *testing.T) {
 		Name:               "team-platform",
 		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
 	}
+	// Create a K8s destination with namespaces for namespace expansion.
+	k8sDestForNsExp := &models.Destination{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		Name:               "cluster-platform-prod",
+		Kind:               models.DestinationKindKubernetes,
+		Resources:          []string{"default", "kube-system", "ns-platform"},
+	}
+	assert.NilError(t, data.CreateDestination(tx, k8sDestForNsExp))
+
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
 	assert.NilError(t, EvaluateMappingRules(tx))
@@ -1281,5 +1303,255 @@ func TestEvaluateMappingRulesSSHMembersAccess(t *testing.T) {
 		if g.AutoGrant && g.Resource == "ssh-host-platform" {
 			t.Errorf("group %s should NOT have auto-grant to ssh-host-platform (does not match mapping rule)", nonMatchingGroup.Name)
 		}
+	}
+}
+
+// TestExpandNamespaceTemplate verifies expandNamespaceTemplate function works correctly.
+func TestExpandNamespaceTemplate(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	k8sDest := &models.Destination{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		Name:               "cluster-prod",
+		Kind:               models.DestinationKindKubernetes,
+		Resources:          []string{"default", "kube-system", "platform-apps", "staging-env"},
+	}
+	assert.NilError(t, data.CreateDestination(tx, k8sDest))
+
+	t.Run("matches namespaces with regex pattern", func(t *testing.T) {
+		result, err := expandNamespaceTemplate(tx, "cluster-prod", "[a-z]+-env")
+		assert.NilError(t, err)
+		assert.Equal(t, len(result), 1)
+		assert.Assert(t, result[0] == "cluster-prod.staging-env")
+	})
+
+	t.Run("matches all namespaces with wildcard regex", func(t *testing.T) {
+		result, err := expandNamespaceTemplate(tx, "cluster-prod", ".*")
+		assert.NilError(t, err)
+		assert.Equal(t, len(result), 4)
+	})
+
+	t.Run("no match returns empty slice", func(t *testing.T) {
+		result, err := expandNamespaceTemplate(tx, "cluster-prod", "^nonexistent$")
+		assert.NilError(t, err)
+		assert.Equal(t, len(result), 0)
+	})
+
+	t.Run("invalid regex returns error", func(t *testing.T) {
+		result, err := expandNamespaceTemplate(tx, "cluster-prod", "[invalid(")
+		assert.Assert(t, err != nil)
+		assert.Equal(t, len(result), 0)
+	})
+
+	t.Run("non-existent destination returns nil gracefully", func(t *testing.T) {
+		result, err := expandNamespaceTemplate(tx, "cluster-nonexistent", ".*")
+		assert.NilError(t, err)
+		assert.Equal(t, len(result), 0)
+	})
+}
+
+// TestEvaluateMappingRulesK8sWithWildcardNamespaceExpansion verifies the full engine path
+// when NamespaceTemplate is a regex pattern that expands against live K8s namespaces.
+func TestEvaluateMappingRulesK8sWithWildcardNamespaceExpansion(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	k8sDest := &models.Destination{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		Name:               "cluster-platform",
+		Kind:               models.DestinationKindKubernetes,
+		Resources:          []string{"default", "kube-system", "platform-apps", "staging-env"},
+	}
+	assert.NilError(t, data.CreateDestination(tx, k8sDest))
+
+	nsTemplate := "[a-z]+-env"
+	mapping := &models.MappingRule{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		RuleName:           "wildcard-ns-rule",
+		SourceGroupRegex:   "^team-(.*)$",
+		DestinationType:    models.DestinationTypeKubernetes,
+		NameTemplate:       "cluster-platform",
+		NamespaceTemplate:  &nsTemplate,
+		RoleTemplate:       ptrString("platform-admin"),
+	}
+
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
+
+	group := models.Group{
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &group))
+
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	var foundClusterGrant, foundNamespacedGrant bool
+	for _, g := range allGrants {
+		if !g.AutoGrant || g.Subject.Kind != models.SubjectKindGroup {
+			continue
+		}
+		switch g.Resource {
+		case "cluster-platform":
+			foundClusterGrant = true
+		case "cluster-platform.staging-env":
+			foundNamespacedGrant = true
+		}
+	}
+
+	assert.Assert(t, foundClusterGrant, "expected cluster-level grant for team-platform → cluster-platform")
+	assert.Assert(t, foundNamespacedGrant, "expected namespaced grant for team-platform → cluster-platform.staging-env")
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
+// TestCleanupStaleNamespacedGrants verifies that when a namespace is removed from the destination,
+// its corresponding auto-grant is cleaned up during stale grant cleanup.
+func TestCleanupStaleNamespacedGrants(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	k8sDest := &models.Destination{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		Name:               "cluster-prod",
+		Kind:               models.DestinationKindKubernetes,
+		Resources:          []string{"default", "kube-system"},
+	}
+	assert.NilError(t, data.CreateDestination(tx, k8sDest))
+
+	nsTemplate := ".*"
+	mapping := &models.MappingRule{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		RuleName:           "wildcard-all-rule",
+		SourceGroupRegex:   "^team-(.*)$",
+		DestinationType:    models.DestinationTypeKubernetes,
+		NameTemplate:       "cluster-prod",
+		NamespaceTemplate:  &nsTemplate,
+		RoleTemplate:       ptrString("view"),
+	}
+
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
+
+	group := models.Group{
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &group))
+
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrantsBefore, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	var nsGrantCount int
+	for _, g := range allGrantsBefore {
+		if g.AutoGrant && strings.HasPrefix(g.Resource, "cluster-prod.") {
+			nsGrantCount++
+		}
+	}
+
+	k8sDest.Resources = []string{"default"} // removed kube-system
+	assert.NilError(t, data.UpdateDestination(tx, k8sDest))
+
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrantsAfter, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	var nsGrantCountAfter int
+	for _, g := range allGrantsAfter {
+		if g.AutoGrant && strings.HasPrefix(g.Resource, "cluster-prod.") {
+			nsGrantCountAfter++
+		}
+	}
+
+	assert.Assert(t, nsGrantCountAfter < nsGrantCount,
+		"expected fewer namespaced grants after namespace removal (before: %d, after: %d)",
+		nsGrantCount, nsGrantCountAfter)
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
+// TestEvaluateMappingRulesNoNamespaceTemplate verifies that when NamespaceTemplate is empty,
+// the engine behaves as before (no namespace expansion).
+func TestEvaluateMappingRulesNoNamespaceTemplate(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	k8sDest := &models.Destination{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		Name:               "cluster-platform",
+		Kind:               models.DestinationKindKubernetes,
+		Resources:          []string{"default", "kube-system"},
+	}
+	assert.NilError(t, data.CreateDestination(tx, k8sDest))
+
+	mapping := &models.MappingRule{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		RuleName:           "no-ns-rule",
+		SourceGroupRegex:   "^team-(.*)$",
+		DestinationType:    models.DestinationTypeKubernetes,
+		NameTemplate:       "cluster-platform",
+		RoleTemplate:       ptrString("view"),
+	}
+
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
+
+	group := models.Group{
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &group))
+
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	var nsGrantCount int
+	for _, g := range allGrants {
+		if g.AutoGrant && strings.Contains(g.Resource, ".") {
+			nsGrantCount++
+		}
+	}
+
+	assert.Equal(t, 0, nsGrantCount, "expected no namespace-scoped grants when NamespaceTemplate is not set")
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
 	}
 }

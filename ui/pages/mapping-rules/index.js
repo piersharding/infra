@@ -39,14 +39,13 @@ function AddMappingRuleDialog({ open, setOpen, groups, onMutate }) {
   useEffect(() => {
     if (!hasUnsavedChanges) return
 
-    const handleBeforeUnload = (e) => {
+    const handleBeforeUnload = e => {
       e.preventDefault()
       e.returnValue = '' // Required for Chrome to show the dialog.
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasUnsavedChanges])
-
 
   const matchedGroups = useMemo(() => {
     if (!sourceGroupRegex || !groups?.length) return []
@@ -266,7 +265,7 @@ function AddMappingRuleDialog({ open, setOpen, groups, onMutate }) {
                         htmlFor='mr-ns'
                         className='text-xs font-medium text-gray-600'
                       >
-                        Namespace Template (optional)
+                        Namespace Template Regex (optional)
                       </label>
                       <input
                         id='mr-ns'
@@ -440,11 +439,15 @@ export default function GroupsMapping() {
 
       {/* Evaluation status banner */}
       {evalStatus && (
-        <div className={`mb-4 rounded-md border px-4 py-3 text-sm ${evalStatus.success ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+        <div
+          className={`mb-4 rounded-md border px-4 py-3 text-sm ${evalStatus.success ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}
+        >
           <span className='font-medium'>
             {evalStatus.success ? 'Evaluation OK' : 'Evaluation Failed'}
           </span>
-          {lastEvalTime && <span className='ml-2 opacity-75'>{lastEvalTime}</span>}
+          {lastEvalTime && (
+            <span className='ml-2 opacity-75'>{lastEvalTime}</span>
+          )}
           {evalStatus.error && (
             <p className='mt-1 text-xs opacity-80'>{evalStatus.error}</p>
           )}
@@ -486,10 +489,18 @@ export default function GroupsMapping() {
               m.source_group_regex
             ),
             roleTemplatePreview: m.role_template
-              ? previewTemplate(m.role_template, 'team-platform', m.source_group_regex)
+              ? previewTemplate(
+                  m.role_template,
+                  'team-platform',
+                  m.source_group_regex
+                )
               : '-',
             namespaceTemplatePreview: m.namespace_template
-              ? previewTemplate(m.namespace_template, 'team-platform', m.source_group_regex)
+              ? previewTemplate(
+                  m.namespace_template,
+                  'team-platform',
+                  m.source_group_regex
+                )
               : '-',
           }))}
           columns={[
@@ -511,7 +522,7 @@ export default function GroupsMapping() {
               accessorKey: 'roleTemplatePreview',
             },
             {
-              header: () => <span>Namespace Template</span>,
+              header: () => <span>Namespace Template Regex</span>,
               accessorKey: 'namespaceTemplatePreview',
             },
             {

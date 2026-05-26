@@ -71,6 +71,10 @@ func (a *API) CreateDestination(rCtx access.RequestContext, r *api.CreateDestina
 		return nil, fmt.Errorf("create destination: %w", err)
 	}
 
+	// A newly created destination can match existing mapping rules (by NameTemplate),
+	// creating new grants. For K8s destinations this also enables namespace expansion.
+	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
+
 	return destination.ToAPI(), nil
 }
 
@@ -80,6 +84,9 @@ func (a *API) UpdateDestination(rCtx access.RequestContext, r *api.UpdateDestina
 	if err != nil {
 		return nil, err
 	}
+
+	// Capture old Resources before applying updates — needed for K8s namespace change detection.
+	oldResources := destination.Resources
 
 	destination.Name = r.Name
 	destination.UniqueID = r.UniqueID
@@ -93,9 +100,41 @@ func (a *API) UpdateDestination(rCtx access.RequestContext, r *api.UpdateDestina
 		return nil, fmt.Errorf("update destination: %w", err)
 	}
 
+	// When a K8s destination's namespace list (Resources) changes, existing namespace-scoped
+	// grants may need updating. Compare old vs new Resources and trigger evaluation if changed.
+	if destination.Kind == models.DestinationKindKubernetes && !resourcesEqual(oldResources, r.Resources) {
+		EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
+	}
+
 	return destination.ToAPI(), nil
 }
 
 func (a *API) DeleteDestination(rCtx access.RequestContext, r *api.Resource) (*api.EmptyResponse, error) {
-	return nil, access.DeleteDestination(rCtx, r.ID)
+	err := access.DeleteDestination(rCtx, r.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	// When a destination is deleted, auto-grants referencing it become orphaned.
+	// Trigger evaluation so cleanupStaleGrants removes them.
+	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
+
+	return &api.EmptyResponse{}, nil
+}
+
+// resourcesEqual compares two slices of strings for equality (ignoring order).
+func resourcesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	setA := make(map[string]struct{}, len(a))
+	for _, v := range a {
+		setA[v] = struct{}{}
+	}
+	for _, v := range b {
+		if _, ok := setA[v]; !ok {
+			return false
+		}
+	}
+	return true
 }

@@ -51,7 +51,15 @@ func (a *API) CreateGroup(rCtx access.RequestContext, r *api.CreateGroupRequest)
 }
 
 func (a *API) DeleteGroup(rCtx access.RequestContext, r *api.Resource) (*api.EmptyResponse, error) {
-	return nil, access.DeleteGroup(rCtx, r.ID)
+	if err := access.DeleteGroup(rCtx, r.ID); err != nil {
+		return nil, err
+	}
+
+	// When a group is deleted, auto-grants with that group as the subject become orphaned.
+	// Trigger evaluation so cleanupStaleGrants removes them.
+	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
+
+	return &api.EmptyResponse{}, nil
 }
 
 func (a *API) UpdateUsersInGroup(rCtx access.RequestContext, r *api.UpdateUsersInGroupRequest) (*api.EmptyResponse, error) {

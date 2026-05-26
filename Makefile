@@ -52,11 +52,11 @@ docker-login:
 	docker login $(DOCKER_HOST) -u$(REPOSITORY_USER) -p $(GITLAB_TOKEN)
 
 test: check-psql-env
-	go test -short ./...
+	POSTGRESQL_CONNECTION=$(POSTGRESQL_CONNECTION) go test -short ./...
 
 test-all: check-psql-env test-npm
 	internal/server/testdata/pki/generate-localhost-cert.sh || true
-	go test ./...
+	POSTGRESQL_CONNECTION=$(POSTGRESQL_CONNECTION) go test ./...
 
 test-npm: ## run npm tests
 	cd ui && npm test

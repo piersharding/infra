@@ -94,13 +94,13 @@ Group Mapping Rules automatically create access grants based on identity provide
 ### How It Works
 
 1. An admin creates a mapping rule with a regex pattern (e.g., `^team-(.*)$`) and templates for the destination name and role
-2. On every group sync, IDP event, server startup, and after login, the engine evaluates all active rules against all groups
+2. On every group sync, destination change (create/update/delete), or IDP event — server startup also triggers evaluation
 3. Groups matching the regex get auto-grants created with `$N` capture group substitution
 4. When a rule is deleted or changed, the engine cleans up stale auto-grants automatically
 
 ### Creating a Mapping Rule
 
-Navigate to **Settings → Mapping Rules** in the admin UI (admin access required). Each rule has:
+Navigate to **Settings → Group Mapping Rules** in the Infra admin UI (admin access required). Each rule has:
 
 | Field | Required | Description |
 |-------|----------|-------------|
@@ -109,7 +109,7 @@ Navigate to **Settings → Mapping Rules** in the admin UI (admin access require
 | **Destination Type** | Yes | `kubernetes` or `ssh` |
 | **Name Template** | Yes | Template for the resource name (supports `$N` captures) |
 | **Role Template** | For k8s | Template for the RBAC role (required for Kubernetes) |
-| **Namespace Template** | For k8s | Optional Kubernetes namespace scoping |
+| **Namespace Template Regex** | For k8s | Optional template with `$N` captures and/or wildcards (`.*`, etc.). After applying capture group substitution, the engine compiles the result as a Go regex against the target K8s destination's live namespace list (discovered by the connector), creating one grant per matching namespace. |
 
 ### Template Syntax
 
@@ -124,13 +124,25 @@ Given a rule with `^team-(.+)-(.+)$` and input group `team-platform-dev`:
 
 | Template | Output |
 |----------|--------|
-| `cluster-$1` | `cluster-platform` |
-| `cluster-$1.$2` | `cluster-platform.dev` |
-| `$1-$2-admin` | `platform-dev-admin` |
+| `cluster-$1` | `cluster-platform` (resource name) |
+| `$1-admin` | `platform-admin` (RBAC role via Role Template) |
+
+### Namespace Template Regex — Wildcard Expansion
+
+When the **Namespace Template Regex** is set for a Kubernetes rule, it triggers dynamic namespace scoping:
+
+1. The engine queries the target K8s destination's `Resources` field (managed namespaces discovered by the connector)
+2. Compiles the template result as a Go regex pattern against each namespace
+3. Creates one grant per matching namespace with resource = `<cluster>.<namespace>`
+
+Example: `Namespace Template Regex: platform-.*` with namespaces `platform-apps`, `platform-ingress` creates two grants:
+- `resource=cluster-platform.platform-apps`
+- `resource=cluster-platform.platform-ingress`
 
 ### Engine Behavior
 
 - **Async execution**: Evaluation runs in a background goroutine so API responses are never blocked by the engine
+- **Triggered on**: group sync, IDP events, server startup, and all destination/group CRUD operations (create/update/delete)
 - **Eval status visibility**: The Mapping Rules page shows a success/error banner with the timestamp of the last evaluation. The raw status is also available via `GET /api/mapping-rules/eval-status`.
 - **Auto-grant safe**: Engine-created grants are marked `auto_grant=true` and are the only grants eligible for cleanup
 - **Idempotent**: Running the engine multiple times does not create duplicate grants

@@ -99,19 +99,27 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 			}
 
 			// Kubernetes destinations can be scoped to specific namespaces via NamespaceTemplate.
-			// When set, the engine creates a second namespace-scoped grant:
-			//   resource = "NameTemplateResult.NamespaceTemplateResult"
-			// This uses the same privilege (RoleTemplate or fallback) as the cluster-level grant.
+			// When set, the engine queries the destination for its live namespace list,
+			// compiles the template result as a regex pattern, and creates one grant per
+			// matching namespace: resource = "<cluster>.<namespace>".
 			if models.DestinationType(mapping.DestinationType) == models.DestinationTypeKubernetes && mapping.NamespaceTemplate != nil && *mapping.NamespaceTemplate != "" {
-				namespaceName, err := applyTemplate(*mapping.NamespaceTemplate, g.Name, re)
+				// First apply $N capture group references in NamespaceTemplate.
+				extendedNS, err := applyTemplate(*mapping.NamespaceTemplate, g.Name, re)
 				if err != nil {
-					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to apply namespace template")
+					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to expand namespace template with capture groups")
 					continue
 				}
 
-				nsResource := fmt.Sprintf("%s.%s", resourceName, namespaceName)
-				if err := createOrUpdateGrant(tx, tx.OrganizationID(), mapping.DestinationType, g.ID, privilege, nsResource); err != nil {
-					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create namespaced grant")
+				nsResourceNames, err := expandNamespaceTemplate(tx, resourceName, extendedNS)
+				if err != nil {
+					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to expand namespace template")
+					continue
+				}
+
+				for _, nsResource := range nsResourceNames {
+					if err := createOrUpdateGrant(tx, tx.OrganizationID(), mapping.DestinationType, g.ID, privilege, nsResource); err != nil {
+						logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create namespaced grant")
+					}
 				}
 			}
 		}
@@ -297,6 +305,41 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 //
 // Key design: only grants marked as auto-grants can be cleaned up — bootstrap/manual grants
 // always have AutoGrant=false and are never touched by the engine.
+// expandNamespaceTemplate queries the K8s destination matching clusterName (derived from
+// NameTemplate), compiles expandedPattern as a Go regex pattern against each namespace
+// in the destination's Resources list, and returns one resource string per match.
+// Each result has the form "<cluster>.<namespace>". If the destination doesn't exist
+// or is disconnected, it logs a warning and returns nil (graceful degradation).
+func expandNamespaceTemplate(tx data.WriteTxn, clusterName, expandedPattern string) ([]string, error) {
+	destinations, err := data.ListDestinations(tx, data.ListDestinationsOptions{ByKind: "kubernetes", ByName: clusterName})
+	if err != nil {
+		return nil, fmt.Errorf("query k8s destinations for %q: %w", clusterName, err)
+	}
+
+	if len(destinations) == 0 {
+		logging.L.Warn().Str("cluster", clusterName).Msg("k8s destination not found; skipping namespace expansion")
+		return nil, nil
+	}
+
+	dest := &destinations[0]
+
+	// Compile the expanded template result as a Go regex pattern against dest.Resources.
+	patternRegex, err := regexp.Compile(expandedPattern)
+	if err != nil {
+		logging.L.Warn().Str("cluster", clusterName).Str("pattern", expandedPattern).Msg("invalid namespace pattern regex")
+		return nil, fmt.Errorf("compile namespace pattern %q as regex: %w", expandedPattern, err)
+	}
+
+	var matchedResources []string
+	for _, ns := range dest.Resources {
+		if patternRegex.MatchString(ns) {
+			matchedResources = append(matchedResources, clusterName+"."+ns)
+		}
+	}
+
+	return matchedResources, nil
+}
+
 func cleanupStaleGrants(tx data.WriteTxn) error {
 	grants, err := data.ListAutoGrants(tx)
 	if err != nil {
@@ -343,16 +386,73 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 					continue
 				}
 				// If this grant's group matches the rule pattern and would produce a matching resource,
-				// keep it. For namespaced K8s grants (resource.namespace), check the base resource.
+				// keep it. For namespaced K8s grants (resource.namespace), check both base resource
+				// AND that the namespace part still exists in the destination's live Resources list.
 				if re.MatchString(grpName) {
-					// For namespaced K8s grants (resource.namespace), extract base resource by removing last dot suffix.
 					baseResource := grant.Resource
+					namespacePart := ""
 					if idx := strings.LastIndex(grant.Resource, "."); idx != -1 {
 						baseResource = grant.Resource[:idx]
+						namespacePart = grant.Resource[idx+1:]
 					}
+
 					matchedRes, err3 := applyTemplate(m.NameTemplate, grpName, re)
-					if err3 == nil && baseResource == matchedRes {
-						matched = true
+					if err3 != nil {
+						continue
+					}
+
+					// Base resource must match the cluster name.
+					if baseResource != matchedRes {
+						continue
+					}
+
+					matched = true
+
+					// For namespaced K8s grants, also verify the namespace part still exists in the destination.
+					if m.DestinationType == models.DestinationTypeKubernetes && namespacePart != "" {
+						namespaces, err4 := data.ListDestinations(tx, data.ListDestinationsOptions{ByKind: "kubernetes", ByName: matchedRes})
+						if err4 != nil || len(namespaces) == 0 {
+							// Destination not found — grant is stale.
+							matched = false
+							continue
+						}
+
+						dest := namespaces[0]
+						namespaceFound := false
+						for _, ns := range dest.Resources {
+							if ns == namespacePart {
+								namespaceFound = true
+								break
+							}
+						}
+
+						// Also verify the rule's NamespaceTemplate still matches at least one live namespace.
+						hasActiveRule := true
+						if m.NamespaceTemplate != nil && *m.NamespaceTemplate != "" {
+							expanded, err5 := applyTemplate(*m.NamespaceTemplate, grpName, re)
+							if err5 == nil {
+								patternRegex, err6 := regexp.Compile(expanded)
+								if err6 == nil {
+									hasMatch := false
+									for _, ns := range dest.Resources {
+										if patternRegex.MatchString(ns) {
+											hasMatch = true
+											break
+										}
+									}
+									if !hasMatch {
+										hasActiveRule = false
+									}
+								}
+							}
+						}
+
+						// Grant is valid only if namespace exists AND rule still has active matches.
+						if !namespaceFound || !hasActiveRule {
+							matched = false
+						} else {
+							matched = true
+						}
 					}
 				}
 			}

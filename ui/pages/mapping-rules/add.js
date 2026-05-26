@@ -42,7 +42,7 @@ export default function AddGroupsMapping() {
   useEffect(() => {
     if (!hasUnsavedChanges) return
 
-    const handleBeforeUnload = (e) => {
+    const handleBeforeUnload = e => {
       e.preventDefault()
       e.returnValue = '' // Required for Chrome to show the dialog.
     }
@@ -352,14 +352,14 @@ export default function AddGroupsMapping() {
           </div>
         )}
 
-        {/* Namespace Template (only for Kubernetes) */}
+        {/* Namespace Template Regex (only for Kubernetes) */}
         {destinationType === 'kubernetes' && (
           <div className='mb-4 flex flex-col'>
             <label
               htmlFor='namespace_template'
               className='text-xs font-medium text-gray-600'
             >
-              Namespace Template
+              Namespace Template Regex
             </label>
             <input
               id='namespace_template'
