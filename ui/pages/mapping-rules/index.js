@@ -353,6 +353,11 @@ export default function GroupsMapping() {
   const { data: groupsData } = useSWR('/api/groups') || {}
   const groups = (groupsData?.items || []).map(g => g.name)
 
+  const { data: evalStatus } = useSWR('/api/mapping-rules/eval-status')
+  const lastEvalTime = evalStatus?.last_run_at
+    ? new Date(evalStatus.last_run_at).toLocaleString()
+    : null
+
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [selectedMappingId, setSelectedMappingId] = useState(null)
   const [selectedMappingName, setSelectedMappingName] = useState('')
@@ -432,6 +437,19 @@ export default function GroupsMapping() {
           </button>
         </div>
       </header>
+
+      {/* Evaluation status banner */}
+      {evalStatus && (
+        <div className={`mb-4 rounded-md border px-4 py-3 text-sm ${evalStatus.success ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}>
+          <span className='font-medium'>
+            {evalStatus.success ? 'Evaluation OK' : 'Evaluation Failed'}
+          </span>
+          {lastEvalTime && <span className='ml-2 opacity-75'>{lastEvalTime}</span>}
+          {evalStatus.error && (
+            <p className='mt-1 text-xs opacity-80'>{evalStatus.error}</p>
+          )}
+        </div>
+      )}
 
       {/* Search */}
       {totalCount > 5 && (

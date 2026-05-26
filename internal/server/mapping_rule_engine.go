@@ -1,10 +1,13 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/infrahq/infra/internal"
 	"github.com/infrahq/infra/internal/logging"
@@ -115,6 +118,71 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 	}
 
 	return cleanupStaleGrants(tx)
+}
+
+// EvalStatusReport captures the result of the most recent EvaluateMappingRulesAsync
+// invocation for an organization. Stored in-memory and exposed via the API so the
+// UI can display whether the last evaluation succeeded or failed.
+type EvalStatusReport struct {
+	LastRunAt time.Time `json:"last_run_at"`
+	Success   bool      `json:"success"`
+	Error     string    `json:"error,omitempty"`
+}
+
+// evalStatusStore is an in-memory store of the last evaluation result per org.
+// Keyed by orgID uid.ID; values are *EvalStatusReport. Populated by
+// EvaluateMappingRulesAsync and read by GetEvalStatus.
+var evalStatusStore sync.Map
+
+// recordEvalStatus stores the outcome of an EvaluateMappingRulesAsync run.
+// Called by the background goroutine after evaluation completes.
+func recordEvalStatus(orgID uid.ID, err error) {
+	s := &EvalStatusReport{
+		LastRunAt: time.Now(),
+		Success:   err == nil,
+	}
+	if err != nil {
+		s.Error = err.Error()
+	}
+	evalStatusStore.Store(orgID, s)
+}
+
+// GetEvalStatus returns the last known evaluation result for the given org,
+// or nil if no evaluation has been recorded yet.
+func GetEvalStatus(orgID uid.ID) *EvalStatusReport {
+	val, ok := evalStatusStore.Load(orgID)
+	if !ok {
+		return nil
+	}
+	return val.(*EvalStatusReport)
+}
+
+// EvaluateMappingRulesAsync runs EvaluateMappingRules in a background goroutine
+// with its own database transaction, scoped to the given organization. Errors are
+// logged but not returned — the caller is free to respond to the HTTP request
+// without waiting for evaluation to complete. On completion, the result is
+// recorded in the in-memory evalStatusStore and visible via GetEvalStatus.
+func EvaluateMappingRulesAsync(db *data.DB, orgID uid.ID) {
+	go func() {
+		tx, err := db.Begin(context.Background(), nil)
+		if err != nil {
+			logging.L.Warn().Err(err).Msg("async mapping eval: begin txn")
+			recordEvalStatus(orgID, err)
+			return
+		}
+		defer tx.Rollback()
+		if err := EvaluateMappingRules(tx.WithOrgID(orgID)); err != nil {
+			logging.L.Warn().Err(err).Msg("async mapping eval failed")
+			recordEvalStatus(orgID, err)
+			return
+		}
+		if err := tx.Commit(); err != nil {
+			logging.L.Warn().Err(err).Msg("async mapping eval: commit")
+			recordEvalStatus(orgID, err)
+			return
+		}
+		recordEvalStatus(orgID, nil)
+	}()
 }
 
 // applyTemplate substitutes $N references in a template string with the Nth capture group

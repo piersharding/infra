@@ -540,9 +540,9 @@ func getFieldName(f reflect.StructField, parent reflect.Type) string {
 func validateFieldName(name string) {
 	// temporary allow list
 	switch name {
-	// Allow field names from the mapping_rule model that don't follow standard Go naming conventions.
+	// Allow field names from the mapping_rule model and DB columns that don't follow standard Go naming conventions.
 	case "unique_id", "rule_name", "source_group_regex", "destination_type",
-		"name_template", "namespace_template", "role_template":
+		"name_template", "namespace_template", "role_template", "last_run_at":
 		return
 	}
 

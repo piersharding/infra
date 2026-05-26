@@ -5,7 +5,6 @@ import (
 
 	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/internal/access"
-	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/internal/server/data"
 	"github.com/infrahq/infra/internal/server/models"
 )
@@ -65,13 +64,8 @@ func (a *API) CreateMappingRule(rCtx access.RequestContext, r *api.CreateMapping
 	}
 
 	// A new mapping rule can match already-existing groups, so we re-evaluate to
-	// immediately create the corresponding access grants. If evaluation fails,
-	// the mapping is still saved but an error is returned so the caller knows
-	// the grants may not have been created (a subsequent evaluation will catch up).
-	if err := EvaluateMappingRules(rCtx.DBTxn); err != nil {
-		logging.L.Warn().Err(err).Str("rule", r.RuleName).Msg("error evaluating group mappings after creating mapping")
-		return mapping.ToAPI(), fmt.Errorf("mapping rule created but grant evaluation failed: %w", err)
-	}
+	// immediately create the corresponding access grants.
+	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
 
 	return mapping.ToAPI(), nil
 }
@@ -96,14 +90,27 @@ func (a *API) UpdateMappingRule(rCtx access.RequestContext, r *api.UpdateMapping
 	mapping.ID = r.ID
 
 	// The updated mapping may now match different groups or produce different resource names,
-	// so we re-evaluate to update the grant set accordingly. If evaluation fails, the
-	// mapping is still saved but an error is returned.
-	if err := EvaluateMappingRules(rCtx.DBTxn); err != nil {
-		logging.L.Warn().Err(err).Str("rule", r.RuleName).Msg("error evaluating group mappings after updating mapping")
-		return mapping.ToAPI(), fmt.Errorf("mapping rule updated but grant evaluation failed: %w", err)
-	}
+	// so we re-evaluate to update the grant set accordingly.
+	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
 
 	return mapping.ToAPI(), nil
+}
+
+// GetMappingRuleEvalStatus returns the result of the last async evaluation.
+// Requires InfraViewRole — same as listing rules.
+func (a *API) GetMappingRuleEvalStatus(rCtx access.RequestContext, _ *api.EmptyRequest) (*api.MappingRuleEvalStatus, error) {
+	if err := access.GetMappingRuleEvalStatus(rCtx); err != nil {
+		return nil, err
+	}
+	status := GetEvalStatus(rCtx.DBTxn.OrganizationID())
+	if status == nil {
+		return &api.MappingRuleEvalStatus{}, nil
+	}
+	return &api.MappingRuleEvalStatus{
+		LastRunAt: api.Time(status.LastRunAt),
+		Success:   status.Success,
+		Error:     status.Error,
+	}, nil
 }
 
 // DeleteMappingRule soft-deletes a mapping rule and triggers EvaluateMappingRules to
@@ -116,10 +123,7 @@ func (a *API) DeleteMappingRule(rCtx access.RequestContext, r *api.Resource) (*a
 
 	// Deleting a mapping can revoke access for previously-matched groups, so we
 	// immediately re-run the engine which will detect and remove stale auto-grants.
-	if err := EvaluateMappingRules(rCtx.DBTxn); err != nil {
-		logging.L.Warn().Err(err).Str("mapping_id", r.ID.String()).Msg("error evaluating group mappings after deleting mapping")
-		return &api.EmptyResponse{}, fmt.Errorf("mapping rule deleted but grant cleanup failed: %w", err)
-	}
+	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
 
 	return &api.EmptyResponse{}, nil
 }

@@ -99,8 +99,9 @@ func (s *Server) GenerateRoutes() Routes {
 	put(a, authn, "/api/providers/:id", a.UpdateProvider)
 	del(a, authn, "/api/providers/:id", a.DeleteProvider)
 
-	// Mapping rule CRUD endpoints — admin-only access to manage rule-based grants.
+	// Mapping rule endpoints — admin-only CRUD + eval status (viewable by InfraViewRole).
 	get(a, authn, "/api/mapping-rules", a.ListMappingRules)
+	get(a, authn, "/api/mapping-rules/eval-status", a.GetMappingRuleEvalStatus)
 	get(a, authn, "/api/mapping-rules/:id", a.GetMappingRule)
 	post(a, authn, "/api/mapping-rules", a.CreateMappingRule)
 	put(a, authn, "/api/mapping-rules/:id", a.UpdateMappingRule)

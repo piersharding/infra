@@ -603,20 +603,24 @@ Group Mapping Rules is a rule-based engine that automatically creates access gra
 Admin UI (/mapping-rules) → API handlers (mapping_rules.go)
   → access layer (access/mapping_rule.go, InfraAdminRole)
     → data layer (data/mapping_rule.go)
-      → EvaluateMappingRules (mapping_rule_engine.go)
-        → createOrUpdateGrant + cleanupStaleGrants
+      → EvaluateMappingRulesAsync (mapping_rule_engine.go)  ← async, own txn
+        → EvaluateMappingRules (sync)
+          → createOrUpdateGrant + cleanupStaleGrants
+        → recordEvalStatus → evalStatusStore (in-memory)
 ```
+
+Eval status is exposed via `GET /api/mapping-rules/eval-status` and displayed as a banner in the UI.
 
 ### Key Files
 
 | File | Purpose |
 |---|---|
-| `api/mapping_rule.go` | Request/response types + validation (regex compile check, enum, conditional required) |
+| `api/mapping_rule.go` | Request/response types + validation (regex compile check, enum, conditional required) + `MappingRuleEvalStatus` |
 | `internal/server/models/mapping_rule.go` | `MappingRule` domain model, `DestinationType` enum, `ToAPI()` converter |
 | `internal/server/data/mapping_rule.go` | Data layer CRUD + `mappingRulesTable` implementing the `Table` interface |
-| `internal/server/mapping_rules.go` | HTTP handlers (List/Get/Create/Update/Delete), each triggers `EvaluateMappingRules` |
-| `internal/server/mapping_rule_engine.go` | Core engine: `EvaluateMappingRules`, `applyTemplate`, `createOrUpdateGrant`, `cleanupStaleGrants` |
-| `internal/access/mapping_rule.go` | Authorization: List/Get require `InfraViewRole`, mutations require `InfraAdminRole` |
+| `internal/server/mapping_rules.go` | HTTP handlers (List/Get/Create/Update/Delete/EvalStatus), Create/Update/Delete trigger `EvaluateMappingRulesAsync` |
+| `internal/server/mapping_rule_engine.go` | Core engine: `EvaluateMappingRules`, `EvaluateMappingRulesAsync`, `applyTemplate`, `createOrUpdateGrant`, `cleanupStaleGrants`, `EvalStatusReport` + in-memory status store |
+| `internal/access/mapping_rule.go` | Authorization: all endpoints require `InfraAdminRole` |
 | `internal/server/data/migrations.go` | Migrations: `mapping_rules` table + `auto_grant` column on `grants` + partial index |
 | `internal/server/data/schema.sql` | `mapping_rules` DDL with unique partial index |
 | `internal/connector/ssh.go` | `resolveUsersFromGrants`: resolves group-based grants to individual users |
@@ -627,10 +631,13 @@ Admin UI (/mapping-rules) → API handlers (mapping_rules.go)
 
 ### Engine Behavior
 
-- **Triggered by**: rule CRUD (create/update/delete), group creation, server startup
+- **Triggered by**: rule CRUD (create/update/delete), group creation, server startup, login (to catch IDP-synced groups)
+- **Admin-only**: All mapping rule endpoints require `InfraAdminRole` — the UI already enforces this
+- **Async execution**: All request-triggered evaluations run asynchronously in a background goroutine with their own DB transaction, so the API response is not blocked by evaluation
+- **Eval status visibility**: Result of each async evaluation is recorded in an in-memory `evalStatusStore` and exposed via `GET /api/mapping-rules/eval-status` — the UI shows a success/error banner
 - **Locking**: `pg_try_advisory_xact_lock(orgID)` prevents concurrent evaluation races
 - **Idempotent**: `createOrUpdateGrant` checks for existing grants before creating; marks pre-existing matches as `auto_grant=true`
-- **Auto-grant safety**: Only grants with `AutoGrant=true` AND `CreatedBy=system` are cleaned up. Manually-created grants are never touched.
+- **Auto-grant safety**: Only grants with `AutoGrant=true` (only the mapping engine sets this) are cleaned up. Manually-created grants are never touched.
 - **Graceful degradation**: Invalid regex or template errors are logged and skipped — one bad rule does not crash the engine
 - **Cross-org isolation**: All queries are scoped by `organization_id`
 
@@ -653,8 +660,9 @@ Admin UI (/mapping-rules) → API handlers (mapping_rules.go)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/mapping-rules` | InfraViewRole | List rules (paginated, filterable by name) |
-| GET | `/api/mapping-rules/:id` | InfraViewRole | Get single rule |
+| GET | `/api/mapping-rules` | InfraAdminRole | List rules (paginated, filterable by name) |
+| GET | `/api/mapping-rules/eval-status` | InfraAdminRole | Last async evaluation result (success/error + timestamp) |
+| GET | `/api/mapping-rules/:id` | InfraAdminRole | Get single rule |
 | POST | `/api/mapping-rules` | InfraAdminRole | Create rule (triggers engine) |
 | PUT | `/api/mapping-rules/:id` | InfraAdminRole | Update rule (triggers engine) |
 | DELETE | `/api/mapping-rules/:id` | InfraAdminRole | Delete rule (triggers engine) |
@@ -664,7 +672,7 @@ Admin UI (/mapping-rules) → API handlers (mapping_rules.go)
 - **Mutation of existing grants**: `createOrUpdateGrant` marks pre-existing matching grants as `auto_grant=true`. This is intentional — if a user creates a mapping rule that matches an existing manual grant, the user intends for the rule to manage that grant going forward.
 - **SSH privilege is always "connect"**: The engine hardcodes `privilege = "connect"` for SSH destinations. Role template is not used for SSH.
 - **Kubernetes fallback**: When no `RoleTemplate` is set for a Kubernetes rule, the engine falls back to `"view"` (least-privilege valid RBAC role).
-- **Cleanup scope**: `cleanupStaleGrants` only removes grants where `AutoGrant=true` AND `CreatedBy=system`. Bootstrap grants (`AutoGrant=false`, `CreatedBy=system`) and user-created grants (`CreatedBy != system`) are preserved.
+- **Cleanup scope**: `cleanupStaleGrants` only removes grants where `AutoGrant=true` (only the mapping engine sets this). Bootstrap grants and user-created grants are preserved.
 - **Template syntax**: Only `$N` (bare number) is supported. `${...}` syntax is explicitly rejected with an error. Use `$1`, `$2`, etc. for capture group references.
 
 ### Test Commands

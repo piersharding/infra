@@ -94,7 +94,7 @@ Group Mapping Rules automatically create access grants based on identity provide
 ### How It Works
 
 1. An admin creates a mapping rule with a regex pattern (e.g., `^team-(.*)$`) and templates for the destination name and role
-2. On every group sync, IDP event, and server startup, the engine evaluates all active rules against all groups
+2. On every group sync, IDP event, server startup, and after login, the engine evaluates all active rules against all groups
 3. Groups matching the regex get auto-grants created with `$N` capture group substitution
 4. When a rule is deleted or changed, the engine cleans up stale auto-grants automatically
 
@@ -130,6 +130,8 @@ Given a rule with `^team-(.+)-(.+)$` and input group `team-platform-dev`:
 
 ### Engine Behavior
 
+- **Async execution**: Evaluation runs in a background goroutine so API responses are never blocked by the engine
+- **Eval status visibility**: The Mapping Rules page shows a success/error banner with the timestamp of the last evaluation. The raw status is also available via `GET /api/mapping-rules/eval-status`.
 - **Auto-grant safe**: Engine-created grants are marked `auto_grant=true` and are the only grants eligible for cleanup
 - **Idempotent**: Running the engine multiple times does not create duplicate grants
 - **Graceful degradation**: Invalid regex or template in one rule does not affect other rules

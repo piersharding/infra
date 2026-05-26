@@ -7,21 +7,19 @@ import (
 )
 
 // ListMappingRules checks authorization for listing mapping rules.
-// Requires InfraViewRole or InfraAdminRole — viewers can see the list of rules,
-// but only admins can modify them.
+// Requires InfraAdminRole — mapping rules control access policies.
 func ListMappingRules(rCtx RequestContext) error {
-	if err := IsAuthorized(rCtx, models.InfraViewRole, models.InfraAdminRole); err != nil {
-		return HandleAuthErr(err, "mapping rule", "list", models.InfraViewRole)
+	if err := IsAuthorized(rCtx, models.InfraAdminRole); err != nil {
+		return HandleAuthErr(err, "mapping rule", "list", models.InfraAdminRole)
 	}
 	return nil
 }
 
 // GetMappingRule checks authorization and fetches a single mapping rule by ID.
-// Requires InfraViewRole or InfraAdminRole — viewers can see individual rules,
-// but only admins can modify them.
+// Requires InfraAdminRole — mapping rules control access policies.
 func GetMappingRule(rCtx RequestContext, id uid.ID) (*models.MappingRule, error) {
-	if err := IsAuthorized(rCtx, models.InfraViewRole, models.InfraAdminRole); err != nil {
-		return nil, HandleAuthErr(err, "mapping rule", "get", models.InfraViewRole)
+	if err := IsAuthorized(rCtx, models.InfraAdminRole); err != nil {
+		return nil, HandleAuthErr(err, "mapping rule", "get", models.InfraAdminRole)
 	}
 
 	opts := data.GetMappingRuleOptions{ByID: id}
@@ -50,6 +48,15 @@ func UpdateMappingRule(rCtx RequestContext, id uid.ID, mapping *models.MappingRu
 	}
 	mapping.ID = id
 	return data.UpdateMappingRule(rCtx.DBTxn, mapping)
+}
+
+// GetMappingRuleEvalStatus checks authorization for reading the evaluation status.
+// Requires InfraAdminRole — mapping rules control access policies.
+func GetMappingRuleEvalStatus(rCtx RequestContext) error {
+	if err := IsAuthorized(rCtx, models.InfraAdminRole); err != nil {
+		return HandleAuthErr(err, "mapping rule", "get", models.InfraAdminRole)
+	}
+	return nil
 }
 
 // DeleteMappingRule checks authorization and delegates to the data layer.

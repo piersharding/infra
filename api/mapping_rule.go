@@ -96,6 +96,15 @@ func (r ListMappingRulesRequest) ValidationRules() []validate.ValidationRule {
 	return nil
 }
 
+// MappingRuleEvalStatus is the response body for the eval-status endpoint.
+// It exposes the result of the last asynchronous evaluation so the UI can
+// indicate whether auto-grants were computed successfully.
+type MappingRuleEvalStatus struct {
+	LastRunAt Time   `json:"last_run_at"`
+	Success   bool   `json:"success"`
+	Error     string `json:"error,omitempty"`
+}
+
 // ListMappingRulesResponse is the response body for listing mapping rules.
 type ListMappingRulesResponse struct {
 	Count  int           `json:"count"`
