@@ -191,7 +191,6 @@ CREATE TABLE encryption_keys (
 
 CREATE TABLE grants (
     id bigint NOT NULL,
-    auto_grant boolean DEFAULT false,
     created_at timestamp with time zone,
     updated_at timestamp with time zone,
     deleted_at timestamp with time zone,
@@ -201,24 +200,9 @@ CREATE TABLE grants (
     organization_id bigint,
     update_index bigint,
     subject_id bigint NOT NULL,
-    subject_kind smallint NOT NULL
+    subject_kind smallint NOT NULL,
+    auto_grant boolean DEFAULT false
 );
-
-CREATE TABLE mapping_rules (
-    id             bigint PRIMARY KEY,
-    organization_id bigint NOT NULL,
-    created_at     timestamp with time zone,
-    updated_at     timestamp with time zone,
-    deleted_at     timestamp with time zone,
-    created_by     bigint NOT NULL,
-    rule_name      text NOT NULL,
-    source_group_regex text NOT NULL,
-    destination_type text NOT NULL CHECK (destination_type IN ('kubernetes', 'ssh')),
-    name_template  text NOT NULL,
-    namespace_template text,
-    role_template  text
-);
-CREATE UNIQUE INDEX idx_mapping_rules_rule_name_org_id ON mapping_rules (rule_name, organization_id) WHERE deleted_at IS NULL;
 
 CREATE TABLE groups (
     id bigint NOT NULL,
@@ -248,6 +232,22 @@ CREATE TABLE identities (
 CREATE TABLE identities_groups (
     identity_id bigint NOT NULL,
     group_id bigint NOT NULL
+);
+
+CREATE TABLE mapping_rules (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    deleted_at timestamp with time zone,
+    created_by bigint NOT NULL,
+    rule_name text NOT NULL,
+    source_group_regex text NOT NULL,
+    destination_type text NOT NULL,
+    name_template text NOT NULL,
+    namespace_template text,
+    role_template text,
+    CONSTRAINT mapping_rules_destination_type_check CHECK ((destination_type = ANY (ARRAY['kubernetes'::text, 'ssh'::text])))
 );
 
 CREATE TABLE organizations (
@@ -350,6 +350,9 @@ ALTER TABLE ONLY identities_groups
 ALTER TABLE ONLY identities
     ADD CONSTRAINT identities_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY mapping_rules
+    ADD CONSTRAINT mapping_rules_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY organizations
     ADD CONSTRAINT organizations_pkey PRIMARY KEY (id);
 
@@ -387,19 +390,19 @@ CREATE UNIQUE INDEX idx_emails_providers_identities ON provider_users USING btre
 
 CREATE UNIQUE INDEX idx_encryption_keys_key_id ON encryption_keys USING btree (key_id);
 
+CREATE INDEX idx_grants_auto_grant ON grants USING btree (auto_grant) WHERE (auto_grant = true);
+
 CREATE UNIQUE INDEX idx_grants_subject_privilege_resource ON grants USING btree (organization_id, subject_id, privilege, resource) WHERE (deleted_at IS NULL);
 
 CREATE INDEX idx_grants_update_index ON grants USING btree (organization_id, update_index);
-
--- Partial index to optimize cleanupStaleGrants. Since auto_grant=true implies CreatedBy=system,
--- filtering on created_by is redundant — only the auto_grant column is needed.
-CREATE INDEX idx_grants_auto_grant ON grants (auto_grant) WHERE auto_grant = true;
 
 CREATE UNIQUE INDEX idx_groups_name ON groups USING btree (organization_id, name) WHERE (deleted_at IS NULL);
 
 CREATE UNIQUE INDEX idx_identities_name ON identities USING btree (organization_id, name) WHERE (deleted_at IS NULL);
 
 CREATE UNIQUE INDEX idx_identities_verified ON identities USING btree (organization_id, verification_token) WHERE (deleted_at IS NULL);
+
+CREATE UNIQUE INDEX idx_mapping_rules_rule_name_org_id ON mapping_rules USING btree (rule_name, organization_id) WHERE (deleted_at IS NULL);
 
 CREATE UNIQUE INDEX idx_organizations_domain ON organizations USING btree (domain) WHERE (deleted_at IS NULL);
 

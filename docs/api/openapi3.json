@@ -1298,6 +1298,22 @@
           }
         }
       },
+      "MappingRuleEvalStatus": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "last_run_at": {
+            "description": "formatted as an RFC3339 date-time",
+            "example": "2022-03-14T09:48:00Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
       "Organization": {
         "properties": {
           "allowedDomains": {
@@ -5390,6 +5406,102 @@
           }
         },
         "summary": "CreateMappingRule",
+        "tags": [
+          "Misc"
+        ]
+      }
+    },
+    "/api/mapping-rules/eval-status": {
+      "get": {
+        "description": "GetMappingRuleEvalStatus",
+        "operationId": "GetMappingRuleEvalStatus",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Infra-Version",
+            "required": true,
+            "schema": {
+              "description": "Version of the API being requested",
+              "example": "0.0.0",
+              "format": "\\d+\\.\\d+\\(.\\d+)?(-.\\w(+\\w)?)?",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": true,
+            "schema": {
+              "description": "Bearer followed by your access key",
+              "example": "Bearer ACCESSKEY",
+              "format": "Bearer [\\da-zA-Z]{10}\\.[\\da-zA-Z]{24}",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized: Requestor is not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: Requestor does not have the right permissions"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Duplicate Record"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MappingRuleEvalStatus"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        },
+        "summary": "GetMappingRuleEvalStatus",
         "tags": [
           "Misc"
         ]
