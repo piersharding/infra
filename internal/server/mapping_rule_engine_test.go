@@ -144,8 +144,9 @@ func TestEvaluateMappingRulesKubernetes(t *testing.T) {
 		}
 	}
 
-	// With no K8s destination registered for namespace expansion, only the cluster-level grant is created.
-	assert.Assert(t, len(k8sGroupGrants) >= 1, "expected at least 1 kubernetes group grant (cluster-level), got %d; grants: %+v", len(k8sGroupGrants), allGrants)
+	// With no K8s destination registered for namespace expansion and NamespaceTemplate set,
+	// the engine creates zero grants — only namespaced grants are valid.
+	assert.Assert(t, len(k8sGroupGrants) == 0, "expected 0 kubernetes group grants when namespace expansion has no destination, got %d; grants: %+v", len(k8sGroupGrants), allGrants)
 
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit: %v", err)
@@ -508,21 +509,16 @@ func TestEvaluateMappingRulesK8sWithNamespaceTemplate(t *testing.T) {
 	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	assert.NilError(t, err)
 
-	var foundRegular, foundNamespaced bool
+	var foundNamespaced bool
 	for _, g := range allGrants {
 		if g.Subject.Kind != models.SubjectKindGroup || !g.AutoGrant {
 			continue
 		}
 		switch g.Resource {
-		case "cluster-platform-prod":
-			foundRegular = true
 		case "cluster-platform-prod.ns-platform":
 			foundNamespaced = true
 		}
 	}
-
-	assert.Assert(t, foundRegular,
-		"expected k8s regular grant for team-platform → cluster-platform-prod")
 	assert.Assert(t, foundNamespaced,
 		"expected k8s namespaced grant for team-platform → cluster-platform-prod.ns-platform")
 
@@ -1402,20 +1398,17 @@ func TestEvaluateMappingRulesK8sWithWildcardNamespaceExpansion(t *testing.T) {
 	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
 	assert.NilError(t, err)
 
-	var foundClusterGrant, foundNamespacedGrant bool
+	var foundNamespacedGrant bool
 	for _, g := range allGrants {
 		if !g.AutoGrant || g.Subject.Kind != models.SubjectKindGroup {
 			continue
 		}
 		switch g.Resource {
-		case "cluster-platform":
-			foundClusterGrant = true
 		case "cluster-platform.staging-env":
 			foundNamespacedGrant = true
 		}
 	}
 
-	assert.Assert(t, foundClusterGrant, "expected cluster-level grant for team-platform → cluster-platform")
 	assert.Assert(t, foundNamespacedGrant, "expected namespaced grant for team-platform → cluster-platform.staging-env")
 
 	if err := tx.Commit(); err != nil {

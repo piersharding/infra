@@ -350,11 +350,6 @@ func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.Mapping
 		return
 	}
 
-	if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
-		logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create grant")
-		return
-	}
-
 	if models.DestinationType(mapping.DestinationType) == models.DestinationTypeKubernetes && mapping.NamespaceTemplate != nil && *mapping.NamespaceTemplate != "" {
 		extendedNS, err := applyTemplate(*mapping.NamespaceTemplate, g.Name, re)
 		if err != nil {
@@ -369,6 +364,10 @@ func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.Mapping
 		}
 
 		createNamespacedGrants(tx, orgID, mapping.DestinationType, g.ID, privilege, nsResourceNames)
+	} else {
+		if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
+			logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create grant")
+		}
 	}
 }
 
