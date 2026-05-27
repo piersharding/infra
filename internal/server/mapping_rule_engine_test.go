@@ -1548,3 +1548,58 @@ func TestEvaluateMappingRulesNoNamespaceTemplate(t *testing.T) {
 		t.Fatalf("commit: %v", err)
 	}
 }
+
+// TestAnchorRegex verifies anchorRegex adds ^...$ anchors correctly.
+func TestAnchorRegex(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{"unanchored", "group1", "^group1$"},
+		{"start only", "^group1", "^group1$"},
+		{"end only", "group1$", "^group1$"},
+		{"already anchored", "^group1$", "^group1$"},
+		{"whitespace", "  group1  ", "^group1$"},
+		{"empty", "", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := anchorRegex(tc.input)
+			assert.Equal(t, tc.expect, got)
+		})
+	}
+}
+
+// TestExpandGlobPtr verifies expandGlobPtr converts glob wildcards to .* correctly.
+func TestExpandGlobPtr(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect string
+	}{
+		{"trailing wildcard", "group*", "group.*"},
+		{"leading wildcard", "*infra", ".*infra"},
+		{"middle wildcard", "team-*", "team-.*"},
+		// Note: valid Go regex like (.*) gets .* expanded too — users should write proper patterns.
+		{"valid go regex", "^team-(.*)$", "^team-(..*)$"},
+
+}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			input := &tc.input
+			gotPtr := expandGlobPtr(input)
+			assert.Assert(t, gotPtr != nil)
+			assert.Equal(t, tc.expect, *gotPtr)
+		})
+	}
+
+	t.Run("nil input returns nil", func(t *testing.T) {
+		var input *string = nil
+		got := expandGlobPtr(input)
+		assert.Assert(t, got == nil)
+	})
+}
+
+

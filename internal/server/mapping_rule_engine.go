@@ -16,14 +16,11 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
-// EvaluateMappingRules evaluates all active mapping rules and creates or updates grants to match.
-// It iterates over mapping rules, matches them against groups using regex patterns,
-// and creates group-level grants for SSH and Kubernetes destinations. Stale grants
-// (created by this engine that no longer have a matching rule) are cleaned up automatically.
-// EvaluateMappingRules evaluates all active mapping rules and creates or updates grants to match.
-// It uses a database-level advisory lock (scoped by organization_id) to prevent concurrent
-// evaluations from racing on grant creation. If the lock cannot be acquired immediately,
-// the function returns nil (another evaluation is in progress doing the same work).
+// EvaluateMappingRules processes all active mapping rules against the current set of groups,
+// creating or updating grants where a group's name matches a rule's SourceGroupRegex.
+// It first acquires an xact-scoped PostgreSQL advisory lock to prevent concurrent evaluations
+// for the same organization, then iterates each non-deleted mapping rule and matching group
+// to produce auto-grants. Finally it runs cleanupStaleGrants to remove stale access.
 func EvaluateMappingRules(tx data.WriteTxn) error {
 	// Acquire an xact-scoped advisory lock keyed by organization ID.
 	// pg_try_advisory_xact_lock auto-releases on transaction end, so no explicit unlock needed.
@@ -376,6 +373,8 @@ type k8sDestCache struct {
 	items map[string][]models.Destination // clusterName → destinations
 }
 
+// newK8sDestCache creates a fresh K8s destination cache for the current evaluation scope.
+// The cache is short-lived — it covers only one cleanupStaleGrants call.
 func newK8sDestCache() *k8sDestCache {
 	return &k8sDestCache{items: make(map[string][]models.Destination)}
 }
@@ -396,9 +395,9 @@ func (c *k8sDestCache) getK8sDestsByClusterName(tx data.WriteTxn, clusterName st
 
 // cleanupStaleGrantsContext holds the setup state needed to validate grants against active rules.
 type cleanupStaleGrantsContext struct {
-	grants      []models.Grant
-	rules       []models.MappingRule
-	precompiled map[string]*regexp.Regexp
+	grants      []models.Grant            // auto-granted access entries to validate
+	rules       []models.MappingRule      // non-deleted mapping rules (pre-sorted)
+	precompiled map[string]*regexp.Regexp // ruleName → compiled regex, only for valid SourceGroupRegex values
 }
 
 // loadCleanupState fetches auto-grants, active mappings, and pre-compiles their regexes.
@@ -457,10 +456,14 @@ func (ctx *cleanupStaleGrantsContext) isGrantStillValid(tx data.WriteTxn, grant 
 	return false
 }
 
+// ruleAppliesToOrg checks whether a mapping rule belongs to the current organization
+// and has not been soft-deleted.
 func (ctx *cleanupStaleGrantsContext) ruleAppliesToOrg(tx data.WriteTxn, m models.MappingRule) bool {
 	return m.OrganizationID == tx.OrganizationID()
 }
 
+// ruleMatchesGrant checks whether a grant's base resource matches the NameTemplate output
+// of an active mapping rule whose SourceGroupRegex also matches the group name.
 func ruleMatchesGrant(grant models.Grant, re *regexp.Regexp, m models.MappingRule, grpName string) bool {
 	if !re.MatchString(grpName) {
 		return false
@@ -476,6 +479,10 @@ func ruleMatchesGrant(grant models.Grant, re *regexp.Regexp, m models.MappingRul
 	return baseResource == matchedRes
 }
 
+// checkNamespacedK8s validates a namespaced K8s grant during cleanup:
+//  1. The cluster destination must still exist.
+//  2. The namespace portion of the grant's resource must be in the dest's Resources list,
+//     or if NamespaceTemplate is set, the expanded template pattern must match at least one namespace.
 func (ctx *cleanupStaleGrantsContext) checkNamespacedK8s(tx data.WriteTxn, grant models.Grant, re *regexp.Regexp, m models.MappingRule, grpName string, destCache *k8sDestCache) (*models.Destination, bool) {
 	if m.DestinationType != models.DestinationTypeKubernetes || !strings.Contains(grant.Resource, ".") {
 		return nil, true

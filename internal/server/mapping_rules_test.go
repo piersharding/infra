@@ -3,14 +3,20 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"strings"
+
 	"gotest.tools/v3/assert"
 
 	"github.com/infrahq/infra/api"
+
+	"github.com/infrahq/infra/internal/server/data"
+	"github.com/infrahq/infra/internal/server/models"
 )
 
 // TestAPI_CreateMappingRule verifies validation rules for creating group mappings.
@@ -485,4 +491,102 @@ func TestAPI_ListMappingRulesByNameFilter(t *testing.T) {
 	}
 	json.NewDecoder(respNone.Body).Decode(&noneListResp)
 	assert.Equal(t, len(noneListResp.Items), 0, "expected 0 rules matching 'nonexistent', got %d", len(noneListResp.Items))
+}
+
+// TestAPI_CreateMappingRuleAutoAnchoring verifies that unanchored SourceGroupRegex is anchored by the API handler.
+func TestAPI_CreateMappingRuleAutoAnchoring(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	routes := srv.GenerateRoutes()
+
+	// Create a mapping rule with an UNANCHORED regex — no leading ^.
+	req := api.CreateMappingRuleRequest{
+		RuleName:         "test-anchored",
+		SourceGroupRegex: "team-(.*)$", // intentionally missing ^ anchor
+		DestinationType:  "ssh",
+		NameTemplate:     "host-$1",
+	}
+
+	body := jsonBody(t, &req)
+	resp := httptest.NewRecorder()
+	rReq := httptest.NewRequest(http.MethodPost, "/api/mapping-rules", body)
+	rReq.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
+	rReq.Header.Set("Infra-Version", apiVersionLatest)
+	routes.ServeHTTP(resp, rReq)
+
+	assert.Equal(t, http.StatusCreated, resp.Code, "body: %s", resp.Body.String())
+
+	var created api.MappingRule
+	json.NewDecoder(resp.Body).Decode(&created)
+
+	// The stored regex must have the ^ anchor added.
+	assert.Assert(t, strings.HasPrefix(created.SourceGroupRegex, "^"),
+		"expected SourceGroupRegex to start with ^, got %%q", created.SourceGroupRegex)
+}
+
+// TestAPI_CreateMappingRuleWildcardExpansion verifies that glob wildcards in NamespaceTemplate are expanded before matching.
+func TestEvaluateMappingRulesK8sWithGlobNamespaceTemplate(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	// Create a K8s destination with namespaces that match the glob pattern.
+	k8sDest := &models.Destination{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		Name:               "k8s-glob-test",
+		Kind:               models.DestinationKindKubernetes,
+		Resources:          []string{"default", "kube-system", "infra-prod", "infra-staging"},
+	}
+	assert.NilError(t, data.CreateDestination(tx, k8sDest))
+
+	// Create a mapping rule with glob-style wildcards in NamespaceTemplate.
+	// The wildcard * should be expanded to .* so it matches any prefix before "-prod" or "-staging".
+	nsTemplate := "infra-*" // glob: "infra-" followed by anything
+	mapping := &models.MappingRule{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		RuleName:           "glob-wildcard-rule",
+		SourceGroupRegex:   "^team-(.*)$",
+		DestinationType:    models.DestinationTypeKubernetes,
+		NameTemplate:       "k8s-glob-test",
+		NamespaceTemplate:  &nsTemplate,
+		RoleTemplate:       ptrString("view"),
+	}
+
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
+
+	group := models.Group{
+		Name:               "team-platform",
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &group))
+
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
+	assert.NilError(t, err)
+
+	var foundInfraProd, foundInfraStaging bool
+	for _, g := range allGrants {
+		if !g.AutoGrant || g.Subject.Kind != models.SubjectKindGroup {
+			continue
+		}
+		switch g.Resource {
+		case "k8s-glob-test.infra-prod":
+			foundInfraProd = true
+		case "k8s-glob-test.infra-staging":
+			foundInfraStaging = true
+		}
+	}
+
+	assert.Assert(t, foundInfraProd, "expected namespaced grant for team-platform → k8s-glob-test.infra-prod")
+	assert.Assert(t, foundInfraStaging, "expected namespaced grant for team-platform → k8s-glob-test.infra-staging")
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
 }

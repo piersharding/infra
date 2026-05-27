@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/internal/access"
@@ -46,16 +47,41 @@ func (a *API) GetMappingRule(rCtx access.RequestContext, r *api.Resource) (*api.
 	return mapping.ToAPI(), nil
 }
 
+// anchorRegex ensures the regex is anchored with ^...$ to prevent partial matches.
+// If already anchored on either side, only the missing anchor is added.
+func anchorRegex(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	if !strings.HasPrefix(s, "^") {
+		s = "^" + s
+	}
+	if !strings.HasSuffix(s, "$") {
+		s = s + "$"
+	}
+	return s
+}
+
+// expandGlobPtr applies glob wildcard expansion to a pointer-to-string, returning nil for nil input.
+func expandGlobPtr(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	r := strings.ReplaceAll(*s, "*", ".*")
+	return &r
+}
+
 // CreateMappingRule adds a new mapping rule and immediately triggers EvaluateMappingRules
 // because a new rule can match already-existing groups, creating new access grants.
 // Requires InfraAdminRole.
 func (a *API) CreateMappingRule(rCtx access.RequestContext, r *api.CreateMappingRuleRequest) (*api.MappingRule, error) {
 	mapping := &models.MappingRule{
 		RuleName:          r.RuleName,
-		SourceGroupRegex:  r.SourceGroupRegex,
+		SourceGroupRegex:  anchorRegex(r.SourceGroupRegex),
 		DestinationType:   models.DestinationType(r.DestinationType),
 		NameTemplate:      r.NameTemplate,
-		NamespaceTemplate: r.NamespaceTemplate,
+		NamespaceTemplate: expandGlobPtr(r.NamespaceTemplate),
 		RoleTemplate:      r.RoleTemplate,
 	}
 
@@ -76,10 +102,10 @@ func (a *API) CreateMappingRule(rCtx access.RequestContext, r *api.CreateMapping
 func (a *API) UpdateMappingRule(rCtx access.RequestContext, r *api.UpdateMappingRuleRequest) (*api.MappingRule, error) {
 	mapping := &models.MappingRule{
 		RuleName:          r.RuleName,
-		SourceGroupRegex:  r.SourceGroupRegex,
+		SourceGroupRegex:  anchorRegex(r.SourceGroupRegex),
 		DestinationType:   models.DestinationType(r.DestinationType),
 		NameTemplate:      r.NameTemplate,
-		NamespaceTemplate: r.NamespaceTemplate,
+		NamespaceTemplate: expandGlobPtr(r.NamespaceTemplate),
 		RoleTemplate:      r.RoleTemplate,
 	}
 
