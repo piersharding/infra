@@ -106,6 +106,7 @@ func (s *Server) GenerateRoutes() Routes {
 	post(a, authn, "/api/mapping-rules", a.CreateMappingRule)
 	put(a, authn, "/api/mapping-rules/:id", a.UpdateMappingRule)
 	del(a, authn, "/api/mapping-rules/:id", a.DeleteMappingRule)
+	get(a, authn, "/api/mapping-rules/:id/grants", a.GetMappingRuleGrants)
 
 	// End of mapping rule routes — next route is destinations
 	get(a, authn, "/api/destinations", a.ListDestinations)

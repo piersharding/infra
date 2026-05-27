@@ -22,9 +22,10 @@ import (
 // for the same organization, then iterates each non-deleted mapping rule and matching group
 // to produce auto-grants. Finally it runs cleanupStaleGrants to remove stale access.
 func EvaluateMappingRules(tx data.WriteTxn) error {
+	orgID := tx.OrganizationID()
 	// Acquire an xact-scoped advisory lock keyed by organization ID.
 	// pg_try_advisory_xact_lock auto-releases on transaction end, so no explicit unlock needed.
-	lockKey := int64(tx.OrganizationID())
+	lockKey := int64(orgID)
 	var locked bool
 	if err := tx.QueryRow("SELECT pg_try_advisory_xact_lock($1)", lockKey).Scan(&locked); err != nil {
 		return fmt.Errorf("acquire advisory lock: %w", err)
@@ -34,6 +35,14 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 		logging.L.Debug().Msg("skipping EvaluateMappingRules: another instance holds the lock")
 		return nil
 	}
+
+	// Clear matched groups cache for this org before a fresh run.
+	matchedGroupsCache.Range(func(key, _ any) bool {
+		if k, ok := key.(string); ok && strings.HasPrefix(k, orgID.String()+":") {
+			matchedGroupsCache.Delete(key)
+		}
+		return true
+	})
 
 	mappings, err := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
 	if err != nil {
@@ -47,7 +56,14 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 		return fmt.Errorf("list groups: %w", err)
 	}
 
+	// Ensure every rule has a cache entry (even with zero matched groups) so
+	// the grant-counting path can always find it.
 	for _, mapping := range validMappings {
+		ruleKey := fmt.Sprintf("%s:%s", tx.OrganizationID().String(), mapping.ID)
+		if _, ok := matchedGroupsCache.Load(ruleKey); !ok {
+			matchedGroupsCache.Store(ruleKey, []string{})
+		}
+
 		re, err := regexp.Compile(mapping.SourceGroupRegex)
 		if err != nil {
 			logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Msg("invalid regex in group mapping")
@@ -75,6 +91,11 @@ type EvalStatusReport struct {
 	Success   bool      `json:"success"`
 	Error     string    `json:"error,omitempty"`
 }
+
+// matchedGroupsCache tracks, for each mapping rule in a given org,
+// which group names matched its SourceGroupRegex during the last evaluation.
+// Keyed by (orgID.String(), rule.ID) → []string of matching group names.
+var matchedGroupsCache sync.Map
 
 // evalStatusStore is an in-memory store of the last evaluation result per org.
 // Keyed by orgID uid.ID; values are *EvalStatusReport. Populated by
@@ -335,6 +356,15 @@ func createNamespacedGrants(tx data.WriteTxn, orgID uid.ID, destType models.Dest
 
 // evaluateRuleForGroup processes a single mapping rule against a matching group.
 func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.MappingRule, g models.Group, re *regexp.Regexp) {
+	// Record this group as matched by the rule for later grant counting.
+	ruleKey := fmt.Sprintf("%s:%s", orgID.String(), mapping.ID)
+	var groups []string
+	if val, ok := matchedGroupsCache.Load(ruleKey); ok {
+		groups = val.([]string)
+	}
+	groups = append(groups, g.Name)
+	matchedGroupsCache.Store(ruleKey, groups)
+
 	resourceName, err := applyTemplate(mapping.NameTemplate, g.Name, re)
 	if err != nil {
 		logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to apply destination name template")
@@ -427,7 +457,7 @@ func loadCleanupState(tx data.WriteTxn) (*cleanupStaleGrantsContext, error) {
 }
 
 // getGroupByID looks up a group name by ID.
-func getGroupByID(tx data.WriteTxn, id uid.ID) string {
+func getGroupByID(tx data.ReadTxn, id uid.ID) string {
 	grp, err := data.GetGroup(tx, data.GetGroupOptions{ByID: id})
 	if err == nil && grp != nil {
 		return grp.Name
@@ -558,4 +588,43 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 	}
 
 	return nil
+}
+
+// GetRuleMatchingGrants returns all auto-grants that were created by the given mapping rule.
+// It uses the in-memory matchedGroupsCache (populated during EvaluateMappingRules) to find
+// which group names match this rule, then counts their associated grants.
+func GetRuleMatchingGrants(tx data.ReadTxn, orgID uid.ID, ruleID uid.ID) ([]models.Grant, error) {
+	ruleKey := fmt.Sprintf("%s:%s", orgID.String(), ruleID)
+	val, ok := matchedGroupsCache.Load(ruleKey)
+	if !ok || val == nil {
+		return []models.Grant{}, nil
+	}
+
+	matchedGroupNames := val.([]string)
+	if len(matchedGroupNames) == 0 {
+		return []models.Grant{}, nil
+	}
+
+	autoGrants, err := data.ListAutoGrants(tx)
+	if err != nil {
+		return nil, fmt.Errorf("list auto grants: %w", err)
+	}
+
+	matchedGroups := make(map[string]bool, len(matchedGroupNames))
+	for _, name := range matchedGroupNames {
+		matchedGroups[name] = true
+	}
+
+	var result []models.Grant
+	for _, grant := range autoGrants {
+		if grant.Subject.Kind != models.SubjectKindGroup || grant.Subject.ID == 0 {
+			continue
+		}
+		grpName := getGroupByID(tx, grant.Subject.ID)
+		if matchedGroups[grpName] {
+			result = append(result, grant)
+		}
+	}
+
+	return result, nil
 }

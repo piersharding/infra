@@ -276,16 +276,18 @@ func (s *Server) Run(ctx context.Context) error {
 	group.Go(backgroundJob(ctx, s.db, data.RemoveExpiredPasswordResetTokens, 15*time.Minute))
 	group.Go(backgroundJob(ctx, s.db, data.DeleteExpiredUserPublicKeys, time.Hour))
 
-	// Run a one-time evaluation of group mappings at startup.
-	tx, beginErr := s.db.Begin(context.Background(), nil)
+	// Run a one-time evaluation of group mappings at startup, per-organization.
+	evalTx, beginErr := s.db.Begin(context.Background(), nil)
 	if beginErr != nil {
-		return fmt.Errorf("failed to start transaction for group mapping evaluation: %w", beginErr)
+		return fmt.Errorf("start transaction for mapping rule evaluation: %w", beginErr)
 	}
-	if err := EvaluateMappingRules(tx); err != nil {
-		_ = tx.Rollback()
-		logging.L.Warn().Err(err).Msg("error evaluating mapping rules at startup")
-	} else {
-		_ = tx.Commit()
+	orgs, err := data.ListOrganizations(evalTx, data.ListOrganizationsOptions{})
+	_ = evalTx.Rollback()
+	if err != nil {
+		return fmt.Errorf("list organizations for mapping rule evaluation: %w", err)
+	}
+	for _, org := range orgs {
+		EvaluateMappingRulesAsync(s.db, org.ID)
 	}
 
 	if s.tel != nil {
@@ -307,7 +309,7 @@ func (s *Server) Run(ctx context.Context) error {
 		s.routines[i].stop()
 	}
 
-	err := group.Wait()
+	err = group.Wait()
 	s.tel.Close()
 
 	if err := s.db.Close(); err != nil {

@@ -32,6 +32,21 @@ type MappingRule struct {
 	NameTemplate      string `json:"name_template"`
 	NamespaceTemplate string `json:"namespace_template,omitempty"`
 	RoleTemplate      string `json:"role_template,omitempty"`
+	GrantsCount       int    `json:"grantsCount"` // number of auto-grants created by this rule
+}
+
+// MappingRuleGrant represents a single auto-grant associated with a mapping rule.
+type MappingRuleGrant struct {
+	ID        uid.ID `json:"id"`
+	Subject   string `json:"subject"`
+	Privilege string `json:"privilege"`
+	Resource  string `json:"resource"`
+}
+
+// ListMappingRuleGrantsResponse is the response body for GET /api/mapping-rules/:id/grants.
+type ListMappingRuleGrantsResponse struct {
+	Count int                `json:"count" note:"Total number of grants" example:"10"`
+	Items []MappingRuleGrant `json:"items"`
 }
 
 // CreateMappingRuleRequest is the request body for creating a mapping rule.

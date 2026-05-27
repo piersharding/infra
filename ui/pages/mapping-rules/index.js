@@ -4,12 +4,7 @@ import useSWR, { mutate } from 'swr'
 import { useRouter } from 'next/router'
 import { useState, useMemo, useEffect } from 'react'
 
-import {
-  PlusIcon,
-  PencilIcon,
-  TrashIcon,
-  EyeDropperIcon,
-} from '@heroicons/react/24/outline'
+import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { Dialog } from '@headlessui/react'
 
 import Table from '../../components/table'
@@ -20,10 +15,6 @@ import Notification from '../../components/notification'
 import { useUser } from '../../lib/hooks'
 import { useSearch } from '../../lib/useSearch'
 import { previewRegex, previewTemplate } from '../../lib/mappingRules'
-
-function jsonBody(res) {
-  return res.json()
-}
 
 function AddMappingRuleDialog({ open, setOpen, groups, onMutate }) {
   const [ruleName, setRuleName] = useState('')
@@ -313,7 +304,7 @@ export default function GroupsMapping() {
   const page = Math.max(parseInt(router.query.p) || 1, 1)
   const limit = 50
 
-  const { user, loading, isAdmin, isAdminLoading } = useUser()
+  const { user, isAdmin } = useUser()
 
   // Hide from non-admins — mapping rules control group access policies.
   if (user && !isAdmin) {
@@ -326,7 +317,6 @@ export default function GroupsMapping() {
     searchQuery,
     setSearchQuery,
     executeSearch,
-    buildApiUrl,
     getEmptyMessage,
     getResultMessage,
   } = useSearch()
@@ -483,47 +473,94 @@ export default function GroupsMapping() {
             sourceGroupRegex: m.source_group_regex,
             destinationType:
               m.destination_type === 'kubernetes' ? 'Kubernetes' : 'SSH',
-            nameTemplatePreview: previewTemplate(
+            grantsCount: m.grantsCount ?? 0,
+            templatePreview: previewTemplate(
               m.name_template,
               'team-platform',
               m.source_group_regex
             ),
-            roleTemplatePreview: m.role_template
+            roleTemplate: m.role_template
               ? previewTemplate(
                   m.role_template,
                   'team-platform',
                   m.source_group_regex
                 )
               : '-',
-            namespaceTemplatePreview: m.namespace_template
+            namespaceTemplate: m.namespace_template
               ? previewTemplate(
                   m.namespace_template,
                   'team-platform',
                   m.source_group_regex
                 )
-              : '-',
+              : null,
           }))}
           columns={[
-            { header: () => <span>Rule Name</span>, accessorKey: 'ruleName' },
             {
-              header: () => <span>Group Matching Regex</span>,
-              accessorKey: 'sourceGroupRegex',
+              id: 'ruleName',
+              cell: info => (
+                <div className='flex flex-col gap-1'>
+                  <span className='text-sm font-medium text-gray-900'>
+                    {info.row.original.ruleName}
+                  </span>
+                  <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-2xs font-mono text-gray-600'>
+                    {info.row.original.sourceGroupRegex}
+                  </code>
+                </div>
+              ),
+              header: () => <span>Rule Name</span>,
             },
             {
-              header: () => <span>Destination Type</span>,
+              id: 'destinationType',
+              cell: info => (
+                <span className='hidden lg:inline'>{info.getValue()}</span>
+              ),
+              header: () => <span>Type</span>,
               accessorKey: 'destinationType',
             },
             {
-              header: () => <span>Destination Name Template</span>,
-              accessorKey: 'nameTemplatePreview',
+              id: 'template',
+              cell: info => {
+                const m = info.row.original
+                return (
+                  <div className='flex flex-col gap-1'>
+                    <span className='text-xs text-gray-900 font-medium'>
+                      Destination
+                    </span>
+                    <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
+                      {m.templatePreview}
+                    </code>
+                    {m.roleTemplate && m.roleTemplate !== '-' && (
+                      <>
+                        <span className='text-xs text-gray-900 font-medium'>
+                          Role
+                        </span>
+                        <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
+                          {m.roleTemplate}
+                        </code>
+                      </>
+                    )}
+                    {m.namespaceTemplate && (
+                      <>
+                        <span className='text-xs text-gray-900 font-medium'>
+                          Namespace
+                        </span>
+                        <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
+                          {m.namespaceTemplate}
+                        </code>
+                      </>
+                    )}
+                  </div>
+                )
+              },
+              header: () => <span>Target</span>,
             },
             {
-              header: () => <span>Role Template</span>,
-              accessorKey: 'roleTemplatePreview',
-            },
-            {
-              header: () => <span>Namespace Template Regex</span>,
-              accessorKey: 'namespaceTemplatePreview',
+              id: 'grantsCount',
+              accessorKey: 'grantsCount',
+              cell: info => (
+                <span className='text-xs text-gray-600'>{info.getValue()}</span>
+              ),
+              header: () => <span>Grants</span>,
             },
             {
               id: 'delete',

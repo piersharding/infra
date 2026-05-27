@@ -1584,8 +1584,7 @@ func TestExpandGlobPtr(t *testing.T) {
 		{"middle wildcard", "team-*", "team-.*"},
 		// Note: valid Go regex like (.*) gets .* expanded too — users should write proper patterns.
 		{"valid go regex", "^team-(.*)$", "^team-(..*)$"},
-
-}
+	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			input := &tc.input
@@ -1601,5 +1600,3 @@ func TestExpandGlobPtr(t *testing.T) {
 		assert.Assert(t, got == nil)
 	})
 }
-
-

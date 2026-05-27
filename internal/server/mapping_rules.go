@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/infrahq/infra/api"
@@ -29,8 +30,31 @@ func (a *API) ListMappingRules(rCtx access.RequestContext, r *api.ListMappingRul
 	}
 
 	result := api.NewListResponse(mappings, PaginationToResponse(p), func(mapping models.MappingRule) api.MappingRule {
+		ruleKey := fmt.Sprintf("%s:%s", rCtx.DBTxn.OrganizationID().String(), mapping.ID)
+		var grantsCount int
+		if val, ok := matchedGroupsCache.Load(ruleKey); ok && val != nil {
+			matchedGroupNames := val.([]string)
+			autoGrants, err := data.ListAutoGrants(rCtx.DBTxn)
+			if err == nil {
+				matchedSet := make(map[string]bool, len(matchedGroupNames))
+				for _, name := range matchedGroupNames {
+					matchedSet[name] = true
+				}
+				for _, grant := range autoGrants {
+					if grant.Subject.Kind != models.SubjectKindGroup || grant.Subject.ID == 0 {
+						continue
+					}
+					grpName := getGroupByID(rCtx.DBTxn, grant.Subject.ID)
+					if matchedSet[grpName] {
+						grantsCount++
+					}
+				}
+			}
+		}
 		m := mapping
-		return *m.ToAPI()
+		apiRule := *m.ToAPI()
+		apiRule.GrantsCount = grantsCount
+		return apiRule
 	})
 
 	return result, nil
@@ -152,4 +176,55 @@ func (a *API) DeleteMappingRule(rCtx access.RequestContext, r *api.Resource) (*a
 	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
 
 	return &api.EmptyResponse{}, nil
+}
+
+// GetMappingRuleGrants returns all auto-grants that were created by the given mapping rule.
+// Requires InfraAdminRole. Returns grants sorted by subject name, then resource.
+func (a *API) GetMappingRuleGrants(rCtx access.RequestContext, r *api.Resource) (*api.ListMappingRuleGrantsResponse, error) {
+	if err := access.GetMappingRuleEvalStatus(rCtx); err != nil {
+		return nil, err
+	}
+
+	autoGrants, err := data.ListAutoGrants(rCtx.DBTxn)
+	if err != nil {
+		return nil, fmt.Errorf("list auto grants: %w", err)
+	}
+
+	ruleKey := fmt.Sprintf("%s:%s", rCtx.DBTxn.OrganizationID().String(), r.ID)
+	val, ok := matchedGroupsCache.Load(ruleKey)
+	if !ok || val == nil {
+		return &api.ListMappingRuleGrantsResponse{Count: 0, Items: []api.MappingRuleGrant{}}, nil
+	}
+
+	matchedGroupNames := val.([]string)
+	matchedSet := make(map[string]bool, len(matchedGroupNames))
+	for _, name := range matchedGroupNames {
+		matchedSet[name] = true
+	}
+
+	var result []api.MappingRuleGrant
+	for _, grant := range autoGrants {
+		if grant.Subject.Kind != models.SubjectKindGroup || grant.Subject.ID == 0 {
+			continue
+		}
+		grpName := getGroupByID(rCtx.DBTxn, grant.Subject.ID)
+		if !matchedSet[grpName] {
+			continue
+		}
+		result = append(result, api.MappingRuleGrant{
+			ID:        grant.ID,
+			Subject:   grpName,
+			Privilege: grant.Privilege,
+			Resource:  grant.Resource,
+		})
+	}
+
+	slices.SortFunc(result, func(a, b api.MappingRuleGrant) int {
+		if c := strings.Compare(a.Subject, b.Subject); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Resource, b.Resource)
+	})
+
+	return &api.ListMappingRuleGrantsResponse{Count: len(result), Items: result}, nil
 }
