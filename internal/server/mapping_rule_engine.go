@@ -43,12 +43,7 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 		return fmt.Errorf("list mapping rules: %w", err)
 	}
 
-	var validMappings []models.MappingRule
-	for _, m := range mappings {
-		if !m.DeletedAt.Valid {
-			validMappings = append(validMappings, m)
-		}
-	}
+	validMappings := filterValidMappings(mappings)
 
 	groups, err := data.ListGroups(tx, data.ListGroupsOptions{})
 	if err != nil {
@@ -68,60 +63,7 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 				continue // no match — skip this group for this rule
 			}
 
-			resourceName, err := applyTemplate(mapping.NameTemplate, g.Name, re)
-			if err != nil {
-				logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to apply destination name template")
-				continue
-			}
-
-			var privilege string
-			switch models.DestinationType(mapping.DestinationType) {
-			case models.DestinationTypeSSH:
-				privilege = "connect"
-			case models.DestinationTypeKubernetes:
-				if mapping.RoleTemplate != nil && *mapping.RoleTemplate != "" {
-					role, err := applyTemplate(*mapping.RoleTemplate, g.Name, re)
-					if err != nil {
-						logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to apply role template")
-						continue
-					}
-					privilege = role
-				} else {
-					privilege = "view" // Infra requires a valid RBAC role; "view" is the least-privileged option
-				}
-			default:
-				logging.L.Warn().Str("type", string(mapping.DestinationType)).Msg("unknown destination type")
-				continue
-			}
-
-			if err := createOrUpdateGrant(tx, tx.OrganizationID(), mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
-				logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create grant")
-			}
-
-			// Kubernetes destinations can be scoped to specific namespaces via NamespaceTemplate.
-			// When set, the engine queries the destination for its live namespace list,
-			// compiles the template result as a regex pattern, and creates one grant per
-			// matching namespace: resource = "<cluster>.<namespace>".
-			if models.DestinationType(mapping.DestinationType) == models.DestinationTypeKubernetes && mapping.NamespaceTemplate != nil && *mapping.NamespaceTemplate != "" {
-				// First apply $N capture group references in NamespaceTemplate.
-				extendedNS, err := applyTemplate(*mapping.NamespaceTemplate, g.Name, re)
-				if err != nil {
-					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to expand namespace template with capture groups")
-					continue
-				}
-
-				nsResourceNames, err := expandNamespaceTemplate(tx, resourceName, extendedNS)
-				if err != nil {
-					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to expand namespace template")
-					continue
-				}
-
-				for _, nsResource := range nsResourceNames {
-					if err := createOrUpdateGrant(tx, tx.OrganizationID(), mapping.DestinationType, g.ID, privilege, nsResource); err != nil {
-						logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create namespaced grant")
-					}
-				}
-			}
+			evaluateRuleForGroup(tx, tx.OrganizationID(), mapping, g, re)
 		}
 	}
 
@@ -298,6 +240,20 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 	return nil
 }
 
+// fetchK8sDestsByClusterName looks up K8s destinations by cluster name.
+func fetchK8sDestination(tx data.WriteTxn, clusterName string) ([]models.Destination, error) {
+	destinations, err := data.ListDestinations(tx, data.ListDestinationsOptions{ByKind: "kubernetes", ByName: clusterName})
+	if err != nil {
+		return nil, fmt.Errorf("query k8s destinations for %q: %w", clusterName, err)
+	}
+
+	if len(destinations) == 0 {
+		logging.L.Warn().Str("cluster", clusterName).Msg("k8s destination not found; skipping namespace expansion")
+	}
+
+	return destinations, nil
+}
+
 // cleanupStaleGrants runs after EvaluateMappingRules to remove stale auto-granted access
 // for rules that are being removed or changed. It queries only grants with AutoGrant=true
 // (set exclusively by the mapping engine) whose resource name doesn't match any active
@@ -311,7 +267,7 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 // Each result has the form "<cluster>.<namespace>". If the destination doesn't exist
 // or is disconnected, it logs a warning and returns nil (graceful degradation).
 func expandNamespaceTemplate(tx data.WriteTxn, clusterName, expandedPattern string) ([]string, error) {
-	destinations, err := data.ListDestinations(tx, data.ListDestinationsOptions{ByKind: "kubernetes", ByName: clusterName})
+	destinations, err := fetchK8sDestination(tx, clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("query k8s destinations for %q: %w", clusterName, err)
 	}
@@ -340,19 +296,124 @@ func expandNamespaceTemplate(tx data.WriteTxn, clusterName, expandedPattern stri
 	return matchedResources, nil
 }
 
-func cleanupStaleGrants(tx data.WriteTxn) error {
+// filterValidMappings returns only non-deleted mappings from the given list.
+func filterValidMappings(mappings []models.MappingRule) []models.MappingRule {
+	var valid []models.MappingRule
+	for _, m := range mappings {
+		if !m.DeletedAt.Valid {
+			valid = append(valid, m)
+		}
+	}
+	return valid
+}
+
+// resolvePrivilege determines the privilege string for a mapping rule.
+// SSH always maps to "connect"; K8s uses RoleTemplate (applied via template), falling back to "view".
+func resolvePrivilege(mapping models.MappingRule, grpName string, re *regexp.Regexp) (string, error) {
+	switch models.DestinationType(mapping.DestinationType) {
+	case models.DestinationTypeSSH:
+		return "connect", nil
+	case models.DestinationTypeKubernetes:
+		if mapping.RoleTemplate != nil && *mapping.RoleTemplate != "" {
+			role, err := applyTemplate(*mapping.RoleTemplate, grpName, re)
+			if err != nil {
+				return "", fmt.Errorf("apply role template: %w", err)
+			}
+			return role, nil
+		}
+		return "view", nil // least-privileged valid RBAC role
+	default:
+		return "", fmt.Errorf("unknown destination type: %s", mapping.DestinationType)
+	}
+}
+
+// createNamespacedGrants creates auto-grants for each namespaced resource.
+func createNamespacedGrants(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege string, nsResources []string) {
+	for _, nsResource := range nsResources {
+		if err := createOrUpdateGrant(tx, orgID, destType, subjectID, privilege, nsResource); err != nil {
+			logging.L.Warn().Err(err).Str("group", subjectID.String()).Msg("failed to create namespaced grant")
+		}
+	}
+}
+
+// evaluateRuleForGroup processes a single mapping rule against a matching group.
+func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.MappingRule, g models.Group, re *regexp.Regexp) {
+	resourceName, err := applyTemplate(mapping.NameTemplate, g.Name, re)
+	if err != nil {
+		logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to apply destination name template")
+		return
+	}
+
+	privilege, err := resolvePrivilege(mapping, g.Name, re)
+	if err != nil {
+		logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to resolve privilege")
+		return
+	}
+
+	if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
+		logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create grant")
+		return
+	}
+
+	if models.DestinationType(mapping.DestinationType) == models.DestinationTypeKubernetes && mapping.NamespaceTemplate != nil && *mapping.NamespaceTemplate != "" {
+		extendedNS, err := applyTemplate(*mapping.NamespaceTemplate, g.Name, re)
+		if err != nil {
+			logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to expand namespace template with capture groups")
+			return
+		}
+
+		nsResourceNames, err := expandNamespaceTemplate(tx, resourceName, extendedNS)
+		if err != nil {
+			logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to expand namespace template")
+			return
+		}
+
+		createNamespacedGrants(tx, orgID, mapping.DestinationType, g.ID, privilege, nsResourceNames)
+	}
+}
+
+// k8sDestCache memoizes K8s destination lookups by cluster name.
+type k8sDestCache struct {
+	items map[string][]models.Destination // clusterName → destinations
+}
+
+func newK8sDestCache() *k8sDestCache {
+	return &k8sDestCache{items: make(map[string][]models.Destination)}
+}
+
+// getK8sDestsByClusterName returns K8s destinations matching the given cluster name,
+// fetching from DB on cache miss. Delegates to fetchK8sDestination for actual I/O.
+func (c *k8sDestCache) getK8sDestsByClusterName(tx data.WriteTxn, clusterName string) ([]models.Destination, error) {
+	if dests, ok := c.items[clusterName]; ok {
+		return dests, nil
+	}
+	dests, err := fetchK8sDestination(tx, clusterName)
+	if err != nil {
+		return nil, err
+	}
+	c.items[clusterName] = dests
+	return dests, nil
+}
+
+// cleanupStaleGrantsContext holds the setup state needed to validate grants against active rules.
+type cleanupStaleGrantsContext struct {
+	grants      []models.Grant
+	rules       []models.MappingRule
+	precompiled map[string]*regexp.Regexp
+}
+
+// loadCleanupState fetches auto-grants, active mappings, and pre-compiles their regexes.
+func loadCleanupState(tx data.WriteTxn) (*cleanupStaleGrantsContext, error) {
 	grants, err := data.ListAutoGrants(tx)
 	if err != nil {
-		return fmt.Errorf("list auto-grants for cleanup: %w", err)
+		return nil, fmt.Errorf("list auto-grants for cleanup: %w", err)
 	}
 
-	// Fetch active mappings once — avoiding a database query per grant.
 	mappings, err := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
 	if err != nil {
-		return fmt.Errorf("list group mappings for cleanup: %w", err)
+		return nil, fmt.Errorf("list group mappings for cleanup: %w", err)
 	}
 
-	// Pre-compile all mapping rule regexes to avoid recompiling them per-grant.
 	precompiled := make(map[string]*regexp.Regexp, len(mappings))
 	for _, m := range mappings {
 		if re, err := regexp.Compile(m.SourceGroupRegex); err == nil {
@@ -360,104 +421,129 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 		}
 	}
 
-	for _, grant := range grants {
-		// Only clean up auto-grants created by previous mapping rules.
-		// Grants with AutoGrant=false are bootstrap or manual access — always preserve them.
+	return &cleanupStaleGrantsContext{
+		grants:      grants,
+		rules:       mappings,
+		precompiled: precompiled,
+	}, nil
+}
+
+// getGroupByID looks up a group name by ID.
+func getGroupByID(tx data.WriteTxn, id uid.ID) string {
+	grp, err := data.GetGroup(tx, data.GetGroupOptions{ByID: id})
+	if err == nil && grp != nil {
+		return grp.Name
+	}
+	return ""
+}
+
+// isGrantStillValid checks whether a single auto-grant is still covered by any active mapping rule.
+func (ctx *cleanupStaleGrantsContext) isGrantStillValid(tx data.WriteTxn, grant models.Grant, grpName string, destCache *k8sDestCache) bool {
+	for _, m := range ctx.rules {
+		if !ctx.ruleAppliesToOrg(tx, m) || m.DeletedAt.Valid {
+			continue
+		}
+		re, ok := ctx.precompiled[m.RuleName]
+		if !ok || grpName == "" {
+			continue
+		}
+		if !ruleMatchesGrant(grant, re, m, grpName) {
+			continue
+		}
+		if _, nsValid := ctx.checkNamespacedK8s(tx, grant, re, m, grpName, destCache); !nsValid {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+func (ctx *cleanupStaleGrantsContext) ruleAppliesToOrg(tx data.WriteTxn, m models.MappingRule) bool {
+	return m.OrganizationID == tx.OrganizationID()
+}
+
+func ruleMatchesGrant(grant models.Grant, re *regexp.Regexp, m models.MappingRule, grpName string) bool {
+	if !re.MatchString(grpName) {
+		return false
+	}
+	matchedRes, err := applyTemplate(m.NameTemplate, grpName, re)
+	if err != nil {
+		return false
+	}
+	baseResource := grant.Resource
+	if idx := strings.LastIndex(grant.Resource, "."); idx != -1 {
+		baseResource = grant.Resource[:idx]
+	}
+	return baseResource == matchedRes
+}
+
+func (ctx *cleanupStaleGrantsContext) checkNamespacedK8s(tx data.WriteTxn, grant models.Grant, re *regexp.Regexp, m models.MappingRule, grpName string, destCache *k8sDestCache) (*models.Destination, bool) {
+	if m.DestinationType != models.DestinationTypeKubernetes || !strings.Contains(grant.Resource, ".") {
+		return nil, true
+	}
+
+	namespace := grant.Resource[strings.LastIndex(grant.Resource, ".")+1:]
+	baseResource := grant.Resource[:strings.LastIndex(grant.Resource, ".")]
+
+	dests, err := destCache.getK8sDestsByClusterName(tx, baseResource)
+	if err != nil || len(dests) == 0 {
+		return nil, false
+	}
+	dest := &dests[0]
+
+	namespaceFound := false
+	for _, ns := range dest.Resources {
+		if ns == namespace {
+			namespaceFound = true
+			break
+		}
+	}
+	if !namespaceFound {
+		return dest, false
+	}
+
+	if m.NamespaceTemplate != nil && *m.NamespaceTemplate != "" {
+		extended, err := applyTemplate(*m.NamespaceTemplate, grpName, re)
+		if err == nil {
+			patternRegex, err2 := regexp.Compile(extended)
+			if err2 == nil {
+				hasMatch := false
+				for _, ns := range dest.Resources {
+					if patternRegex.MatchString(ns) {
+						hasMatch = true
+						break
+					}
+				}
+				if !hasMatch {
+					return dest, false
+				}
+			}
+		}
+	}
+
+	return dest, true
+}
+
+// cleanupStaleGrants removes auto-granted access that no longer matches any active mapping rule.
+func cleanupStaleGrants(tx data.WriteTxn) error {
+	ctx, err := loadCleanupState(tx)
+	if err != nil {
+		return err
+	}
+
+	destCache := newK8sDestCache()
+
+	for _, grant := range ctx.grants {
 		if !grant.AutoGrant {
 			continue
 		}
 
-		// Check if the group that owns this grant is still covered by an active mapping rule.
-		matched := false
-
-		// Get the group name to check against mapping rule patterns.
-		grpName := ""
+		var grpName string
 		if grant.Subject.Kind == models.SubjectKindGroup && grant.Subject.ID != 0 {
-			grp, err2 := data.GetGroup(tx, data.GetGroupOptions{ByID: grant.Subject.ID})
-			if err2 == nil && grp != nil {
-				grpName = grp.Name
-			}
+			grpName = getGroupByID(tx, grant.Subject.ID)
 		}
 
-		for _, m := range mappings {
-			if m.OrganizationID == tx.OrganizationID() && !m.DeletedAt.Valid {
-				re, ok := precompiled[m.RuleName]
-				if !ok || grpName == "" {
-					continue
-				}
-				// If this grant's group matches the rule pattern and would produce a matching resource,
-				// keep it. For namespaced K8s grants (resource.namespace), check both base resource
-				// AND that the namespace part still exists in the destination's live Resources list.
-				if re.MatchString(grpName) {
-					baseResource := grant.Resource
-					namespacePart := ""
-					if idx := strings.LastIndex(grant.Resource, "."); idx != -1 {
-						baseResource = grant.Resource[:idx]
-						namespacePart = grant.Resource[idx+1:]
-					}
-
-					matchedRes, err3 := applyTemplate(m.NameTemplate, grpName, re)
-					if err3 != nil {
-						continue
-					}
-
-					// Base resource must match the cluster name.
-					if baseResource != matchedRes {
-						continue
-					}
-
-					matched = true
-
-					// For namespaced K8s grants, also verify the namespace part still exists in the destination.
-					if m.DestinationType == models.DestinationTypeKubernetes && namespacePart != "" {
-						namespaces, err4 := data.ListDestinations(tx, data.ListDestinationsOptions{ByKind: "kubernetes", ByName: matchedRes})
-						if err4 != nil || len(namespaces) == 0 {
-							// Destination not found — grant is stale.
-							matched = false
-							continue
-						}
-
-						dest := namespaces[0]
-						namespaceFound := false
-						for _, ns := range dest.Resources {
-							if ns == namespacePart {
-								namespaceFound = true
-								break
-							}
-						}
-
-						// Also verify the rule's NamespaceTemplate still matches at least one live namespace.
-						hasActiveRule := true
-						if m.NamespaceTemplate != nil && *m.NamespaceTemplate != "" {
-							expanded, err5 := applyTemplate(*m.NamespaceTemplate, grpName, re)
-							if err5 == nil {
-								patternRegex, err6 := regexp.Compile(expanded)
-								if err6 == nil {
-									hasMatch := false
-									for _, ns := range dest.Resources {
-										if patternRegex.MatchString(ns) {
-											hasMatch = true
-											break
-										}
-									}
-									if !hasMatch {
-										hasActiveRule = false
-									}
-								}
-							}
-						}
-
-						// Grant is valid only if namespace exists AND rule still has active matches.
-						if !namespaceFound || !hasActiveRule {
-							matched = false
-						} else {
-							matched = true
-						}
-					}
-				}
-			}
-		}
-
+		matched := ctx.isGrantStillValid(tx, grant, grpName, destCache)
 		if !matched {
 			if err := data.DeleteGrants(tx, data.DeleteGrantsOptions{ByID: grant.ID}); err != nil {
 				logging.L.Warn().Err(err).Str("grant", grant.ID.String()).Msg("failed to delete stale auto-grant")
