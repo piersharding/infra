@@ -457,6 +457,9 @@
           "items": {
             "items": {
               "properties": {
+                "groupName": {
+                  "type": "string"
+                },
                 "id": {
                   "example": "4yJ3n3D8E2",
                   "format": "uid",
@@ -467,9 +470,6 @@
                   "type": "string"
                 },
                 "resource": {
-                  "type": "string"
-                },
-                "subject": {
                   "type": "string"
                 }
               },
@@ -905,15 +905,34 @@
                 "destination_type": {
                   "type": "string"
                 },
-                "grantsCount": {
-                  "format": "int",
-                  "type": "integer"
-                },
                 "id": {
                   "example": "4yJ3n3D8E2",
                   "format": "uid",
                   "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
                   "type": "string"
+                },
+                "matchedGrants": {
+                  "items": {
+                    "properties": {
+                      "groupName": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "example": "4yJ3n3D8E2",
+                        "format": "uid",
+                        "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                        "type": "string"
+                      },
+                      "privilege": {
+                        "type": "string"
+                      },
+                      "resource": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
                 },
                 "name_template": {
                   "type": "string"
@@ -1306,15 +1325,34 @@
           "destination_type": {
             "type": "string"
           },
-          "grantsCount": {
-            "format": "int",
-            "type": "integer"
-          },
           "id": {
             "example": "4yJ3n3D8E2",
             "format": "uid",
             "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
             "type": "string"
+          },
+          "matchedGrants": {
+            "items": {
+              "properties": {
+                "groupName": {
+                  "type": "string"
+                },
+                "id": {
+                  "example": "4yJ3n3D8E2",
+                  "format": "uid",
+                  "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                  "type": "string"
+                },
+                "privilege": {
+                  "type": "string"
+                },
+                "resource": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
           },
           "name_template": {
             "type": "string"

@@ -48,6 +48,8 @@ LINT_ARGS ?= --fix
 
 clean: clean-oci clean-secrets
 
+deploy-local: test-all build docker-build dev-oci dev-connector
+
 docker-login:
 	docker login $(DOCKER_HOST) -u$(REPOSITORY_USER) -p $(GITLAB_TOKEN)
 
@@ -78,10 +80,11 @@ GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(BUILDVER
 					-X github.com/infrahq/infra/internal.TelemetryWriteKey="none" \
 					-linkmode external -extldflags "-static"
 build: ## build infra
-	mkdir -p bin && rm -rf bin/infra
+	mkdir -p bin && rm -rf bin/infra && rm -f dist/infra_linux_amd64_v1/infra
 	CGO_ENABLED=1 GOOS=linux go build -o bin/infra -ldflags '$(GO_BUILD_LDFLAGS)' .
 	ls -latr bin/
 	./bin/infra --help
+	cp ./bin/infra ./dist/infra_linux_amd64_v1/infra
 
 .PHONY: bin/infra
 bin/infra: build ## build local bin/infra

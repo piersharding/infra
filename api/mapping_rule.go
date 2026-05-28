@@ -23,22 +23,22 @@ func ptrVal(p *string) string {
 //   - namespace_template (optional, k8s only): template for Kubernetes namespace scoping
 //   - role_template (required for k8s): template for the RBAC role name
 type MappingRule struct {
-	ID                uid.ID `json:"id"`
-	Created           Time   `json:"created"`
-	Updated           Time   `json:"updated"`
-	RuleName          string `json:"rule_name"`
-	SourceGroupRegex  string `json:"source_group_regex"`
-	DestinationType   string `json:"destination_type"`
-	NameTemplate      string `json:"name_template"`
-	NamespaceTemplate string `json:"namespace_template,omitempty"`
-	RoleTemplate      string `json:"role_template,omitempty"`
-	GrantsCount       int    `json:"grantsCount"` // number of auto-grants created by this rule
+	ID                uid.ID             `json:"id"`
+	Created           Time               `json:"created"`
+	Updated           Time               `json:"updated"`
+	RuleName          string             `json:"rule_name"`
+	SourceGroupRegex  string             `json:"source_group_regex"`
+	DestinationType   string             `json:"destination_type"`
+	NameTemplate      string             `json:"name_template"`
+	NamespaceTemplate string             `json:"namespace_template,omitempty"`
+	RoleTemplate      string             `json:"role_template,omitempty"`
+	MatchedGrants     []MappingRuleGrant `json:"matchedGrants"` // matched grants with privilege/resource details
 }
 
 // MappingRuleGrant represents a single auto-grant associated with a mapping rule.
 type MappingRuleGrant struct {
 	ID        uid.ID `json:"id"`
-	Subject   string `json:"subject"`
+	GroupName string `json:"groupName"`
 	Privilege string `json:"privilege"`
 	Resource  string `json:"resource"`
 }

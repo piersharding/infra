@@ -2,7 +2,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import useSWR, { mutate } from 'swr'
 import { useRouter } from 'next/router'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { Dialog } from '@headlessui/react'
@@ -473,7 +473,7 @@ export default function GroupsMapping() {
             sourceGroupRegex: m.source_group_regex,
             destinationType:
               m.destination_type === 'kubernetes' ? 'Kubernetes' : 'SSH',
-            grantsCount: m.grantsCount ?? 0,
+            matchedGrants: m.matchedGrants || [],
             templatePreview: previewTemplate(
               m.name_template,
               'team-platform',
@@ -555,11 +555,115 @@ export default function GroupsMapping() {
               header: () => <span>Target</span>,
             },
             {
-              id: 'grantsCount',
-              accessorKey: 'grantsCount',
-              cell: info => (
-                <span className='text-xs text-gray-600'>{info.getValue()}</span>
-              ),
+              id: 'matchedGrants',
+              cell: info => {
+                const matchedGrants = info.row.original.matchedGrants || []
+                const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 })
+                const [vw, setVw] = useState(window.innerWidth)
+                const tableWrapperRef = useRef(null)
+                const containerRef = useRef(null)
+                const buttonRef = useRef(null)
+
+                useEffect(() => {
+                  if (!buttonRef.current) return
+                  const triggerRect = buttonRef.current.getBoundingClientRect()
+                  // Walk up to find the Table component's wrapper div (overflow-x-auto).
+                  let el = buttonRef.current.parentElement
+                  while (
+                    el &&
+                    !el.classList.contains('overflow-x-auto') &&
+                    el !== document.body
+                  ) {
+                    el = el.parentElement
+                  }
+                  if (el) tableWrapperRef.current = el
+                  setHoverPos({
+                    x: triggerRect.left,
+                    y: triggerRect.bottom + window.scrollY,
+                  })
+                }, [matchedGrants])
+
+                useEffect(() => {
+                  const handleResize = () => setVw(window.innerWidth)
+                  window.addEventListener('resize', handleResize)
+                  return () =>
+                    window.removeEventListener('resize', handleResize)
+                }, [])
+
+                return (
+                  <div className='relative group'>
+                    <span
+                      ref={buttonRef}
+                      className='text-xs font-medium text-gray-600 hover:text-blue-600 transition-colors cursor-default'
+                    >
+                      {matchedGrants.length}
+                    </span>
+                    {matchedGrants.length > 0 && (
+                      <div
+                        ref={containerRef}
+                        className='pointer-events-none group-hover:pointer-events-auto fixed z-10 mt-2 w-max min-h-fit rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-xl opacity-0 transition-opacity group-hover:opacity-100'
+                        style={{
+                          right: tableWrapperRef.current
+                            ? `${tableWrapperRef.current.getBoundingClientRect().right}px`
+                            : undefined,
+                          left:
+                            tableWrapperRef.current && containerRef.current
+                              ? Math.max(
+                                  tableWrapperRef.current.getBoundingClientRect()
+                                    .right -
+                                    (containerRef.current?.offsetWidth || 480),
+                                  12
+                                )
+                              : undefined,
+                          top: hoverPos.y,
+                          // eslint-disable-next-line react-hooks/exhaustive-deps
+                          '--vw': vw,
+                        }}
+                      >
+                        <table className='w-max text-xs'>
+                          <thead>
+                            <tr className='border-b border-gray-200'>
+                              <th className='px-3 py-1.5 text-left font-medium text-gray-500'>
+                                Group
+                              </th>
+                              <th className='px-3 py-1.5 w-[80px] text-left font-medium text-gray-500'>
+                                Permission
+                              </th>
+                              <th className='px-3 py-1.5 text-left font-medium text-gray-500'>
+                                Destination
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {matchedGrants.map((g, i) => (
+                              <tr
+                                key={i}
+                                className='border-b border-gray-100 last:border-b-0'
+                              >
+                                <td
+                                  className='px-3 py-1.5 text-gray-900'
+                                  title={g.groupName}
+                                >
+                                  {g.groupName}
+                                </td>
+                                <td className='w-[80px] px-3 py-1.5 font-mono text-center text-gray-700'>
+                                  {g.privilege}
+                                </td>
+                                <td
+                                  className='px-3 py-1.5 text-left font-mono text-gray-900'
+                                  title={g.resource}
+                                >
+                                  {g.resource}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              },
               header: () => <span>Grants</span>,
             },
             {

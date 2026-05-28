@@ -69,30 +69,30 @@ func TestEvaluateMappingRulesPopulatesCacheForAllRules(t *testing.T) {
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
 	// Clear cache before evaluation (simulates fresh start).
-	matchedGroupsCache = sync.Map{}
+	MRGrantsCache = sync.Map{}
 
 	assert.NilError(t, EvaluateMappingRules(tx))
 
 	// Verify ALL 3 rules have a cache entry.
 	for _, rule := range rules {
 		ruleKey := orgID.String() + ":" + rule.ID.String()
-		val, ok := matchedGroupsCache.Load(ruleKey)
+		val, ok := MRGrantsCache.Load(ruleKey)
 		if !ok {
 			t.Errorf("cache miss for rule %q (key=%s) — expected empty array entry", rule.RuleName, ruleKey)
 			continue
 		}
 
-		groupNames := val.([]string)
+		grants := val.([]api.MappingRuleGrant)
 
-		// The matching rule should have exactly 1 group name.
+		// The matching rule should have exactly 1 matched grant.
 		if rule.RuleName == "matching-rule" {
-			assert.Equal(t, len(groupNames), 1,
-				"expected 1 matched group for %q, got %d: %v", rule.RuleName, len(groupNames), groupNames)
-			assert.Equal(t, groupNames[0], group.Name)
+			assert.Equal(t, len(grants), 1,
+				"expected 1 matched grant for %q, got %d: %+v", rule.RuleName, len(grants), grants)
+			assert.Equal(t, grants[0].GroupName, group.Name)
 		} else {
-			// Non-matching rules should have an EMPTY array (not missing key).
-			assert.Equal(t, len(groupNames), 0,
-				"expected empty array for %q (no matching groups), got: %v", rule.RuleName, val)
+			// Non-matching rules should have an EMPTY grants list (not missing key).
+			assert.Equal(t, len(grants), 0,
+				"expected empty grants for %q (no matching groups), got: %+v", rule.RuleName, val)
 		}
 	}
 
@@ -145,7 +145,7 @@ func TestListMappingRulesGrantsCountWithMatchingGroups(t *testing.T) {
 		assert.NilError(t, data.CreateGroup(tx, &g))
 	}
 
-	matchedGroupsCache = sync.Map{}
+	MRGrantsCache = sync.Map{}
 	assert.NilError(t, EvaluateMappingRules(tx))
 
 	if err := tx.Commit(); err != nil {
@@ -174,7 +174,7 @@ func TestListMappingRulesGrantsCountWithMatchingGroups(t *testing.T) {
 
 	ruleCounts := make(map[string]int)
 	for _, item := range listResp.Items {
-		ruleCounts[item.RuleName] = item.GrantsCount
+		ruleCounts[item.RuleName] = len(item.MatchedGrants)
 	}
 
 	if count, ok := ruleCounts["ssh-team-rule"]; !ok {
@@ -190,9 +190,9 @@ func TestListMappingRulesGrantsCountWithMatchingGroups(t *testing.T) {
 	}
 }
 
-// TestListMappingRulesGrantsCountZeroForNoMatchingGroups verifies that when rules exist but no groups match,
-// the grants count is exactly 0 (not missing or nil).
-func TestListMappingRulesGrantsCountZeroForNoMatchingGroups(t *testing.T) {
+// TestListMappingRulesMatchedGrantsEmptyForNoMatchingGroups verifies that when rules exist but no groups match,
+// matched_grants is an empty array.
+func TestListMappingRulesMatchedGrantsEmptyForNoMatchingGroups(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	orgID := srv.db.DefaultOrg.ID
 
@@ -219,7 +219,7 @@ func TestListMappingRulesGrantsCountZeroForNoMatchingGroups(t *testing.T) {
 	}
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
-	matchedGroupsCache = sync.Map{}
+	MRGrantsCache = sync.Map{}
 	assert.NilError(t, EvaluateMappingRules(tx))
 
 	if err := tx.Commit(); err != nil {
@@ -243,8 +243,8 @@ func TestListMappingRulesGrantsCountZeroForNoMatchingGroups(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&listResp)
 
 	assert.Equal(t, len(listResp.Items), 1)
-	if listResp.Items[0].GrantsCount != 0 {
-		t.Errorf("expected grants count = 0 for rule with no matching groups, got %d", listResp.Items[0].GrantsCount)
+	if len(listResp.Items[0].MatchedGrants) != 0 {
+		t.Errorf("expected empty matched_grants for rule with no matching groups, got %+v", listResp.Items[0].MatchedGrants)
 	}
 }
 
@@ -276,7 +276,7 @@ func TestGetMappingRuleGrantsDirectly(t *testing.T) {
 	}
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
-	matchedGroupsCache = sync.Map{}
+	MRGrantsCache = sync.Map{}
 	assert.NilError(t, EvaluateMappingRules(tx))
 
 	if err := tx.Commit(); err != nil {
@@ -306,8 +306,8 @@ func TestGetMappingRuleGrantsDirectly(t *testing.T) {
 	}
 
 	// Verify the grant subject matches the group name.
-	if len(grantsResp.Items) > 0 && grantsResp.Items[0].Subject != "team-platform" {
-		t.Errorf("expected grant subject to be 'team-platform', got %q", grantsResp.Items[0].Subject)
+	if len(grantsResp.Items) > 0 && grantsResp.Items[0].GroupName != "team-platform" {
+		t.Errorf("expected grant subject to be 'team-platform', got %q", grantsResp.Items[0].GroupName)
 	}
 
 	// Verify the resource matches the template output.
@@ -336,7 +336,7 @@ func TestGetMappingRuleGrantsEmptyForNoMatchingGroups(t *testing.T) {
 	}
 	assert.NilError(t, data.CreateMappingRule(tx, rule))
 
-	matchedGroupsCache = sync.Map{}
+	MRGrantsCache = sync.Map{}
 	assert.NilError(t, EvaluateMappingRules(tx))
 
 	if err := tx.Commit(); err != nil {
@@ -368,7 +368,7 @@ func TestGetMappingRuleGrantsEmptyForNoMatchingGroups(t *testing.T) {
 }
 
 // TestEvaluateMappingRulesAsyncPopulatesCache verifies that the async evaluation path
-// (used during startup and CRUD triggers) correctly populates matchedGroupsCache.
+// (used during startup and CRUD triggers) correctly populates MRGrantsCache.
 func TestEvaluateMappingRulesAsyncPopulatesCache(t *testing.T) {
 	srv := setupServer(t, withAdminUser)
 	orgID := srv.db.DefaultOrg.ID
@@ -399,7 +399,7 @@ func TestEvaluateMappingRulesAsyncPopulatesCache(t *testing.T) {
 	}
 
 	// Clear cache and eval status to simulate fresh state.
-	matchedGroupsCache = sync.Map{}
+	MRGrantsCache = sync.Map{}
 	evalStatusStore = sync.Map{}
 
 	EvaluateMappingRulesAsync(srv.db, orgID)
@@ -422,12 +422,12 @@ func TestEvaluateMappingRulesAsyncPopulatesCache(t *testing.T) {
 
 	// Verify the cache has an entry for this specific rule.
 	ruleKey := orgID.String() + ":" + rule.ID.String()
-	val, ok := matchedGroupsCache.Load(ruleKey)
+	val, ok := MRGrantsCache.Load(ruleKey)
 	assert.Assert(t, ok, "expected cache entry for async-evaluated rule %q (key=%s); status success=%v err=%s", rule.RuleName, ruleKey, status.Success, status.Error)
 
-	groupNames := val.([]string)
-	assert.Equal(t, len(groupNames), 1, "expected 1 matched group from async eval, got %d: %v", len(groupNames), groupNames)
-	assert.Equal(t, groupNames[0], group.Name)
+	grants := val.([]api.MappingRuleGrant)
+	assert.Equal(t, len(grants), 1, "expected 1 matched grant from async eval, got %d: %+v", len(grants), grants)
+	assert.Equal(t, grants[0].GroupName, group.Name)
 }
 
 // TestEvaluateMappingRulesPopulatesCacheForInvalidRegexRule verifies that rules with invalid regexes
@@ -459,7 +459,7 @@ func TestEvaluateMappingRulesPopulatesCacheForInvalidRegexRule(t *testing.T) {
 	}
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
-	matchedGroupsCache = sync.Map{}
+	MRGrantsCache = sync.Map{}
 	assert.NilError(t, EvaluateMappingRules(tx))
 
 	if err := tx.Commit(); err != nil {
@@ -468,11 +468,11 @@ func TestEvaluateMappingRulesPopulatesCacheForInvalidRegexRule(t *testing.T) {
 
 	// Verify the invalid-regex rule has an empty cache entry (not missing).
 	ruleKey := orgID.String() + ":" + badRule.ID.String()
-	val, ok := matchedGroupsCache.Load(ruleKey)
+	val, ok := MRGrantsCache.Load(ruleKey)
 	if !ok {
 		t.Fatalf("cache miss for invalid-regex rule %q (key=%s) — expected empty array entry", badRule.RuleName, ruleKey)
 	}
 
-	groupNames := val.([]string)
-	assert.Equal(t, len(groupNames), 0, "expected empty array for invalid-regex rule, got: %v", groupNames)
+	grants := val.([]api.MappingRuleGrant)
+	assert.Equal(t, len(grants), 0, "expected empty grants for invalid-regex rule, got: %+v", grants)
 }
