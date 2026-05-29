@@ -325,30 +325,35 @@ func filterValidMappings(mappings []models.MappingRule) []models.MappingRule {
 	return valid
 }
 
-// resolvePrivilege determines the privilege string for a mapping rule.
-// SSH always maps to "connect"; K8s uses RoleTemplate (applied via template), falling back to "view".
+// resolvePrivilege determines the privilege strings for a mapping rule.
+// SSH always maps to ["connect"]; K8s uses RoleTemplate (applied via template), falling back to ["view"].
 // For Kubernetes, if the resolved role is exactly "admin", it is translated to "cluster-admin"
 // because the built-in ClusterRole "admin" only provides namespace-level permissions,
 // while "cluster-admin" grants full cluster-wide access as intended by admin rules.
-func resolvePrivilege(mapping models.MappingRule, grpName string, re *regexp.Regexp) (string, error) {
+// aivadmin returns both its own privilege and admin in addition.
+func resolvePrivilege(mapping models.MappingRule, grpName string, re *regexp.Regexp) ([]string, error) {
 	switch models.DestinationType(mapping.DestinationType) {
 	case models.DestinationTypeSSH:
-		return "connect", nil
+		return []string{"connect"}, nil
 	case models.DestinationTypeKubernetes:
 		if mapping.RoleTemplate != nil && *mapping.RoleTemplate != "" {
 			role, err := applyTemplate(*mapping.RoleTemplate, grpName, re)
 			if err != nil {
-				return "", fmt.Errorf("apply role template: %w", err)
+				return nil, fmt.Errorf("apply role template: %w", err)
+			}
+			// aivadmin includes admin in addition to its own privilege.
+			if role == "aivadmin" {
+				return []string{"aivadmin", "admin"}, nil
 			}
 			// Translate admin → cluster-admin for full cluster-wide access.
 			if role == "admin" {
 				role = "cluster-admin"
 			}
-			return role, nil
+			return []string{role}, nil
 		}
-		return "view", nil // least-privileged valid RBAC role
+		return []string{"view"}, nil // least-privileged valid RBAC role
 	default:
-		return "", fmt.Errorf("unknown destination type: %s", mapping.DestinationType)
+		return nil, fmt.Errorf("unknown destination type: %s", mapping.DestinationType)
 	}
 }
 
@@ -371,23 +376,25 @@ func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.Mapping
 		return
 	}
 
-	privilege, err := resolvePrivilege(mapping, g.Name, re)
+	privileges, err := resolvePrivilege(mapping, g.Name, re)
 	if err != nil {
 		logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to resolve privilege")
 		return
 	}
 
 	// Track matched grants with full details for the UI.
-	addMatchedGrant := func(resource string) {
+	addMatchedGrant := func(privilege, resource string) {
 		var grants []api.MappingRuleGrant
 		if val, ok := MRGrantsCache.Load(ruleKey); ok && val != nil {
 			grants = val.([]api.MappingRuleGrant)
 		}
-		grants = append(grants, api.MappingRuleGrant{
-			GroupName: g.Name,
-			Privilege: privilege,
-			Resource:  resource,
-		})
+		for _, priv := range privileges {
+			grants = append(grants, api.MappingRuleGrant{
+				GroupName: g.Name,
+				Privilege: priv,
+				Resource:  resource,
+			})
+		}
 		MRGrantsCache.Store(ruleKey, grants)
 	}
 
@@ -405,14 +412,20 @@ func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.Mapping
 		}
 
 		for _, nsResource := range nsResourceNames {
-			addMatchedGrant(nsResource)
+			for _, priv := range privileges {
+				if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, priv, nsResource); err != nil {
+					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create namespaced grant")
+				}
+			}
+			addMatchedGrant(privileges[0], nsResource)
 		}
-		createNamespacedGrants(tx, orgID, mapping.DestinationType, g.ID, privilege, nsResourceNames)
 	} else {
-		if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, privilege, resourceName); err != nil {
-			logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create grant")
+		for _, priv := range privileges {
+			if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, priv, resourceName); err != nil {
+				logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create grant")
+			}
 		}
-		addMatchedGrant(resourceName)
+		addMatchedGrant(privileges[0], resourceName)
 	}
 }
 

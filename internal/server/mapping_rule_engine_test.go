@@ -956,6 +956,48 @@ func TestApplyTemplateMixedSingleAndMultiDigitRefs(t *testing.T) {
 	assert.Equal(t, got, "team.platform.prod")
 }
 
+// TestResolvePrivilegeAIVAdminTranslation verifies that the aivadmin role is translated to admin,
+// which then chains to cluster-admin for full Kubernetes cluster-wide access.
+func TestResolvePrivilegeAIVAdminTranslation(t *testing.T) {
+	tests := []struct {
+		name         string
+		roleTemplate string
+		destType     models.DestinationType
+		expect       []string
+	}{
+		{
+			name:         "aivadmin returns both aivadmin and admin privileges",
+			roleTemplate: "aivadmin",
+			destType:     models.DestinationTypeKubernetes,
+			expect:       []string{"aivadmin", "admin"},
+		},
+		{
+			name:         "admin still maps to cluster-admin (unchanged)",
+			roleTemplate: "admin",
+			destType:     models.DestinationTypeKubernetes,
+			expect:       []string{"cluster-admin"},
+		},
+		{
+			name:         "custom role passes through unchanged",
+			roleTemplate: "my-custom-role",
+			destType:     models.DestinationTypeKubernetes,
+			expect:       []string{"my-custom-role"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mapping := models.MappingRule{
+				DestinationType: tc.destType,
+				RoleTemplate:    &tc.roleTemplate,
+			}
+			got, err := resolvePrivilege(mapping, "test-group", mustCompileRegex("^(.*)$"))
+			assert.NilError(t, err)
+			assert.DeepEqual(t, got, tc.expect)
+		})
+	}
+}
+
 // TestCleanupStaleGrantsCrossOrgIsolation verifies that cleanup in one organization's context
 // does not affect auto-grants created by rules in another organization. This is critical because
 // cleanupStaleGrants iterates all grants and checks against active mapping rules — if org-scoping

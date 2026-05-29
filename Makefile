@@ -508,6 +508,11 @@ create-groups: get-access-key ## Create test groups in current dev deployment
 	  -H 'Content-Type: application/json' \
 	  -H 'Infra-Version: 0.18.1' \
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "name": "k8s-minikube-aivadmin" }' | jq -r '.id'
+	@curl -X POST http://$(INFRA_URL)/api/groups \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
 	  -d '{ "name": "k8s-minikube-view-kube*" }' | jq -r '.id'
 
 .PHONY: get-groups
@@ -582,7 +587,8 @@ create-destination: get-access-key ## Create test destination in current dev dep
 test-data: create-users create-groups add-user-group create-destination add-grants create-mapping-rules
 	make add-user-group USER_NAME=test01@local.net
 	make add-user-group USER_NAME=test02@local.net GROUP_NAME=ssh-connect-ssh01 
-	make add-user-group USER_NAME=test01@local.net GROUP_NAME=k8s-minikube-admin
+	make add-user-group USER_NAME=admin@local GROUP_NAME=k8s-minikube-admin
+	make add-user-group USER_NAME=test01@local.net GROUP_NAME=k8s-minikube-aivadmin
 	make add-user-group USER_NAME=test02@local.net GROUP_NAME=k8s-minikube-view-kube*
 
 define INFRA_SSHD_CONFIG
