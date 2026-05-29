@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/infrahq/infra/api"
@@ -160,29 +159,4 @@ func (a *API) DeleteMappingRule(rCtx access.RequestContext, r *api.Resource) (*a
 	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
 
 	return &api.EmptyResponse{}, nil
-}
-
-// GetMappingRuleGrants returns all auto-grants that were created by the given mapping rule.
-// Requires InfraAdminRole. Returns grants sorted by subject name, then resource.
-func (a *API) GetMappingRuleGrants(rCtx access.RequestContext, r *api.Resource) (*api.ListMappingRuleGrantsResponse, error) {
-	if err := access.GetMappingRuleEvalStatus(rCtx); err != nil {
-		return nil, err
-	}
-
-	ruleKey := fmt.Sprintf("%s:%s", rCtx.DBTxn.OrganizationID().String(), r.ID)
-	val, ok := MRGrantsCache.Load(ruleKey)
-	if !ok || val == nil {
-		return &api.ListMappingRuleGrantsResponse{Count: 0, Items: []api.MappingRuleGrant{}}, nil
-	}
-
-	matchedGrants := val.([]api.MappingRuleGrant)
-
-	slices.SortFunc(matchedGrants, func(a, b api.MappingRuleGrant) int {
-		if c := strings.Compare(a.GroupName, b.GroupName); c != 0 {
-			return c
-		}
-		return strings.Compare(a.Resource, b.Resource)
-	})
-
-	return &api.ListMappingRuleGrantsResponse{Count: len(matchedGrants), Items: matchedGrants}, nil
 }

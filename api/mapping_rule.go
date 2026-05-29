@@ -43,12 +43,6 @@ type MappingRuleGrant struct {
 	Resource  string `json:"resource"`
 }
 
-// ListMappingRuleGrantsResponse is the response body for GET /api/mapping-rules/:id/grants.
-type ListMappingRuleGrantsResponse struct {
-	Count int                `json:"count" note:"Total number of grants" example:"10"`
-	Items []MappingRuleGrant `json:"items"`
-}
-
 // CreateMappingRuleRequest is the request body for creating a mapping rule.
 // RoleTemplate and NamespaceTemplate are pointers to allow distinguishing "not set" from "empty string".
 type CreateMappingRuleRequest struct {
