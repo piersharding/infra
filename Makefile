@@ -581,9 +581,9 @@ create-destination: get-access-key ## Create test destination in current dev dep
 .PHONY: test-data
 test-data: create-users create-groups add-user-group create-destination add-grants create-mapping-rules
 	make add-user-group USER_NAME=test01@local.net
-	make add-user-group USER_NAME=test02@local.net GROUP_NAME=ssh-connect-ssh01-infra 
-	make add-user-group USER_NAME=test01@local.net GROUP_NAME=k8s-minikube-cluster-admin-infra
-	make add-user-group USER_NAME=test02@local.net GROUP_NAME=k8s-minikube-system-infra
+	make add-user-group USER_NAME=test02@local.net GROUP_NAME=ssh-connect-ssh01 
+	make add-user-group USER_NAME=test01@local.net GROUP_NAME=k8s-minikube-admin
+	make add-user-group USER_NAME=test02@local.net GROUP_NAME=k8s-minikube-view-kube*
 
 define INFRA_SSHD_CONFIG
 Match group infra-users
