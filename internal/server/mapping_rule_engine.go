@@ -327,6 +327,9 @@ func filterValidMappings(mappings []models.MappingRule) []models.MappingRule {
 
 // resolvePrivilege determines the privilege string for a mapping rule.
 // SSH always maps to "connect"; K8s uses RoleTemplate (applied via template), falling back to "view".
+// For Kubernetes, if the resolved role is exactly "admin", it is translated to "cluster-admin"
+// because the built-in ClusterRole "admin" only provides namespace-level permissions,
+// while "cluster-admin" grants full cluster-wide access as intended by admin rules.
 func resolvePrivilege(mapping models.MappingRule, grpName string, re *regexp.Regexp) (string, error) {
 	switch models.DestinationType(mapping.DestinationType) {
 	case models.DestinationTypeSSH:
@@ -336,6 +339,10 @@ func resolvePrivilege(mapping models.MappingRule, grpName string, re *regexp.Reg
 			role, err := applyTemplate(*mapping.RoleTemplate, grpName, re)
 			if err != nil {
 				return "", fmt.Errorf("apply role template: %w", err)
+			}
+			// Translate admin → cluster-admin for full cluster-wide access.
+			if role == "admin" {
+				role = "cluster-admin"
 			}
 			return role, nil
 		}

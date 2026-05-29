@@ -517,6 +517,8 @@ func TestEvaluateMappingRulesK8sWithNamespaceTemplate(t *testing.T) {
 		switch g.Resource {
 		case "cluster-platform-prod.ns-platform":
 			foundNamespaced = true
+			assert.Equal(t, g.Privilege, "cluster-admin",
+				"expected privilege to be translated from admin → cluster-admin")
 		}
 	}
 	assert.Assert(t, foundNamespaced,

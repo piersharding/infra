@@ -55,6 +55,7 @@ For **kubernetes** destination type, the engine creates grants that map IDP grou
 
 - A cluster-level grant is created using the Name Template as the resource
 - If Role Template is set, it's applied to determine the RBAC role name; otherwise `view` is used as a safe default
+- The built-in Kubernetes role **`admin`** (which only provides namespace-level permissions) is automatically translated to **`cluster-admin`** (full cluster-wide access), since mapping rules intended for admin groups typically expect full cluster privileges. This translation applies when the resolved Role Template value is exactly `admin`.
 - If **Namespace Template Regex** is set (see below), namespace-scoped grants are created dynamically against the destination's live namespace list
 
 #### Namespace Template Regex — Wildcard Expansion
