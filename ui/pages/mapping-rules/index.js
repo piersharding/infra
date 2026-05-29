@@ -4,7 +4,11 @@ import useSWR, { mutate } from 'swr'
 import { useRouter } from 'next/router'
 import { useState, useMemo, useEffect, useRef } from 'react'
 
-import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
+import {
+  PlusIcon,
+  TrashIcon,
+  QuestionMarkCircleIcon,
+} from '@heroicons/react/24/outline'
 import { Dialog } from '@headlessui/react'
 
 import Table from '../../components/table'
@@ -558,66 +562,41 @@ export default function GroupsMapping() {
               id: 'matchedGrants',
               cell: info => {
                 const matchedGrants = info.row.original.matchedGrants || []
-                const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 })
-                const [vw, setVw] = useState(window.innerWidth)
-                const tableWrapperRef = useRef(null)
+                const hoverRef = useRef({ top: 0, left: 0 })
                 const containerRef = useRef(null)
                 const buttonRef = useRef(null)
+                const [isHovered, setIsHovered] = useState(false)
 
                 useEffect(() => {
                   if (!buttonRef.current) return
-                  const triggerRect = buttonRef.current.getBoundingClientRect()
-                  // Walk up to find the Table component's wrapper div (overflow-x-auto).
-                  let el = buttonRef.current.parentElement
-                  while (
-                    el &&
-                    !el.classList.contains('overflow-x-auto') &&
-                    el !== document.body
-                  ) {
-                    el = el.parentElement
+                  const rect = buttonRef.current.getBoundingClientRect()
+                  hoverRef.current = {
+                    top: rect.bottom + window.scrollY - 8,
+                    left: rect.left + rect.width / 2,
                   }
-                  if (el) tableWrapperRef.current = el
-                  setHoverPos({
-                    x: triggerRect.left,
-                    y: triggerRect.bottom + window.scrollY,
-                  })
                 }, [matchedGrants])
 
-                useEffect(() => {
-                  const handleResize = () => setVw(window.innerWidth)
-                  window.addEventListener('resize', handleResize)
-                  return () =>
-                    window.removeEventListener('resize', handleResize)
-                }, [])
-
                 return (
-                  <div className='relative group'>
+                  <div className='relative flex justify-center items-center gap-1'>
                     <span
                       ref={buttonRef}
-                      className='text-xs font-medium text-gray-600 hover:text-blue-600 transition-colors cursor-default'
+                      onMouseEnter={() => setIsHovered(true)}
+                      onMouseLeave={() => setIsHovered(false)}
+                      className='inline-flex items-center gap-0.5 text-xs font-medium text-gray-600 hover:text-blue-800 transition-colors cursor-help decoration-dashed underline-offset-2 hover:decoration-blue-400'
                     >
                       {matchedGrants.length}
+                      <QuestionMarkCircleIcon className='h-3.5 w-3.5 text-gray-400 transition-colors' />
                     </span>
-                    {matchedGrants.length > 0 && (
+                    {isHovered && matchedGrants.length > 0 && (
                       <div
                         ref={containerRef}
-                        className='pointer-events-none group-hover:pointer-events-auto fixed z-10 mt-2 w-max min-h-fit rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-xl opacity-0 transition-opacity group-hover:opacity-100'
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                        className='fixed z-[100] mt-2 w-max min-h-fit rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-xl'
                         style={{
-                          right: tableWrapperRef.current
-                            ? `${tableWrapperRef.current.getBoundingClientRect().right}px`
-                            : undefined,
-                          left:
-                            tableWrapperRef.current && containerRef.current
-                              ? Math.max(
-                                  tableWrapperRef.current.getBoundingClientRect()
-                                    .right -
-                                    (containerRef.current?.offsetWidth || 480),
-                                  12
-                                )
-                              : undefined,
-                          top: hoverPos.y,
-                          // eslint-disable-next-line react-hooks/exhaustive-deps
-                          '--vw': vw,
+                          left: hoverRef.current.left,
+                          top: hoverRef.current.top,
+                          transform: 'translateX(-50%)',
                         }}
                       >
                         <table className='w-max text-xs'>
@@ -664,7 +643,7 @@ export default function GroupsMapping() {
                   </div>
                 )
               },
-              header: () => <span>Grants</span>,
+              header: () => <span className='text-center'>Grants</span>,
             },
             {
               id: 'delete',
