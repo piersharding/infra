@@ -604,20 +604,26 @@ export default function GroupsMapping() {
                                 key={i}
                                 className='border-b border-gray-100 last:border-b-0'
                               >
-                                <td
-                                  className='px-3 py-1.5 text-gray-900'
-                                  title={g.groupName}
-                                >
-                                  {g.groupName}
+                                <td className='px-3 py-1.5'>
+                                  <Link
+                                    href={`/groups/${g.groupID}`}
+                                    passHref
+                                    className='text-blue-700 hover:text-blue-900 underline decoration-dashed underline-offset-2'
+                                  >
+                                    {g.groupName}
+                                  </Link>
                                 </td>
                                 <td className='w-[80px] px-3 py-1.5 font-mono text-center text-gray-700'>
                                   {g.privilege}
                                 </td>
-                                <td
-                                  className='px-3 py-1.5 text-left font-mono text-gray-900'
-                                  title={g.resource}
-                                >
-                                  {g.resource}
+                                <td className='px-3 py-1.5'>
+                                  <Link
+                                    href={`/destinations/${g.destinationID}`}
+                                    passHref
+                                    className='text-blue-700 hover:text-blue-900 underline decoration-dashed underline-offset-2'
+                                  >
+                                    {g.resource}
+                                  </Link>
                                 </td>
                               </tr>
                             ))}

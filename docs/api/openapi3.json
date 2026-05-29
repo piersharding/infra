@@ -881,6 +881,18 @@
                 "matchedGrants": {
                   "items": {
                     "properties": {
+                      "destinationID": {
+                        "example": "4yJ3n3D8E2",
+                        "format": "uid",
+                        "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                        "type": "string"
+                      },
+                      "groupID": {
+                        "example": "4yJ3n3D8E2",
+                        "format": "uid",
+                        "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                        "type": "string"
+                      },
                       "groupName": {
                         "type": "string"
                       },
@@ -1301,6 +1313,18 @@
           "matchedGrants": {
             "items": {
               "properties": {
+                "destinationID": {
+                  "example": "4yJ3n3D8E2",
+                  "format": "uid",
+                  "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                  "type": "string"
+                },
+                "groupID": {
+                  "example": "4yJ3n3D8E2",
+                  "format": "uid",
+                  "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                  "type": "string"
+                },
                 "groupName": {
                   "type": "string"
                 },

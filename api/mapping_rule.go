@@ -37,10 +37,12 @@ type MappingRule struct {
 
 // MappingRuleGrant represents a single auto-grant associated with a mapping rule.
 type MappingRuleGrant struct {
-	ID        uid.ID `json:"id"`
-	GroupName string `json:"groupName"`
-	Privilege string `json:"privilege"`
-	Resource  string `json:"resource"`
+	ID            uid.ID `json:"id"`
+	GroupID       uid.ID `json:"groupID"`
+	GroupName     string `json:"groupName"`
+	Privilege     string `json:"privilege"`
+	Resource      string `json:"resource"`
+	DestinationID uid.ID `json:"destinationID,omitempty"`
 }
 
 // CreateMappingRuleRequest is the request body for creating a mapping rule.

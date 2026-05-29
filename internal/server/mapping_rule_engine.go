@@ -382,6 +382,18 @@ func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.Mapping
 		return
 	}
 
+	// Resolve destination info for UI linking.
+	var destInfo *models.Destination
+	dests, err := data.ListDestinations(tx, data.ListDestinationsOptions{
+		ByKind: string(mapping.DestinationType),
+		ByName: resourceName,
+	})
+	if err != nil {
+		logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Msg("failed to resolve destination for UI linking")
+	} else if len(dests) > 0 {
+		destInfo = &dests[0]
+	}
+
 	// Track matched grants with full details for the UI.
 	addMatchedGrant := func(privilege, resource string) {
 		var grants []api.MappingRuleGrant
@@ -389,11 +401,16 @@ func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.Mapping
 			grants = val.([]api.MappingRuleGrant)
 		}
 		for _, priv := range privileges {
-			grants = append(grants, api.MappingRuleGrant{
+			grantInfo := api.MappingRuleGrant{
+				GroupID:   g.ID,
 				GroupName: g.Name,
 				Privilege: priv,
 				Resource:  resource,
-			})
+			}
+			if destInfo != nil {
+				grantInfo.DestinationID = destInfo.ID
+			}
+			grants = append(grants, grantInfo)
 		}
 		MRGrantsCache.Store(ruleKey, grants)
 	}
