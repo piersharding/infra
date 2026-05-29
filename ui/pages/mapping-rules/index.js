@@ -317,13 +317,8 @@ export default function GroupsMapping() {
   }
 
   // Search functionality
-  const {
-    searchQuery,
-    setSearchQuery,
-    executeSearch,
-    getEmptyMessage,
-    getResultMessage,
-  } = useSearch()
+  const { searchQuery, setSearchQuery, executeSearch, getEmptyMessage } =
+    useSearch()
 
   // Memoized: builds the API URL string with pagination params and optional name search query.
   const apiUrl = useMemo(() => {
@@ -360,7 +355,6 @@ export default function GroupsMapping() {
 
   // Determine empty-state and result-count messages for the UI.
   const emptyMessage = getEmptyMessage('No mapping rules')
-  const resultText = getResultMessage(totalCount || 0, 'mapping rules')
 
   async function handleDelete(id) {
     try {
@@ -417,9 +411,13 @@ export default function GroupsMapping() {
             <h1 className='py-1 font-display text-xl font-medium'>
               Mapping Rules
             </h1>
-            {resultText && (
-              <span className='text-sm text-gray-500'>{resultText}</span>
-            )}
+            <SearchInput
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onSearch={executeSearch}
+              placeholder='Search rules... (press Enter)'
+              ariaLabel='Search mapping rules by rule name'
+            />
           </div>
           <button
             type='button'
@@ -445,19 +443,6 @@ export default function GroupsMapping() {
           {evalStatus.error && (
             <p className='mt-1 text-xs opacity-80'>{evalStatus.error}</p>
           )}
-        </div>
-      )}
-
-      {/* Search */}
-      {totalCount > 5 && (
-        <div className='mb-4'>
-          <SearchInput
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            onSearch={executeSearch}
-            placeholder='Search rules... (press Enter)'
-            ariaLabel='Search mapping rules by rule name'
-          />
         </div>
       )}
 
@@ -643,7 +628,10 @@ export default function GroupsMapping() {
                   </div>
                 )
               },
-              header: () => <span className='text-center'>Grants</span>,
+
+              header: () => (
+                <span className='flex justify-center w-full'>Grants</span>
+              ),
             },
             {
               id: 'delete',
