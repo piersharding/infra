@@ -66,6 +66,17 @@ func TestSyncProviderUser(t *testing.T) {
 		err := CreateProvider(db, provider)
 		assert.NilError(t, err)
 
+		// Add a catch-all mapping rule so IDP groups pass through filterIDPGroups.
+		mappingRule := &models.MappingRule{
+			Model:              models.Model{},
+			OrganizationMember: models.OrganizationMember{OrganizationID: db.DefaultOrg.ID},
+			RuleName:           "catch-all",
+			SourceGroupRegex:   ".*",
+			DestinationType:    models.DestinationTypeSSH,
+			NameTemplate:       "ssh-$1",
+		}
+		assert.NilError(t, CreateMappingRule(db, mappingRule))
+
 		tests := []struct {
 			name              string
 			setupProviderUser func(t *testing.T) *models.ProviderUser

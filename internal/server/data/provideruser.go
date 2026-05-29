@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/scim2/filter-parser/v2"
@@ -300,6 +303,70 @@ func ProvisionProviderUser(tx WriteTxn, user *models.ProviderUser) error {
 	return insert(tx, (*providerUserTable)(user))
 }
 
+// filterIDPGroups filters incoming IDP group names to only those that:
+// 1. Are locally created groups (CreatedByProvider is NULL), OR
+// 2. Match the source_group_regex of any active mapping rule for this org.
+// Non-matching groups are logged at WARN level and dropped from the result.
+func filterIDPGroups(tx ReadTxn, incoming []string) []string {
+	allowed := make(map[string]bool)
+
+	// Load locally created group names (created_by_provider is 0 or null — admin-created).
+	var localGroupNames []string
+	rows, err := tx.Query(`SELECT name FROM groups WHERE deleted_at IS NULL AND organization_id = ? AND (created_by_provider IS NULL OR created_by_provider = 0)`, tx.OrganizationID())
+	if err != nil {
+		logging.L.Warn().Err(err).Msg("failed to load locally created group names for IDP filter")
+	} else {
+		for rows.Next() {
+			var name string
+			rows.Scan(&name)
+			localGroupNames = append(localGroupNames, name)
+		}
+		rows.Close()
+		for _, n := range localGroupNames {
+			allowed[n] = true
+		}
+	}
+
+	// Load all active mapping rules and build a combined regex from their patterns.
+	rules, err := ListMappingRules(tx, ListMappingRulesOptions{})
+	if err != nil {
+		logging.L.Warn().Err(err).Msg("failed to load mapping rules for IDP filter")
+	} else {
+		var parts []string
+		for _, r := range rules {
+			// Each rule already has ^...$ anchors from anchorRegex.
+			parts = append(parts, r.SourceGroupRegex)
+		}
+		if len(parts) > 0 {
+			combinedPattern := strings.Join(parts, "|")
+			combinedRe, err2 := regexp.Compile(combinedPattern)
+			if err2 != nil {
+				logging.L.Warn().Err(err2).Msg("invalid combined mapping rule regex for IDP filter")
+			} else {
+				for _, name := range incoming {
+					if allowed[name] {
+						continue
+					}
+					if combinedRe.MatchString(name) {
+						allowed[name] = true
+					} else if !slices.Contains(localGroupNames, name) {
+						logging.L.Warn().Str("group", name).Msg("dropped IDP group: not locally created and does not match any mapping rule")
+					}
+				}
+			}
+		}
+	}
+
+	// Filter incoming to only allowed groups, preserving order.
+	var result []string
+	for _, name := range incoming {
+		if allowed[name] {
+			result = append(result, name)
+		}
+	}
+	return result
+}
+
 func SyncProviderUser(ctx context.Context, tx WriteTxn, user *models.ProviderUser, oidcClient providers.OIDCClient) ([]models.Group, error) {
 	accessToken, expiry, err := oidcClient.RefreshAccessToken(ctx, user)
 	if err != nil {
@@ -325,7 +392,10 @@ func SyncProviderUser(ctx context.Context, tx WriteTxn, user *models.ProviderUse
 		return nil, fmt.Errorf("oidc user sync failed: %w", err)
 	}
 
-	return AssignIdentityToGroups(tx, user, info.Groups)
+	// Filter IDP groups to only those that are locally created or match an active mapping rule.
+	filteredGroups := filterIDPGroups(tx, info.Groups)
+
+	return AssignIdentityToGroups(tx, user, filteredGroups)
 }
 
 type SCIMParameters struct {

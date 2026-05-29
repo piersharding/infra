@@ -592,6 +592,8 @@ func (ctx *cleanupStaleGrantsContext) checkNamespacedK8s(tx data.WriteTxn, grant
 }
 
 // cleanupStaleGrants removes auto-granted access that no longer matches any active mapping rule.
+// It also cleans up orphaned group rows (IDP-synced groups with zero identity members)
+// that don't match any active mapping rule regex.
 func cleanupStaleGrants(tx data.WriteTxn) error {
 	ctx, err := loadCleanupState(tx)
 	if err != nil {
@@ -615,6 +617,66 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 			if err := data.DeleteGrants(tx, data.DeleteGrantsOptions{ByID: grant.ID}); err != nil {
 				logging.L.Warn().Err(err).Str("grant", grant.ID.String()).Msg("failed to delete stale auto-grant")
 			}
+		}
+	}
+
+	// Clean up orphaned group rows that no longer match any active mapping rule.
+	if err := cleanupOrphanedGroups(tx, ctx.rules); err != nil {
+		logging.L.Warn().Err(err).Msg("failed to clean up orphaned groups")
+	}
+
+	return nil
+}
+
+// cleanupOrphanedGroups removes group rows synced from an IDP that don't match any active mapping rule.
+func cleanupOrphanedGroups(tx data.WriteTxn, rules []models.MappingRule) error {
+	// Build combined regex from all active mapping rule patterns.
+	parts := make([]string, len(rules))
+	for i, r := range rules {
+		parts[i] = r.SourceGroupRegex
+	}
+	combinedPattern := strings.Join(parts, "|")
+
+	// When there are no active mapping rules, all IDP-synced groups become orphans.
+	var combinedRe *regexp.Regexp
+	if combinedPattern != "" {
+		var compileErr error
+		combinedRe, compileErr = regexp.Compile(combinedPattern)
+		if compileErr != nil {
+			return fmt.Errorf("compile combined mapping rule regex for orphan cleanup: %w", compileErr)
+		}
+	}
+
+	// Find all IDP-synced groups (created_by_provider != 0) that are not soft-deleted.
+	rows, err := tx.Query(`SELECT id, name FROM groups WHERE deleted_at IS NULL AND organization_id = ? AND created_by_provider <> 0`, tx.OrganizationID())
+	if err != nil {
+		return fmt.Errorf("query orphaned groups: %w", err)
+	}
+
+	// Collect all group IDs that need to be deleted first — we can't call DeleteGroup while iterating,
+	// because Go's database/sql doesn't allow multiple open result sets on one connection.
+	var idsToDelete []uid.ID
+	for rows.Next() {
+		var groupID uid.ID
+		var name string
+		if err := rows.Scan(&groupID, &name); err != nil {
+			logging.L.Warn().Err(err).Str("group", name).Msg("failed to scan orphaned group")
+			continue
+		}
+
+		// If there are no rules or this group doesn't match any rule, mark for deletion.
+		if combinedRe == nil || !combinedRe.MatchString(name) {
+			idsToDelete = append(idsToDelete, groupID)
+		}
+	}
+	rows.Close()
+
+	// Now delete all marked groups after the cursor is closed.
+	for _, groupID := range idsToDelete {
+		grpName := getGroupByID(tx, groupID)
+		logging.L.Info().Str("group", grpName).Msg("deleted orphaned group: not locally created and does not match any mapping rule")
+		if err := data.DeleteGroup(tx, groupID); err != nil {
+			logging.L.Warn().Err(err).Str("group", grpName).Msg("failed to delete orphaned group")
 		}
 	}
 
