@@ -4,6 +4,10 @@
 /**
  * previewRegex takes a regex string and an optional list of sample group names,
  * then returns the subset that matches. Used for live "Matches:" preview in forms.
+ *
+ * The regex is anchored with ^...$ to match server-side behavior:
+ * anchorRegex() always adds missing anchors before storage, so the preview
+ * must do the same — otherwise matched results differ between UI and actual grants.
  */
 export function previewRegex(
   regex,
@@ -11,7 +15,10 @@ export function previewRegex(
 ) {
   if (!regex) return []
   try {
-    const re = new RegExp(regex)
+    let anchored = regex.trim()
+    if (anchored && !anchored.startsWith('^')) anchored = '^' + anchored
+    if (anchored && !anchored.endsWith('$')) anchored = anchored + '$'
+    const re = new RegExp(anchored)
     return sampleGroupNames.filter(name => re.test(name))
   } catch {
     return []

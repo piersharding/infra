@@ -2,6 +2,7 @@ package data
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/infrahq/infra/internal/server/data/querybuilder"
 	"github.com/infrahq/infra/internal/server/models"
@@ -156,6 +157,11 @@ func validateMappingRule(mapping *models.MappingRule) error {
 	}
 	if mapping.SourceGroupRegex == "" {
 		return fmt.Errorf("source_group_regex is required")
+	}
+	// Validate regex compiles -- prevents invalid patterns from being persisted
+	// via direct data layer calls (migrations, seeds, tests).
+	if _, err := regexp.Compile(mapping.SourceGroupRegex); err != nil {
+		return fmt.Errorf("invalid source_group_regex: %w", err)
 	}
 	if mapping.DestinationType != "kubernetes" && mapping.DestinationType != "ssh" {
 		return fmt.Errorf("destination_type must be 'kubernetes' or 'ssh'")

@@ -307,16 +307,13 @@ func TestIntegrationInvalidRegexGracefulDegradation(t *testing.T) {
 	}
 	assert.NilError(t, data.CreateMappingRule(tx, validRule))
 
-	// Create an invalid rule (bad regex).
-	invalidRule := &models.MappingRule{
-		Model:              models.Model{},
-		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
-		RuleName:           "invalid-rule",
-		SourceGroupRegex:   "[invalid(", // bad regex
-		DestinationType:    models.DestinationTypeSSH,
-		NameTemplate:       "$1-infra",
-	}
-	assert.NilError(t, data.CreateMappingRule(tx, invalidRule))
+	// Create an invalid rule (bad regex) via raw SQL since validation rejects it.
+	_, sqlErr := tx.Exec(
+		`INSERT INTO mapping_rules (id, created_at, updated_at, deleted_at, organization_id,
+		created_by, rule_name, source_group_regex, destination_type, name_template)
+		VALUES ($1::int8, NOW(), NOW(), NULL, $2, 0, 'invalid-rule', '[invalid(', 'ssh', '$1-infra')`, int64(99), orgID,
+	)
+	assert.NilError(t, sqlErr)
 
 	// Create a matching group.
 	group := models.Group{

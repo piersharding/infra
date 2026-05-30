@@ -409,12 +409,14 @@ export default function AddGroupsMapping() {
                 type='text'
                 value={namespaceTemplate}
                 onChange={e => setNamespaceTemplate(e.target.value)}
-                placeholder='Optional: e.g., $1-ns (leave empty for cluster-wide)'
+                placeholder='Optional: e.g., $1-ns or platform-* for all namespaces'
                 className='mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm'
               />
               <p className='mt-1 text-xs text-gray-400'>
-                Optional. If set, creates namespaced grants (e.g.,
-                cluster-$1-prod.$2-ns)
+                Optional. If set, creates namespaced grants against the
+                cluster's live namespace list. Supports $N capture references
+                and glob wildcards (* expands to any characters). Leave empty
+                for cluster-wide access.
               </p>
             </div>
           )}

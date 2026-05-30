@@ -4,8 +4,10 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/internal/server/data"
 	"github.com/infrahq/infra/internal/server/models"
+	"github.com/infrahq/infra/uid"
 )
 
 // TestEvaluateMappingRulesPopulatesCacheForAllRules verifies that EvaluateMappingRules
@@ -69,7 +72,14 @@ func TestEvaluateMappingRulesPopulatesCacheForAllRules(t *testing.T) {
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
 	// Clear cache before evaluation (simulates fresh start).
-	MRGrantsCache = sync.Map{}
+	// Clear cache properly for this org.
+	prefix := orgID.String() + ":"
+	MRGrantsCache.Range(func(key, _ any) bool {
+		if k, ok := key.(string); ok && strings.HasPrefix(k, prefix) {
+			MRGrantsCache.Delete(key)
+		}
+		return true
+	})
 
 	assert.NilError(t, EvaluateMappingRules(tx))
 
@@ -145,6 +155,7 @@ func TestListMappingRulesGrantsCountWithMatchingGroups(t *testing.T) {
 		assert.NilError(t, data.CreateGroup(tx, &g))
 	}
 
+	// Clear cache before evaluation (simulates fresh state).
 	MRGrantsCache = sync.Map{}
 	assert.NilError(t, EvaluateMappingRules(tx))
 
@@ -219,6 +230,7 @@ func TestListMappingRulesMatchedGrantsEmptyForNoMatchingGroups(t *testing.T) {
 	}
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
+	// Clear cache before evaluation (simulates fresh state).
 	MRGrantsCache = sync.Map{}
 	assert.NilError(t, EvaluateMappingRules(tx))
 
@@ -322,16 +334,13 @@ func TestEvaluateMappingRulesPopulatesCacheForInvalidRegexRule(t *testing.T) {
 	tx := rawTx.WithOrgID(orgID)
 	defer func() { _ = tx.Rollback() }()
 
-	// Create a rule with INVALID regex.
-	badRule := &models.MappingRule{
-		Model:              models.Model{},
-		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
-		RuleName:           "invalid-regex-rule",
-		SourceGroupRegex:   "[invalid(", // invalid regex
-		DestinationType:    models.DestinationTypeSSH,
-		NameTemplate:       "ssh-$1",
-	}
-	assert.NilError(t, data.CreateMappingRule(tx, badRule))
+	// Create a rule with INVALID regex via raw SQL (validation rejects it).
+	_, sqlErr := tx.Exec(
+		`INSERT INTO mapping_rules (id, created_at, updated_at, deleted_at, organization_id,
+		created_by, rule_name, source_group_regex, destination_type, name_template)
+		VALUES ($1::int8, NOW(), NOW(), NULL, $2, 0, 'invalid-regex-rule', '[invalid(', 'ssh', 'ssh-$1')`, int64(99), orgID,
+	)
+	assert.NilError(t, sqlErr)
 
 	// Create a group that would match if the regex were valid.
 	group := models.Group{
@@ -340,20 +349,38 @@ func TestEvaluateMappingRulesPopulatesCacheForInvalidRegexRule(t *testing.T) {
 	}
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
-	MRGrantsCache = sync.Map{}
+	// List rules BEFORE evaluation to get the inserted rule's ID (since raw SQL may generate its own).
+	rules, _ := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
+	var insertedRuleID uid.ID
+	for _, r := range rules {
+		if r.RuleName == "invalid-regex-rule" && !r.DeletedAt.Valid {
+			insertedRuleID = r.ID
+		}
+	}
+
+	// Clear cache before evaluation (simulates fresh state).
+	prefix := orgID.String() + ":"
+	MRGrantsCache.Range(func(key, _ any) bool {
+		if k, ok := key.(string); ok && strings.HasPrefix(k, prefix) {
+			MRGrantsCache.Delete(key)
+		}
+		return true
+	})
+
+	// Run evaluation (creates cache entries for all rules).
 	assert.NilError(t, EvaluateMappingRules(tx))
 
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
+	ruleKey := fmt.Sprintf("%s:%s", tx.OrganizationID().String(), insertedRuleID.String())
 	// Verify the invalid-regex rule has an empty cache entry (not missing).
-	ruleKey := orgID.String() + ":" + badRule.ID.String()
+	// Load the raw stored value (no TTL wrapper anymore).
 	val, ok := MRGrantsCache.Load(ruleKey)
 	if !ok {
-		t.Fatalf("cache miss for invalid-regex rule %q (key=%s) — expected empty array entry", badRule.RuleName, ruleKey)
+		t.Fatalf("cache miss for invalid-regex rule (key=%s) — expected empty array entry", ruleKey)
 	}
 
-	grants := val.([]api.MappingRuleGrant)
+	grants, ok := val.([]api.MappingRuleGrant)
+	if !ok {
+		t.Fatalf("expected []api.MappingRuleGrant for invalid-regex rule (key=%s), got %T", ruleKey, val)
+	}
 	assert.Equal(t, len(grants), 0, "expected empty grants for invalid-regex rule, got: %+v", grants)
 }

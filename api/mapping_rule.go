@@ -151,6 +151,9 @@ func validateMappingRuleRequest(rule MappingRule) []validate.ValidationRule {
 		}))
 	}
 
+	// Note: source_group_regex is also validated in data.validateMappingRule() for
+	// defense-in-depth — direct callers (migrations, seeds, tests) that bypass the API
+	// still get regex validation at the persistence layer. This duplication is intentional.
 	return rules
 }
 

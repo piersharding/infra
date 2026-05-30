@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -39,13 +40,13 @@ func EvaluateMappingRules(tx data.WriteTxn) error {
 	}
 
 	// Clear mapping rule grants cache for this org before a fresh run.
+	prefix := orgID.String() + ":"
 	MRGrantsCache.Range(func(key, _ any) bool {
-		if k, ok := key.(string); ok && strings.HasPrefix(k, orgID.String()+":") {
+		if k, ok := key.(string); ok && strings.HasPrefix(k, prefix) {
 			MRGrantsCache.Delete(key)
 		}
 		return true
 	})
-
 	mappings, err := data.ListMappingRules(tx, data.ListMappingRulesOptions{})
 	if err != nil {
 		return fmt.Errorf("list mapping rules: %w", err)
@@ -96,11 +97,15 @@ type EvalStatusReport struct {
 // MRGrantsCache tracks, for each mapping rule in a given org,
 // which group names matched its SourceGroupRegex and their grant details
 // during the last evaluation. Keyed by (orgID.String(), rule.ID) → []MappingRuleGrant.
+// Cleared per-org at the start of each EvaluateMappingRules call.
+// No TTL needed — the org-scoped clear prevents unbounded growth, and
+// the grants themselves are the source of truth in PostgreSQL.
 var MRGrantsCache sync.Map
 
 // evalStatusStore is an in-memory store of the last evaluation result per org.
 // Keyed by orgID uid.ID; values are *EvalStatusReport. Populated by
-// EvaluateMappingRulesAsync and read by GetEvalStatus.
+// EvaluateMappingRulesAsync and read by GetEvalStatus. No TTL needed —
+// the timestamp in the report lets the UI decide how fresh the status is.
 var evalStatusStore sync.Map
 
 // recordEvalStatus stores the outcome of an EvaluateMappingRulesAsync run.
@@ -120,7 +125,7 @@ func recordEvalStatus(orgID uid.ID, err error) {
 // or nil if no evaluation has been recorded yet.
 func GetEvalStatus(orgID uid.ID) *EvalStatusReport {
 	val, ok := evalStatusStore.Load(orgID)
-	if !ok {
+	if !ok || val == nil {
 		return nil
 	}
 	return val.(*EvalStatusReport)
@@ -157,64 +162,49 @@ func EvaluateMappingRulesAsync(db *data.DB, orgID uid.ID) {
 // applyTemplate substitutes $N references in a template string with the Nth capture group
 // from a regex match on the given input. Supports multi-digit references ($10, $25).
 // Only bare numeric references like $1 are supported — ${...} syntax is rejected.
+// applyTemplate substitutes $1, $2, etc. references in a template string with the
+// corresponding capture groups from the regex match. Only bare $N (not ${N}) syntax
+// is supported — the latter is rejected to avoid ambiguity.
 func applyTemplate(template, input string, re *regexp.Regexp) (string, error) {
 	matches := re.FindStringSubmatch(input)
 	if matches == nil || len(matches) == 0 {
 		return "", fmt.Errorf("regex did not match")
 	}
 
-	var result strings.Builder
-	for i := 0; i < len(template); i++ {
-		ch := template[i]
-		if ch == '$' && i+1 < len(template) {
-			nextCh := template[i+1]
-			if nextCh >= '0' && nextCh <= '9' {
-				// Parse the full capture group reference number.
-				numStart := i + 1
-				for numStart+1 < len(template) && template[numStart+1] >= '0' && template[numStart+1] <= '9' {
-					numStart++
-				}
-				refNumStr := template[i+1 : numStart+1]
-
-				if refNum, err := parseCaptureRef(refNumStr); err != nil {
-					return "", fmt.Errorf("invalid capture reference %s: %w", refNumStr, err)
-				} else if refNum >= 0 && refNum < len(matches) {
-					result.WriteString(matches[refNum])
-				} else {
-					// Unmatched reference → empty string (as per spec).
-					result.WriteString("")
-				}
-
-				i = numStart // skip past the number
-			} else if nextCh == '{' {
-				// Reject any ${...} pattern — only $N (bare number) syntax is supported
-				return "", fmt.Errorf("invalid template syntax: ${...} is not supported; use $N instead")
-			} else {
-				result.WriteByte(ch)
-			}
-		} else {
-			result.WriteByte(ch)
-		}
+	// Reject ${...} syntax before checking for valid refs — catches edge cases like "${invalid}".
+	if strings.Contains(template, "${") {
+		return "", fmt.Errorf("invalid template syntax: ${...} is not supported; use $N instead")
 	}
+
+	// Find all $N references in the template.
+	refPattern := regexp.MustCompile(`\$(\d+)`)
+	allRefs := refPattern.FindAllStringSubmatchIndex(template, -1)
+
+	// No $N references to substitute — return the template unchanged.
+	if len(allRefs) == 0 {
+		return template, nil
+	}
+
+	var result strings.Builder
+	prevEnd := 0 // cursor into template string
+	for _, match := range allRefs {
+		refNumStr := template[match[2]:match[3]]
+		refNum, err := strconv.Atoi(refNumStr)
+		if err != nil || refNum == 0 {
+			return "", fmt.Errorf("invalid capture reference %s: %w", refNumStr, err)
+		}
+
+		result.WriteString(template[prevEnd:match[0]])
+
+		if refNum >= 1 && refNum < len(matches) {
+			result.WriteString(matches[refNum])
+		}
+
+		prevEnd = match[1] // skip past the $N
+	}
+	result.WriteString(template[prevEnd:])
 
 	return result.String(), nil
-}
-
-// parseCaptureRef converts a digit string like "2" or "10" into its integer value.
-// Returns an error if the string contains non-digit characters or is "0"
-// (capture references are 1-indexed per regexp.SubexpIndex).
-func parseCaptureRef(s string) (int, error) {
-	var n int
-	for _, ch := range s {
-		if ch < '0' || ch > '9' {
-			return 0, fmt.Errorf("non-digit character in capture reference")
-		}
-		n = n*10 + int(ch-'0')
-	}
-	if n == 0 {
-		return 0, fmt.Errorf("capture group references must be 1-indexed (got $%s)", s)
-	}
-	return n, nil
 }
 
 // createOrUpdateGrant ensures a grant exists for the given subject, privilege, and resource name.
@@ -402,6 +392,11 @@ func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.Mapping
 	}
 
 	// Track matched grants with full details for the UI.
+	//
+	// NOTE: The read-modify-write on MRGrantsCache (Load → append → Store) is safe
+	// because evaluateRuleForGroup is called sequentially from a single goroutine in
+	// EvaluateMappingRules. If this function ever becomes concurrent, replace with a
+	// per-rule mutex or sync.Map Load-Merge-Store pattern.
 	addMatchedGrant := func(privilege, resource string) {
 		var grants []api.MappingRuleGrant
 		if val, ok := MRGrantsCache.Load(ruleKey); ok && val != nil {
@@ -533,7 +528,7 @@ func (ctx *cleanupStaleGrantsContext) isGrantStillValid(tx data.WriteTxn, grant 
 		if !ruleMatchesGrant(grant, re, m, grpName) {
 			continue
 		}
-		if _, nsValid := ctx.checkNamespacedK8s(tx, grant, re, m, grpName, destCache); !nsValid {
+		if _, valid := ctx.isNamespacedGrantValid(tx, grant, re, m, grpName, destCache); !valid {
 			return false
 		}
 		return true
@@ -564,11 +559,15 @@ func ruleMatchesGrant(grant models.Grant, re *regexp.Regexp, m models.MappingRul
 	return baseResource == matchedRes
 }
 
-// checkNamespacedK8s validates a namespaced K8s grant during cleanup:
-//  1. The cluster destination must still exist.
-//  2. The namespace portion of the grant's resource must be in the dest's Resources list,
-//     or if NamespaceTemplate is set, the expanded template pattern must match at least one namespace.
-func (ctx *cleanupStaleGrantsContext) checkNamespacedK8s(tx data.WriteTxn, grant models.Grant, re *regexp.Regexp, m models.MappingRule, grpName string, destCache *k8sDestCache) (*models.Destination, bool) {
+// isNamespacedGrantValid checks whether a namespaced K8s grant should survive cleanup.
+// Returns (destination, true) when the grant passes validation:
+//
+//   - For non-K8s grants or non-namespaced resources: returns (nil, true) — nothing to check, grant is fine.
+//   - For K8s namespace grants: returns the destination and checks that the namespace
+//     either exists in dest.Resources directly, or matches an expanded NamespaceTemplate pattern.
+//
+// Returns (dest, false) when the cluster no longer exists or namespace validation fails.
+func (ctx *cleanupStaleGrantsContext) isNamespacedGrantValid(tx data.WriteTxn, grant models.Grant, re *regexp.Regexp, m models.MappingRule, grpName string, destCache *k8sDestCache) (*models.Destination, bool) {
 	if m.DestinationType != models.DestinationTypeKubernetes || !strings.Contains(grant.Resource, ".") {
 		return nil, true
 	}
@@ -654,21 +653,15 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 
 // cleanupOrphanedGroups removes group rows synced from an IDP that don't match any active mapping rule.
 func cleanupOrphanedGroups(tx data.WriteTxn, rules []models.MappingRule) error {
-	// Build combined regex from all active mapping rule patterns.
-	parts := make([]string, len(rules))
+	// Pre-compile each rule's regex individually to avoid ReDoS risk from
+	// combining patterns with "|" (a single catastrophic pattern like ^(a+)+$
+	// would cause exponential backtracking across all group names).
+	precompiled := make([]*regexp.Regexp, len(rules))
 	for i, r := range rules {
-		parts[i] = r.SourceGroupRegex
-	}
-	combinedPattern := strings.Join(parts, "|")
-
-	// When there are no active mapping rules, all IDP-synced groups become orphans.
-	var combinedRe *regexp.Regexp
-	if combinedPattern != "" {
-		var compileErr error
-		combinedRe, compileErr = regexp.Compile(combinedPattern)
-		if compileErr != nil {
-			return fmt.Errorf("compile combined mapping rule regex for orphan cleanup: %w", compileErr)
+		if re, err := regexp.Compile(r.SourceGroupRegex); err == nil {
+			precompiled[i] = re
 		}
+		// Silently skip invalid regexes — matches the existing graceful degradation pattern.
 	}
 
 	// Find all IDP-synced groups (created_by_provider != 0) that are not soft-deleted.
@@ -689,7 +682,18 @@ func cleanupOrphanedGroups(tx data.WriteTxn, rules []models.MappingRule) error {
 		}
 
 		// If there are no rules or this group doesn't match any rule, mark for deletion.
-		if combinedRe == nil || !combinedRe.MatchString(name) {
+		if len(precompiled) == 0 {
+			idsToDelete = append(idsToDelete, groupID)
+			continue
+		}
+		matched := false
+		for _, re := range precompiled {
+			if re != nil && re.MatchString(name) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			idsToDelete = append(idsToDelete, groupID)
 		}
 	}

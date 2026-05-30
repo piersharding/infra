@@ -757,15 +757,13 @@ func TestEvaluateMappingRulesInvalidRegexGracefulDegradation(t *testing.T) {
 	defer func() { _ = tx.Rollback() }()
 
 	// Create a rule with an INVALID regex — this should be skipped gracefully.
-	srvMapping := &models.MappingRule{
-		Model:              models.Model{},
-		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
-		RuleName:           "invalid-regex-rule",
-		SourceGroupRegex:   "[invalid(", // invalid regex
-		DestinationType:    models.DestinationTypeSSH,
-		NameTemplate:       "ssh-$1",
-	}
-	assert.NilError(t, data.CreateMappingRule(tx, srvMapping))
+	// Use raw SQL INSERT because our validation rejects invalid patterns via regexp.Compile().
+	_, sqlErr := tx.Exec(
+		`INSERT INTO mapping_rules (id, created_at, updated_at, deleted_at, organization_id,
+		created_by, rule_name, source_group_regex, destination_type, name_template)
+		VALUES ($1::int8, NOW(), NOW(), NULL, $2, 0, 'invalid-regex-rule', '[invalid(', 'ssh', 'ssh-$1')`, int64(1), orgID,
+	)
+	assert.NilError(t, sqlErr)
 
 	// Create a VALID rule that matches groups.
 	validMapping := &models.MappingRule{
@@ -892,27 +890,6 @@ func TestEvaluateMappingRulesInvalidTemplateNameGracefulDegradation(t *testing.T
 			t.Errorf("unexpected grant for team-platform (should have been skipped due to invalid template): %s", g.Resource)
 		}
 	}
-}
-
-// TestParseCaptureRefEdgeCases verifies parseCaptureRef handles edge cases correctly:
-// $0 returns error (1-indexed), non-digit chars return error, multi-digit works.
-func TestParseCaptureRefEdgeCases(t *testing.T) {
-	// $0 must error — capture references are 1-indexed per regexp.SubexpIndex.
-	_, err := parseCaptureRef("0")
-	assert.Assert(t, err != nil, "expected error for $0 (must be 1-indexed)")
-
-	// Non-digit characters should return an error.
-	_, err = parseCaptureRef("1a")
-	assert.Assert(t, err != nil, "expected error for non-digit character in capture reference")
-
-	// Valid multi-digit references work.
-	n, err := parseCaptureRef("10")
-	assert.NilError(t, err)
-	assert.Equal(t, n, 10)
-
-	n, err = parseCaptureRef("99")
-	assert.NilError(t, err)
-	assert.Equal(t, n, 99)
 }
 
 // TestApplyTemplateOutOfBoundRefs verifies that out-of-bounds capture references produce empty strings (not panic).

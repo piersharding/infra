@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { usePopper } from 'react-popper'
 import * as ReactDOM from 'react-dom'
 import { useRouter } from 'next/router'
@@ -458,7 +458,8 @@ function AccessTable({
                     </div>
                     <div className='text-2xs text-gray-500'>
                       {users?.find(u => u.id === grant.user) && 'User'}
-                      {groups?.find(g => g.id === grant.group)?.name && (grant.hasAutoGrant ? 'Group (Auto)' : 'Group')}
+                      {groups?.find(g => g.id === grant.group)?.name &&
+                        (grant.hasAutoGrant ? 'Group (Auto)' : 'Group')}
                     </div>
                   </div>
                 </td>
@@ -783,25 +784,15 @@ export default function DestinationDetail() {
                   Access cluster
                   <ChevronDownIcon className='ml-1 h-4 w-4' />
                 </Popover.Button>
-                <Transition
-                  show={true}
-                  as={Fragment}
-                  enter='transition ease-out duration-100 origin-top-left md:origin-top-right'
-                  enterFrom='transform opacity-0 scale-90 translate-y-0'
-                  enterTo='transform opacity-100 scale-100 translate-y-1'
-                  leave='transition ease-in duration-75 origin-top-left md:origin-top-right'
-                  leaveFrom='transform opacity-100 scale-100 translate-y-1'
-                  leaveTo='transform opacity-0 scale-90 translate-y-0'
-                >
-                  <Popover.Panel className='absolute left-0 z-10 flex w-80 overflow-hidden rounded-xl bg-black text-white shadow-2xl shadow-black/40 md:left-auto md:right-0'>
-                    <AccessCluster
-                      userID={user?.id}
-                      roles={currentUserRoles}
-                      kind={destination?.kind}
-                      resource={destination?.name}
-                    />
-                  </Popover.Panel>
-                </Transition>
+                {/* Headless UI Popover handles open/close via CSS — no need for Transition */}
+                <Popover.Panel className='absolute left-0 z-10 flex w-80 overflow-hidden rounded-xl bg-black text-white shadow-2xl shadow-black/40 md:left-auto md:right-0'>
+                  <AccessCluster
+                    userID={user?.id}
+                    roles={currentUserRoles}
+                    kind={destination?.kind}
+                    resource={destination?.name}
+                  />
+                </Popover.Panel>
               </Popover>
             )}
             {isAdmin && (
