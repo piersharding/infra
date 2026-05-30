@@ -634,6 +634,7 @@ Eval status is exposed via `GET /api/mapping-rules/eval-status` and displayed as
 - **Triggered by**: rule CRUD (create/update/delete), group creation, server startup, login (to catch IDP-synced groups)
 - **Admin-only**: All mapping rule endpoints require `InfraAdminRole` — the UI already enforces this
 - **Async execution**: All request-triggered evaluations run asynchronously in a background goroutine with their own DB transaction, so the API response is not blocked by evaluation
+- **No semaphore or shutdown context needed**: `EvaluateMappingRules` is idempotent — early termination is harmless because the next run picks up the correct state. `pg_try_advisory_xact_lock(orgID)` already serializes concurrent evaluations per org. Together these make additional semaphores or shutdown-context plumbing unnecessary.
 - **Eval status visibility**: Result of each async evaluation is recorded in an in-memory `evalStatusStore` and exposed via `GET /api/mapping-rules/eval-status` — the UI shows a success/error banner
 - **Locking**: `pg_try_advisory_xact_lock(orgID)` prevents concurrent evaluation races
 - **Idempotent**: `createOrUpdateGrant` checks for existing grants before creating; marks pre-existing matches as `auto_grant=true`
@@ -674,6 +675,7 @@ Eval status is exposed via `GET /api/mapping-rules/eval-status` and displayed as
 - **Kubernetes fallback**: When no `RoleTemplate` is set for a Kubernetes rule, the engine falls back to `"view"` (least-privilege valid RBAC role).
 - **Cleanup scope**: `cleanupStaleGrants` only removes grants where `AutoGrant=true` (only the mapping engine sets this). Bootstrap grants and user-created grants are preserved.
 - **Template syntax**: Only `$N` (bare number) is supported. `${...}` syntax is explicitly rejected with an error. Use `$1`, `$2`, etc. for capture group references.
+- **Orphaned group deletion when no rules exist**: `cleanupOrphanedGroups` deletes *all* IDP-synced groups (`created_by_provider != 0`) when no active mapping rules are configured. This is **by design** — provider-synced groups only serve an access-control purpose when referenced by a mapping rule; without any rules, they are orphaned and safely removed. Locally-created groups (`created_by_provider IS NULL`) are never affected. Admins who want to preserve IDP-synced groups without granting access should create at least one mapping rule with a narrow regex that matches no groups.
 
 ### Test Commands
 

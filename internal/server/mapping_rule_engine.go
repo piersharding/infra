@@ -138,6 +138,14 @@ func GetEvalStatus(orgID uid.ID) *EvalStatusReport {
 // recorded in the in-memory evalStatusStore and visible via GetEvalStatus.
 func EvaluateMappingRulesAsync(db *data.DB, orgID uid.ID) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				err := fmt.Errorf("async mapping eval panicked: %v", r)
+				logging.L.Error().Err(err).Msg("mapping rule evaluation recovered from panic")
+				recordEvalStatus(orgID, err)
+			}
+		}()
+
 		tx, err := db.Begin(context.Background(), nil)
 		if err != nil {
 			logging.L.Warn().Err(err).Msg("async mapping eval: begin txn")
@@ -402,18 +410,16 @@ func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.Mapping
 		if val, ok := MRGrantsCache.Load(ruleKey); ok && val != nil {
 			grants = val.([]api.MappingRuleGrant)
 		}
-		for _, priv := range privileges {
-			grantInfo := api.MappingRuleGrant{
-				GroupID:   g.ID,
-				GroupName: g.Name,
-				Privilege: priv,
-				Resource:  resource,
-			}
-			if destInfo != nil {
-				grantInfo.DestinationID = destInfo.ID
-			}
-			grants = append(grants, grantInfo)
+		grantInfo := api.MappingRuleGrant{
+			GroupID:   g.ID,
+			GroupName: g.Name,
+			Privilege: privilege,
+			Resource:  resource,
 		}
+		if destInfo != nil {
+			grantInfo.DestinationID = destInfo.ID
+		}
+		grants = append(grants, grantInfo)
 		MRGrantsCache.Store(ruleKey, grants)
 	}
 
@@ -435,16 +441,16 @@ func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.Mapping
 				if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, priv, nsResource); err != nil {
 					logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create namespaced grant")
 				}
+				addMatchedGrant(priv, nsResource)
 			}
-			addMatchedGrant(privileges[0], nsResource)
 		}
 	} else {
 		for _, priv := range privileges {
 			if err := createOrUpdateGrant(tx, orgID, mapping.DestinationType, g.ID, priv, resourceName); err != nil {
 				logging.L.Warn().Err(err).Str("rule", mapping.RuleName).Str("group", g.Name).Msg("failed to create grant")
 			}
+			addMatchedGrant(priv, resourceName)
 		}
-		addMatchedGrant(privileges[0], resourceName)
 	}
 }
 

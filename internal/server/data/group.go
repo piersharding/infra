@@ -36,6 +36,8 @@ type GetGroupOptions struct {
 	ByID uid.ID
 	// ByName instructs GetGroup to return the group matching this name.
 	ByName string
+	// IncludeDeleted, if true, returns groups regardless of deleted_at status.
+	IncludeDeleted bool
 }
 
 func GetGroup(tx ReadTxn, opts GetGroupOptions) (*models.Group, error) {
@@ -43,7 +45,11 @@ func GetGroup(tx ReadTxn, opts GetGroupOptions) (*models.Group, error) {
 	query := querybuilder.New("SELECT")
 	query.B(columnsForSelect(group))
 	query.B("FROM groups")
-	query.B("WHERE deleted_at is null")
+	if !opts.IncludeDeleted {
+		query.B("WHERE deleted_at is null")
+	} else {
+		query.B("WHERE 1=1")
+	}
 	query.B("AND organization_id = ?", tx.OrganizationID())
 
 	switch {

@@ -71,13 +71,10 @@ func TestCleanupOrphanedGroups_NoMatchingRuleDropsGroup(t *testing.T) {
 	gotassert.NilError(t, EvaluateMappingRules(tx2))
 
 	// Verify the IDP-synced group was soft-deleted (orphaned).
-	stored2, err := data.GetGroup(tx2, data.GetGroupOptions{ByID: idpGroup.ID})
-	if stored2 != nil {
-		gotassert.Assert(t, !stored2.DeletedAt.Valid,
-			"expected 'team-platform' to be soft-deleted (orphaned after rule deletion)")
-	} else if err == nil {
-		t.Logf("group %s no longer found in DB", idpGroup.Name)
-	}
+	stored2, err := data.GetGroup(tx2, data.GetGroupOptions{ByID: idpGroup.ID, IncludeDeleted: true})
+	gotassert.NilError(t, err)
+	gotassert.Assert(t, stored2 != nil && stored2.DeletedAt.Valid,
+		"expected 'team-platform' to be soft-deleted (orphaned after rule deletion), got DeletedAt.Valid=%v", stored2.DeletedAt.Valid)
 
 	if err := tx2.Commit(); err != nil {
 		t.Fatalf("commit2: %v", err)
@@ -115,11 +112,10 @@ func TestCleanupOrphanedGroups_LocalGroupNeverDeleted(t *testing.T) {
 	gotassert.NilError(t, EvaluateMappingRules(tx))
 
 	// Verify the IDP-synced group was cleaned up.
-	storedIDP, err := data.GetGroup(tx, data.GetGroupOptions{ByID: idpGroup.ID})
-	if storedIDP != nil {
-		gotassert.Assert(t, !storedIDP.DeletedAt.Valid,
-			"expected 'team-platform' (IDP-synced) to be cleaned up")
-	}
+	storedIDP, err := data.GetGroup(tx, data.GetGroupOptions{ByID: idpGroup.ID, IncludeDeleted: true})
+	gotassert.NilError(t, err)
+	gotassert.Assert(t, storedIDP.DeletedAt.Valid,
+		"expected 'team-platform' (IDP-synced) to be cleaned up, got DeletedAt.Valid=%v", storedIDP.DeletedAt.Valid)
 
 	// Verify the local group is STILL present and NOT deleted.
 	storedLocal, err := data.GetGroup(tx, data.GetGroupOptions{ByID: localGroup.ID})
@@ -340,13 +336,10 @@ func TestCleanupOrphanedGroups_DeletedRuleDropsGroup(t *testing.T) {
 	gotassert.NilError(t, EvaluateMappingRules(tx))
 
 	// Verify the group was soft-deleted (orphaned).
-	after, err := data.GetGroup(tx, data.GetGroupOptions{ByID: idpGroup.ID})
-	if after != nil {
-		gotassert.Assert(t, !after.DeletedAt.Valid,
-			"expected 'team-platform' to be soft-deleted after its matching rule was deleted")
-	} else if err == nil {
-		t.Logf("group %s no longer found in DB", idpGroup.Name)
-	}
+	after, err := data.GetGroup(tx, data.GetGroupOptions{ByID: idpGroup.ID, IncludeDeleted: true})
+	gotassert.NilError(t, err)
+	gotassert.Assert(t, after.DeletedAt.Valid,
+		"expected 'team-platform' to be soft-deleted after its matching rule was deleted, got DeletedAt.Valid=%v", after.DeletedAt.Valid)
 
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit: %v", err)

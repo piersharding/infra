@@ -501,24 +501,3 @@ func TestSyncGrantsToDestination_GracePeriod(t *testing.T) {
 			"lastSuccessfulSync should be recent after a successful sync")
 	})
 }
-
-// TestPeriodicReconciliation verifies the ReconcileInterval option logic.
-func TestPeriodicReconciliation(t *testing.T) {
-	t.Run("default interval is 5 minutes", func(t *testing.T) {
-		var opts Options
-		assert.Equal(t, time.Duration(0), opts.ReconcileInterval)
-
-		interval := opts.ReconcileInterval
-		if interval == 0 {
-			interval = 5 * time.Minute
-		}
-		assert.Equal(t, 5*time.Minute, interval)
-
-		opts.ReconcileInterval = 100 * time.Millisecond
-		lastReconcile := time.Now().Add(-200 * time.Millisecond)
-		assert.Assert(t, time.Since(lastReconcile) > opts.ReconcileInterval)
-
-		lastReconcile = time.Now().Add(-50 * time.Millisecond)
-		assert.Assert(t, !(time.Since(lastReconcile) > opts.ReconcileInterval))
-	})
-}

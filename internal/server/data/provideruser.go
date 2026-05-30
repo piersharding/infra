@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/scim2/filter-parser/v2"
@@ -327,31 +325,25 @@ func filterIDPGroups(tx ReadTxn, incoming []string) []string {
 		}
 	}
 
-	// Load all active mapping rules and build a combined regex from their patterns.
+	// Load all active mapping rules and pre-compile each regex individually.
 	rules, err := ListMappingRules(tx, ListMappingRulesOptions{})
 	if err != nil {
 		logging.L.Warn().Err(err).Msg("failed to load mapping rules for IDP filter")
 	} else {
-		var parts []string
+		var precompiled []*regexp.Regexp
 		for _, r := range rules {
-			// Each rule already has ^...$ anchors from anchorRegex.
-			parts = append(parts, r.SourceGroupRegex)
+			if re, err2 := regexp.Compile(r.SourceGroupRegex); err2 == nil {
+				precompiled = append(precompiled, re)
+			}
 		}
-		if len(parts) > 0 {
-			combinedPattern := strings.Join(parts, "|")
-			combinedRe, err2 := regexp.Compile(combinedPattern)
-			if err2 != nil {
-				logging.L.Warn().Err(err2).Msg("invalid combined mapping rule regex for IDP filter")
-			} else {
-				for _, name := range incoming {
-					if allowed[name] {
-						continue
-					}
-					if combinedRe.MatchString(name) {
-						allowed[name] = true
-					} else if !slices.Contains(localGroupNames, name) {
-						logging.L.Warn().Str("group", name).Msg("dropped IDP group: not locally created and does not match any mapping rule")
-					}
+		for _, name := range incoming {
+			if allowed[name] {
+				continue
+			}
+			for _, re := range precompiled {
+				if re.MatchString(name) {
+					allowed[name] = true
+					break
 				}
 			}
 		}

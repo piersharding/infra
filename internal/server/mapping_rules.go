@@ -120,8 +120,6 @@ func (a *API) UpdateMappingRule(rCtx access.RequestContext, r *api.UpdateMapping
 		return nil, fmt.Errorf("update mapping rule: %w", err)
 	}
 
-	mapping.ID = r.ID
-
 	// The updated mapping may now match different groups or produce different resource names,
 	// so we re-evaluate to update the grant set accordingly.
 	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())

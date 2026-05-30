@@ -20,6 +20,10 @@ For documentation, see the [docs](./docs)
 - [Community Forum](https://github.com/infrahq/infra/discussions) Best for: help with building, discussion about infrastructure access best practices.
 - [GitHub Issues](https://github.com/infrahq/infra/issues) Best for: bugs and errors you encounter using Infra.
 
+## Mapping Rules
+
+Infra supports group mapping rules that automatically create access grants based on IDP group membership. When the last mapping rule is removed, provider-synced groups that don't match any rule are automatically cleaned up — they serve no access purpose and are safely removed. Only groups synced from an identity provider are affected; locally-created groups are always preserved. See `docs/mapping-rules.md` for full documentation.
+
 
 ## How to set up locally
 
