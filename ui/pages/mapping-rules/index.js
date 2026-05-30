@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 
 import {
   PlusIcon,
+  LinkIcon,
   TrashIcon,
   QuestionMarkCircleIcon,
 } from '@heroicons/react/24/outline'
@@ -20,7 +21,13 @@ import { useUser } from '../../lib/hooks'
 import { useSearch } from '../../lib/useSearch'
 import { previewRegex, previewTemplate } from '../../lib/mappingRules'
 
-function AddMappingRuleDialog({ open, setOpen, groups, onMutate }) {
+function AddMappingRuleDialog({
+  open,
+  setOpen,
+  editingRule,
+  groups,
+  onMutate,
+}) {
   const [ruleName, setRuleName] = useState('')
   const [sourceGroupRegex, setSourceGroupRegex] = useState('')
   const [destinationType, setDestinationType] = useState('kubernetes')
@@ -29,6 +36,28 @@ function AddMappingRuleDialog({ open, setOpen, groups, onMutate }) {
   const [roleTemplate, setRoleTemplate] = useState('')
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
+
+  // Populate or reset form fields when editing rule changes.
+  useEffect(() => {
+    if (editingRule) {
+      setRuleName(editingRule.rule_name || '')
+      setSourceGroupRegex(editingRule.source_group_regex || '')
+      setNameTemplate(editingRule.name_template || '')
+      if (editingRule.destination_type)
+        setDestinationType(editingRule.destination_type)
+      setNamespaceTemplate(editingRule.namespace_template ?? '')
+      setRoleTemplate(editingRule.role_template ?? '')
+    } else {
+      // Reset to fresh-add defaults when no editing rule is provided.
+      setRuleName('')
+      setSourceGroupRegex('')
+      setNameTemplate('')
+      setNamespaceTemplate('')
+      setRoleTemplate('')
+      setDestinationType('kubernetes')
+    }
+  }, [editingRule])
+
   // Warn user if they try to navigate away with unsaved changes.
   const hasUnsavedChanges = ruleName || sourceGroupRegex || nameTemplate
   useEffect(() => {
@@ -89,8 +118,11 @@ function AddMappingRuleDialog({ open, setOpen, groups, onMutate }) {
       if (namespaceTemplate && destinationType === 'kubernetes')
         body.namespace_template = namespaceTemplate
 
-      const res = await fetch('/api/mapping-rules', {
-        method: 'POST',
+      const url = editingRule
+        ? `/api/mapping-rules/${editingRule.id}`
+        : '/api/mapping-rules'
+      const res = await fetch(url, {
+        method: editingRule ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
@@ -291,7 +323,13 @@ function AddMappingRuleDialog({ open, setOpen, groups, onMutate }) {
                     disabled={submitting}
                     className={`rounded-md border border-transparent bg-black px-4 py-2 text-sm font-medium text-white ${submitting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800 cursor-pointer'}`}
                   >
-                    {submitting ? 'Creating...' : 'Create Rule'}
+                    {submitting
+                      ? editingRule
+                        ? 'Saving...'
+                        : 'Creating...'
+                      : editingRule
+                        ? 'Save Rule'
+                        : 'Create Rule'}
                   </button>
                 </div>
               </form>
@@ -352,6 +390,7 @@ export default function GroupsMapping() {
   const [showNotification, setShowNotification] = useState(false)
   const [notificationMessage, setNotificationMessage] = useState('')
   const [addOpen, setAddOpen] = useState(false)
+  const [editingRuleId, setEditingRuleId] = useState(null)
 
   // Determine empty-state and result-count messages for the UI.
   const emptyMessage = getEmptyMessage('No mapping rules')
@@ -421,7 +460,10 @@ export default function GroupsMapping() {
           </div>
           <button
             type='button'
-            onClick={() => setAddOpen(true)}
+            onClick={() => {
+              setEditingRuleId(null)
+              setAddOpen(true)
+            }}
             className='ml-4 inline-flex items-center self-end rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
           >
             <PlusIcon className='mr-1 h-3 w-3' /> Add Rule
@@ -640,10 +682,25 @@ export default function GroupsMapping() {
               ),
             },
             {
-              id: 'delete',
+              id: 'actions',
               cell: function Cell(info) {
                 return (
-                  <div className='group invisible rounded-md bg-transparent group-hover:visible'>
+                  <div className='group invisible rounded-md bg-transparent group-hover:visible flex flex-col gap-1'>
+                    <span
+                      onClick={() => {
+                        fetch(`/api/mapping-rules/${info.row.original.id}`)
+                          .then(res => (res.ok ? res.json() : Promise.reject()))
+                          .then(rule =>
+                            setEditingRuleId({ id: rule.id, ...rule })
+                          )
+                          .catch(() => null)
+                        setAddOpen(true)
+                      }}
+                      className='flex cursor-pointer items-center text-xs font-medium text-blue-500 hover:text-blue-400'
+                    >
+                      <LinkIcon className='mr-2 h-3.5 w-3.5' />
+                      <span className='hidden sm:block'>Edit</span>
+                    </span>
                     <button
                       type='button'
                       onClick={() => handleRowDeleteClick(info.row)}
@@ -701,9 +758,16 @@ export default function GroupsMapping() {
       {/* Add Rule Modal */}
       <AddMappingRuleDialog
         open={addOpen}
-        setOpen={setAddOpen}
+        setOpen={val => {
+          setAddOpen(val)
+          if (!val) setEditingRuleId(null)
+        }}
+        editingRule={editingRuleId}
         groups={groups.map(g => g.name)}
-        onMutate={() => mutate(apiUrl)}
+        onMutate={() => {
+          mutate(apiUrl)
+          setEditingRuleId(null)
+        }}
       />
     </div>
   )

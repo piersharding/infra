@@ -130,7 +130,7 @@ func (a *API) UpdateMappingRule(rCtx access.RequestContext, r *api.UpdateMapping
 }
 
 // GetMappingRuleEvalStatus returns the result of the last async evaluation.
-// Requires InfraViewRole — same as listing rules.
+// Requires InfraAdminRole.
 func (a *API) GetMappingRuleEvalStatus(rCtx access.RequestContext, _ *api.EmptyRequest) (*api.MappingRuleEvalStatus, error) {
 	if err := access.GetMappingRuleEvalStatus(rCtx); err != nil {
 		return nil, err

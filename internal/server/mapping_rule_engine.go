@@ -13,6 +13,7 @@ import (
 	"github.com/infrahq/infra/internal"
 	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/internal/server/data"
+	"github.com/infrahq/infra/internal/server/data/querybuilder"
 	"github.com/infrahq/infra/internal/server/models"
 	"github.com/infrahq/infra/uid"
 )
@@ -239,7 +240,13 @@ func createOrUpdateGrant(tx data.WriteTxn, orgID uid.ID, destType models.Destina
 		}
 	}
 	if found {
-		_, _ = tx.Exec(`UPDATE grants SET auto_grant = true WHERE id = ?`, preExisting.ID)
+		autoGrantQuery := querybuilder.New("UPDATE grants")
+		autoGrantQuery.B("SET auto_grant = ?", true)
+		autoGrantQuery.B("WHERE id = ?", preExisting.ID)
+		_, err := tx.Exec(autoGrantQuery.String(), autoGrantQuery.Args...)
+		if err != nil {
+			return fmt.Errorf("mark grant as auto-granted: %w", err)
+		}
 		return nil // grant already covers this subject → nothing to do
 	}
 

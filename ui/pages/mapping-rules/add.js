@@ -1,7 +1,7 @@
 import Head from 'next/head'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 
 import { ArrowLeftIcon } from '@heroicons/react/24/outline'
 
@@ -36,6 +36,7 @@ export default function AddGroupsMapping() {
 
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
+  const [loading, setLoading] = useState(isEdit)
   const [notification, setNotification] = useState(null)
   // Warn user if they try to navigate away with unsaved changes.
   const hasUnsavedChanges = ruleName || sourceGroupRegex || nameTemplate
@@ -50,14 +51,46 @@ export default function AddGroupsMapping() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasUnsavedChanges])
 
+  // Fetch existing rule data in edit mode.
+  useEffect(() => {
+    if (!isEdit || !router.query.id) return
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/mapping-rules/${router.query.id}`)
+        if (res.ok) {
+          const rule = await jsonBody(res)
+          setRuleName(rule.rule_name || '')
+          setSourceGroupRegex(rule.source_group_regex || '')
+          setNameTemplate(rule.name_template || '')
+          // Default to 'kubernetes' for destination type, but use server value if present.
+          if (rule.destination_type) {
+            setDestinationType(rule.destination_type)
+          }
+          // namespace_template and role_template may be omitted in the response.
+          if (
+            rule.namespace_template !== undefined &&
+            rule.namespace_template !== null
+          ) {
+            setNamespaceTemplate(rule.namespace_template)
+          } else {
+            setNamespaceTemplate('')
+          }
+          if (rule.role_template !== undefined && rule.role_template !== null) {
+            setRoleTemplate(rule.role_template)
+          } else {
+            setRoleTemplate('')
+          }
+        }
+      } catch {
+        /* ignore — form will show defaults */
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [isEdit, router.query.id])
+
   // Memoized live-preview: evaluates sourceGroupRegex against sample group names
   // to show the user which groups would match their regex pattern.
-  const sampleGroups = [
-    'team-platform',
-    'ops-general',
-    'admin-dev',
-    'infra-admins',
-  ]
   const matchedGroups = useMemo(
     () => previewRegex(sourceGroupRegex),
     [sourceGroupRegex]
@@ -182,234 +215,244 @@ export default function AddGroupsMapping() {
         </h1>
       </header>
 
+      {loading && (
+        <div className='flex justify-center py-8'>
+          <Loader className='h-8 w-8 text-gray-400' />
+        </div>
+      )}
+
       {/* Form */}
-      <form onSubmit={handleSubmit} className='space-y-6'>
-        {/* Submit error */}
-        {errors.submit && (
-          <div className='rounded-md bg-red-50 p-3 text-sm text-red-700'>
-            {errors.submit}
-          </div>
-        )}
-
-        {/* Rule Name */}
-        <div className='mb-4 flex flex-col'>
-          <label
-            htmlFor='rule_name'
-            className='text-xs font-medium text-gray-600'
-          >
-            Rule Name
-          </label>
-          <input
-            id='rule_name'
-            name='rule_name'
-            required
-            type='text'
-            value={ruleName}
-            onChange={e => setRuleName(e.target.value)}
-            placeholder='e.g., team-platform-access'
-            className={`mt-1 block w-full rounded-md border ${errors.rule_name ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm`}
-          />
-          {errors.rule_name && (
-            <p className='mt-1 text-xs text-red-500'>{errors.rule_name}</p>
-          )}
-        </div>
-
-        {/* Destination Type */}
-        <div className='mb-4 flex flex-col'>
-          <label
-            htmlFor='destination_type'
-            className='text-xs font-medium text-gray-600'
-          >
-            Destination Type
-          </label>
-          <select
-            id='destination_type'
-            name='destination_type'
-            value={destinationType}
-            onChange={e => setDestinationType(e.target.value)}
-            className='mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm'
-          >
-            <option value='kubernetes'>Kubernetes</option>
-            <option value='ssh'>SSH</option>
-          </select>
-        </div>
-
-        {/* Group Matching Regex */}
-        <div className='mb-4 flex flex-col'>
-          <label
-            htmlFor='source_group_regex'
-            className='text-xs font-medium text-gray-600'
-          >
-            Group Matching Regex
-          </label>
-          <input
-            id='source_group_regex'
-            name='source_group_regex'
-            required
-            type='search'
-            value={sourceGroupRegex}
-            onChange={e => setSourceGroupRegex(e.target.value)}
-            placeholder='e.g., ^team-(.*)$'
-            className={`mt-1 block w-full rounded-md border ${errors.source_group_regex ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm`}
-          />
-          {errors.source_group_regex && (
-            <p className='mt-1 text-xs text-red-500'>
-              {errors.source_group_regex}
-            </p>
-          )}
-
-          {/* Regex Preview */}
-          {matchedGroups.length > 0 && (
-            <div className='mt-2 rounded-md bg-green-50 p-3'>
-              <span className='text-xs font-medium text-green-700'>
-                Matches:
-              </span>
-              <span className='ml-1 text-xs text-gray-600'>
-                {matchedGroups.join(', ')}
-              </span>
+      {!loading && (
+        <form onSubmit={handleSubmit} className='space-y-6'>
+          {/* Submit error */}
+          {errors.submit && (
+            <div className='rounded-md bg-red-50 p-3 text-sm text-red-700'>
+              {errors.submit}
             </div>
           )}
-        </div>
 
-        {/* Destination Name Template */}
-        <div className='mb-4 flex flex-col'>
-          <label
-            htmlFor='name_template'
-            className='text-xs font-medium text-gray-600'
-          >
-            Destination Name Template
-          </label>
-          <input
-            id='name_template'
-            name='name_template'
-            required
-            type='text'
-            value={nameTemplate}
-            onChange={e => setNameTemplate(e.target.value)}
-            placeholder='e.g., cluster-$1-prod'
-            className={`mt-1 block w-full rounded-md border ${errors.name_template ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm`}
-          />
-          <p className='mt-1 text-xs text-gray-400'>
-            Use $N for capture groups from the regex (e.g., cluster-$1-prod)
-          </p>
-          {errors.name_template && (
-            <p className='mt-1 text-xs text-red-500'>{errors.name_template}</p>
-          )}
-
-          {/* Template Preview */}
-          {templatePreview && templatePreview !== nameTemplate && (
-            <div className='mt-2 rounded-md bg-blue-50 p-3'>
-              <span className='text-xs font-medium text-blue-700'>
-                Example output:
-              </span>
-              <span className='ml-1 text-sm text-gray-700'>
-                {templatePreview}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Role Template (only for Kubernetes) */}
-        {destinationType === 'kubernetes' && (
+          {/* Rule Name */}
           <div className='mb-4 flex flex-col'>
             <label
-              htmlFor='role_template'
+              htmlFor='rule_name'
               className='text-xs font-medium text-gray-600'
             >
-              Role Template
+              Rule Name
             </label>
             <input
-              id='role_template'
-              name='role_template'
-              required={destinationType === 'kubernetes'}
+              id='rule_name'
+              name='rule_name'
+              required
               type='text'
-              value={roleTemplate}
-              onChange={e => setRoleTemplate(e.target.value)}
-              placeholder='e.g., $1-admin'
-              className={`mt-1 block w-full rounded-md border ${errors.role_template ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm`}
+              value={ruleName}
+              onChange={e => setRuleName(e.target.value)}
+              placeholder='e.g., team-platform-access'
+              className={`mt-1 block w-full rounded-md border ${errors.rule_name ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm`}
             />
-            <p className='mt-1 text-xs text-gray-400'>
-              Use $N for capture groups (e.g., cluster-team-platform-prod →
-              team-platform-admin)
-            </p>
-            {errors.role_template && (
+            {errors.rule_name && (
+              <p className='mt-1 text-xs text-red-500'>{errors.rule_name}</p>
+            )}
+          </div>
+
+          {/* Destination Type */}
+          <div className='mb-4 flex flex-col'>
+            <label
+              htmlFor='destination_type'
+              className='text-xs font-medium text-gray-600'
+            >
+              Destination Type
+            </label>
+            <select
+              id='destination_type'
+              name='destination_type'
+              value={destinationType}
+              onChange={e => setDestinationType(e.target.value)}
+              className='mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm'
+            >
+              <option value='kubernetes'>Kubernetes</option>
+              <option value='ssh'>SSH</option>
+            </select>
+          </div>
+
+          {/* Group Matching Regex */}
+          <div className='mb-4 flex flex-col'>
+            <label
+              htmlFor='source_group_regex'
+              className='text-xs font-medium text-gray-600'
+            >
+              Group Matching Regex
+            </label>
+            <input
+              id='source_group_regex'
+              name='source_group_regex'
+              required
+              type='search'
+              value={sourceGroupRegex}
+              onChange={e => setSourceGroupRegex(e.target.value)}
+              placeholder='e.g., ^team-(.*)$'
+              className={`mt-1 block w-full rounded-md border ${errors.source_group_regex ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm`}
+            />
+            {errors.source_group_regex && (
               <p className='mt-1 text-xs text-red-500'>
-                {errors.role_template}
+                {errors.source_group_regex}
               </p>
             )}
 
-            {/* Role Template Preview */}
-            {roleTemplate && (
-              <div className='mt-2 rounded-md bg-blue-50 p-3'>
-                <span className='text-xs font-medium text-blue-700'>
-                  Example role:
+            {/* Regex Preview */}
+            {matchedGroups.length > 0 && (
+              <div className='mt-2 rounded-md bg-green-50 p-3'>
+                <span className='text-xs font-medium text-green-700'>
+                  Matches:
                 </span>
-                <span className='ml-1 text-sm text-gray-700'>
-                  {roleTemplate.replace(/\$([1-9]\d*)/g, '[group-$1]')}
+                <span className='ml-1 text-xs text-gray-600'>
+                  {matchedGroups.join(', ')}
                 </span>
               </div>
             )}
           </div>
-        )}
 
-        {/* Namespace Template Regex (only for Kubernetes) */}
-        {destinationType === 'kubernetes' && (
+          {/* Destination Name Template */}
           <div className='mb-4 flex flex-col'>
             <label
-              htmlFor='namespace_template'
+              htmlFor='name_template'
               className='text-xs font-medium text-gray-600'
             >
-              Namespace Template Regex
+              Destination Name Template
             </label>
             <input
-              id='namespace_template'
-              name='namespace_template'
+              id='name_template'
+              name='name_template'
+              required
               type='text'
-              value={namespaceTemplate}
-              onChange={e => setNamespaceTemplate(e.target.value)}
-              placeholder='Optional: e.g., $1-ns (leave empty for cluster-wide)'
-              className='mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm'
+              value={nameTemplate}
+              onChange={e => setNameTemplate(e.target.value)}
+              placeholder='e.g., cluster-$1-prod'
+              className={`mt-1 block w-full rounded-md border ${errors.name_template ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm`}
             />
             <p className='mt-1 text-xs text-gray-400'>
-              Optional. If set, creates namespaced grants (e.g.,
-              cluster-$1-prod.$2-ns)
+              Use $N for capture groups from the regex (e.g., cluster-$1-prod)
             </p>
-          </div>
-        )}
+            {errors.name_template && (
+              <p className='mt-1 text-xs text-red-500'>
+                {errors.name_template}
+              </p>
+            )}
 
-        {/* SSH Note */}
-        {destinationType === 'ssh' && (
-          <div className='mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-700'>
-            For SSH destinations, the privilege is always "connect" and role
-            template is not used.
+            {/* Template Preview */}
+            {templatePreview && templatePreview !== nameTemplate && (
+              <div className='mt-2 rounded-md bg-blue-50 p-3'>
+                <span className='text-xs font-medium text-blue-700'>
+                  Example output:
+                </span>
+                <span className='ml-1 text-sm text-gray-700'>
+                  {templatePreview}
+                </span>
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Submit */}
-        <div className='flex items-center justify-end space-x-3 pt-4'>
-          <Link href='/mapping-rules' passHref>
+          {/* Role Template (only for Kubernetes) */}
+          {destinationType === 'kubernetes' && (
+            <div className='mb-4 flex flex-col'>
+              <label
+                htmlFor='role_template'
+                className='text-xs font-medium text-gray-600'
+              >
+                Role Template
+              </label>
+              <input
+                id='role_template'
+                name='role_template'
+                required={destinationType === 'kubernetes'}
+                type='text'
+                value={roleTemplate}
+                onChange={e => setRoleTemplate(e.target.value)}
+                placeholder='e.g., $1-admin'
+                className={`mt-1 block w-full rounded-md border ${errors.role_template ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm`}
+              />
+              <p className='mt-1 text-xs text-gray-400'>
+                Use $N for capture groups (e.g., cluster-team-platform-prod →
+                team-platform-admin)
+              </p>
+              {errors.role_template && (
+                <p className='mt-1 text-xs text-red-500'>
+                  {errors.role_template}
+                </p>
+              )}
+
+              {/* Role Template Preview */}
+              {roleTemplate && (
+                <div className='mt-2 rounded-md bg-blue-50 p-3'>
+                  <span className='text-xs font-medium text-blue-700'>
+                    Example role:
+                  </span>
+                  <span className='ml-1 text-sm text-gray-700'>
+                    {roleTemplate.replace(/\$([1-9]\d*)/g, '[group-$1]')}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Namespace Template Regex (only for Kubernetes) */}
+          {destinationType === 'kubernetes' && (
+            <div className='mb-4 flex flex-col'>
+              <label
+                htmlFor='namespace_template'
+                className='text-xs font-medium text-gray-600'
+              >
+                Namespace Template Regex
+              </label>
+              <input
+                id='namespace_template'
+                name='namespace_template'
+                type='text'
+                value={namespaceTemplate}
+                onChange={e => setNamespaceTemplate(e.target.value)}
+                placeholder='Optional: e.g., $1-ns (leave empty for cluster-wide)'
+                className='mt-1 block w-full rounded-md border border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm'
+              />
+              <p className='mt-1 text-xs text-gray-400'>
+                Optional. If set, creates namespaced grants (e.g.,
+                cluster-$1-prod.$2-ns)
+              </p>
+            </div>
+          )}
+
+          {/* SSH Note */}
+          {destinationType === 'ssh' && (
+            <div className='mb-4 rounded-md bg-yellow-50 p-3 text-sm text-yellow-700'>
+              For SSH destinations, the privilege is always "connect" and role
+              template is not used.
+            </div>
+          )}
+
+          {/* Submit */}
+          <div className='flex items-center justify-end space-x-3 pt-4'>
+            <Link href='/mapping-rules' passHref>
+              <button
+                type='button'
+                className='rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 cursor-pointer'
+              >
+                Cancel
+              </button>
+            </Link>
             <button
-              type='button'
-              className='rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 cursor-pointer'
+              type='submit'
+              disabled={submitting}
+              className={`rounded-md border border-transparent bg-black px-4 py-2 text-sm font-medium text-white shadow-sm ${submitting ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-800 hover:cursor-pointer'}`}
             >
-              Cancel
+              {submitting
+                ? isEdit
+                  ? 'Updating...'
+                  : 'Creating...'
+                : isEdit
+                  ? 'Update Rule'
+                  : 'Create Rule'}
             </button>
-          </Link>
-          <button
-            type='submit'
-            disabled={submitting}
-            className={`rounded-md border border-transparent bg-black px-4 py-2 text-sm font-medium text-white shadow-sm ${submitting ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-800 hover:cursor-pointer'}`}
-          >
-            {submitting
-              ? isEdit
-                ? 'Updating...'
-                : 'Creating...'
-              : isEdit
-                ? 'Update Rule'
-                : 'Create Rule'}
-          </button>
-        </div>
-      </form>
+          </div>
+        </form>
+      )}
     </div>
   )
 }

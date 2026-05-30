@@ -56,6 +56,7 @@ For **kubernetes** destination type, the engine creates grants that map IDP grou
 - A cluster-level grant is created using the Name Template as the resource
 - If Role Template is set, it's applied to determine the RBAC role name; otherwise `view` is used as a safe default
 - The built-in Kubernetes role **`admin`** (which only provides namespace-level permissions) is automatically translated to **`cluster-admin`** (full cluster-wide access), since mapping rules intended for admin groups typically expect full cluster privileges. This translation applies when the resolved Role Template value is exactly `admin`.
+- Some deployments may define organization-specific roles with special behavior (e.g., a role that grants both its own privilege and elevated access). Check your deployment's configuration to understand any such custom roles.
 - If **Namespace Template Regex** is set (see below), namespace-scoped grants are created dynamically against the destination's live namespace list
 
 #### Namespace Template Regex — Wildcard Expansion
@@ -154,6 +155,18 @@ Grants created by mapping rules are marked with `AutoGrant=true` and `CreatedBy=
 - **Updates**: If a mapping rule changes (regex updated, template modified), stale grants are automatically cleaned up and new ones created on the next evaluation cycle
 - **Cleanup**: Only `AutoGrant=true` grants with `CreatedBy=system` can be removed by the engine. Manual grants (`AutoGrant=false`) and bootstrap grants are always preserved
 
+### IDP Group Cleanup (Orphaned Groups)
+
+The mapping rule engine also manages the lifecycle of identity provider-synced groups stored in Infra:
+
+- **Sync**: When an IDP syncs groups to Infra, they are marked as "provider-created" (`created_by_provider != 0`)
+- **Matching**: During every evaluation cycle (triggered by rule changes, destination updates, group creation, or login), the engine checks each provider-created group against all active mapping rules
+- **Orphan removal**: If a provider-created group does **not** match any active mapping rule's `source_group_regex`, it is deleted from Infra. This prevents unbounded storage of synced groups that are no longer relevant
+- **No rules = full cleanup**: When there are zero active mapping rules, all IDP-synced groups become orphans and are removed on the next evaluation cycle
+- **Locally-created groups** (created manually in the UI) are never deleted by this process — only provider-synced ones
+
+This means that if you delete a mapping rule whose regex was matching certain IDP groups, those groups will be cleaned up on the next evaluation. If you need to preserve an IDP group without granting access via mapping rules, create it as a local group in Infra (Settings → Groups) instead of syncing it from your identity provider.
+
 ## Permissions
 
 | Role | Can View Rules | Can Create/Edit/Delete Rules |
@@ -189,3 +202,30 @@ Mapping rules define access policies that affect group-level permissions. While 
 - Ensure the IDP sync has run since creating/modifying the rule
 - Check server logs for warnings about invalid regex or failed template evaluation
 - Verify the destination (Kubernetes cluster / SSH host) exists and is reachable in Infra's configuration
+
+### Evaluation Status API
+
+You can check the result of the last mapping rule engine evaluation via:
+
+```
+GET /api/mapping-rules/eval-status
+Infra-Version: 0.x.y
+Authorization: Bearer <access-key>
+```
+
+Response (requires `InfraAdminRole`):
+```json
+{
+  "last_run_at": "2024-03-14T09:48:00Z",
+  "success": true,
+  "error": null
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `last_run_at` | string (RFC3339) | Timestamp of the last evaluation run |
+| `success` | boolean | Whether the last evaluation completed without errors |
+| `error` | string or null | Error message if the last evaluation failed, omitted on success |
+
+The UI displays this status as a banner after rule changes. If an evaluation fails (e.g., due to invalid regex in any active rule), the error is logged server-side and visible via this endpoint.

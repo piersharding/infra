@@ -47,6 +47,10 @@ export function previewTemplate(
 
   if (refs.length === 0) return template
 
+  // Sort refs descending so larger numbers are replaced first.
+  // Without this, $1 would match the leading "$1" in "$11", corrupting later replacements.
+  const sortedRefs = [...refs].sort((a, b) => b - a)
+
   // If sourceGroupRegex is provided, use it to get actual capture groups.
   if (sourceGroupRegex) {
     try {
@@ -54,7 +58,7 @@ export function previewTemplate(
       const matches = sampleGroup.match(re)
       if (matches && matches.length > 1) {
         let result = template
-        for (const ref of refs) {
+        for (const ref of sortedRefs) {
           // Replace all occurrences of $ref with the captured group value.
           const replacement =
             ref < matches.length ? matches[ref] : `[group-${ref}]`
