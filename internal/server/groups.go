@@ -62,6 +62,9 @@ func (a *API) DeleteGroup(rCtx access.RequestContext, r *api.Resource) (*api.Emp
 	return &api.EmptyResponse{}, nil
 }
 
+// UpdateUsersInGroup adds/removes users from a group. Unlike CreateGroup and DeleteGroup,
+// this does NOT trigger mapping rule evaluation because changing group membership does not
+// affect which groups match rules — only the set of grants for those matched groups.
 func (a *API) UpdateUsersInGroup(rCtx access.RequestContext, r *api.UpdateUsersInGroupRequest) (*api.EmptyResponse, error) {
 	return nil, access.UpdateUsersInGroup(rCtx, r.GroupID, r.UserIDsToAdd, r.UserIDsToRemove)
 }

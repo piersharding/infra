@@ -22,6 +22,9 @@ type Grant struct {
 	Privilege string `json:"privilege" note:"a role or permission" example:"admin"`
 	Resource  string `json:"resource" note:"a resource name in Infra's Universal Resource Notation" example:"production.namespace"`
 
+	// AutoGrant is true when this grant was created automatically by the mapping
+	// engine (not by an admin or bootstrap process). Only auto-grants are cleaned up
+	// by cleanupStaleGrants, protecting manual and bootstrap grants from accidental removal.
 	AutoGrant bool `json:"autoGrant,omitempty" note:"true if this grant was created automatically by a mapping rule"`
 }
 

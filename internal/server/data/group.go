@@ -37,6 +37,8 @@ type GetGroupOptions struct {
 	// ByName instructs GetGroup to return the group matching this name.
 	ByName string
 	// IncludeDeleted, if true, returns groups regardless of deleted_at status.
+	// Used internally by cleanupOrphanedGroups and mapping rule evaluation where
+	// we need to see all groups including soft-deleted ones for consistency checks.
 	IncludeDeleted bool
 }
 
@@ -217,7 +219,9 @@ func CountAllGroups(tx ReadTxn) (int64, error) {
 	return countRows(tx, groupsTable{})
 }
 
-// GetUsersInGroup returns all user IDs that are members of the group with ID groupID.
+// GetUsersInGroup returns all distinct user (identity) IDs that are members of the
+// group identified by groupID. Queries the identities_groups join table directly.
+// Returns an empty slice (not nil) when the group has no members.
 func GetUsersInGroup(tx ReadTxn, groupID uid.ID) ([]uid.ID, error) {
 	query := querybuilder.New(`SELECT DISTINCT identity_id FROM identities_groups WHERE group_id = ?`)
 	rows, err := tx.Query(query.String(), groupID)

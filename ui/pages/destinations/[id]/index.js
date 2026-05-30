@@ -392,7 +392,9 @@ function AccessTable({
       return g.user === subject || g.group === subject
     })
 
-    // Track whether any grant for this subject is auto-granted.
+    // Track whether any grant for this subject was created by the mapping engine
+    // (auto_grant=true). Used to display '(Auto)' label in the access table so users
+    // can distinguish manual grants from rule-generated ones.
     let hasAutoGrant = false
     grantArray.forEach(g => {
       if (g.autoGrant) {

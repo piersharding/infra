@@ -75,11 +75,13 @@ func (s *Server) GenerateRoutes() Routes {
 	del(a, authn, "/api/access-keys/:id", a.DeleteAccessKey)
 	del(a, authn, "/api/access-keys", a.DeleteAccessKeys)
 
+	// Group management endpoints — admin-only for create/delete; connector role allowed on get-users.
 	get(a, authn, "/api/groups", a.ListGroups)
 	post(a, authn, "/api/groups", a.CreateGroup)
 	get(a, authn, "/api/groups/:id", a.GetGroup)
 	del(a, authn, "/api/groups/:id", a.DeleteGroup)
 	patch(a, authn, "/api/groups/:id/users", a.UpdateUsersInGroup)
+	// GetUsersInGroup — returns member user IDs for group-based grant resolution by SSH connectors.
 	get(a, authn, "/api/groups/:id/users", a.GetUsersInGroup)
 
 	get(a, authn, "/api/organizations", a.ListOrganizations)

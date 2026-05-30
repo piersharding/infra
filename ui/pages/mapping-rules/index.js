@@ -21,6 +21,9 @@ import { useUser } from '../../lib/hooks'
 import { useSearch } from '../../lib/useSearch'
 import { previewRegex, previewTemplate } from '../../lib/mappingRules'
 
+// AddMappingRuleDialog renders an inline dialog form for creating or editing a mapping rule.
+// It shares state with the parent list page via props and triggers onMutate() on success,
+// which causes SWR to refetch the rules list. Supports both add (empty editingRule) and edit modes.
 function AddMappingRuleDialog({
   open,
   setOpen,
@@ -341,6 +344,12 @@ function AddMappingRuleDialog({
   )
 }
 
+// GroupsMapping renders the mapping rules list page with:
+// - paginated table of all active mapping rules
+// - inline add/edit dialog (AddMappingRuleDialog component)
+// - delete confirmation modal
+// - live evaluation status banner
+// - search/filter by rule name
 export default function GroupsMapping() {
   const router = useRouter()
   const page = Math.max(parseInt(router.query.p) || 1, 1)
@@ -495,9 +504,13 @@ export default function GroupsMapping() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — maps API response fields to display-friendly column data with live template previews */}
       {totalCount > 0 && (
         <Table
+          // Each row is a mapping rule with computed preview columns:
+          // - templatePreview: name_template applied to 'team-platform' as sample input
+          // - roleTemplate: role_template preview (k8s only)
+          // - namespaceTemplate: namespace_template regex preview (k8s only)
           data={items.map(m => ({
             id: m.id,
             ruleName: m.rule_name,
@@ -525,6 +538,11 @@ export default function GroupsMapping() {
                 )
               : null,
           }))}
+          // Table column definitions:
+          // - ruleName: displays the rule name with its regex pattern
+          // - destinationType: shows 'Kubernetes' or 'SSH'
+          // - template: shows preview of destination name, role (k8s), and namespace templates
+          // - matchedGrants: hoverable count that reveals a tooltip table of matching grants
           columns={[
             {
               id: 'ruleName',
@@ -585,6 +603,9 @@ export default function GroupsMapping() {
               },
               header: () => <span>Target</span>,
             },
+            // matchedGrants column shows a count of grants produced by this rule.
+            // Hovering reveals a tooltip table with group name, privilege, and destination link
+            // for each grant. Uses fixed-position overlay (not popover) to avoid viewport clipping.
             {
               id: 'matchedGrants',
               cell: info => {
