@@ -167,6 +167,69 @@ The mapping rule engine also manages the lifecycle of identity provider-synced g
 
 This means that if you delete a mapping rule whose regex was matching certain IDP groups, those groups will be cleaned up on the next evaluation. If you need to preserve an IDP group without granting access via mapping rules, create it as a local group in Infra (Settings → Groups) instead of syncing it from your identity provider.
 
+## Configuration File
+
+Mapping rules can be defined in the Infra server configuration file (YAML) alongside users and other bootstrap settings. Rules loaded from config are created **before** IDP sync runs its startup evaluation, ensuring grants exist at boot time.
+
+### YAML Structure
+
+```yaml
+mappingRules:
+  - name: platform-admins
+    sourceGroupRegex: 'platform-.*'
+    destinationType: kubernetes
+    nameTemplate: cluster-platform-prod
+    namespaceTemplate: platform
+    roleTemplate: platform-admin
+```
+
+### Fields
+
+| Field | Required | YAML Key | Description |
+|---|---|---|---|
+| **Name** | Yes | `name` | Unique identifier for the rule within your organization. Used as the upsert key — if a rule with this name already exists, it is updated in place (preserving ID and creation timestamp). |
+| **Source Group Regex** | Yes | `sourceGroupRegex` | A Go regular expression to match against IDP group names. Must compile successfully; invalid regex causes server startup failure. |
+| **Destination Type** | Yes | `destinationType` | Either `kubernetes` or `ssh`. Determines what kind of access is granted. |
+| **Name Template** | Yes | `nameTemplate` | Template for the destination/resource name using `$N` capture references. |
+| **Namespace Template** | No | `namespaceTemplate` | Optional template that may include `$N` capture references and/or wildcard patterns (`*`, `.*`). Omit by not setting the field (not empty string). For kubernetes destinations, this enables namespace-scoped grants against the destination's live namespace list. |
+| **Role Template** | Yes, if Kubernetes | `roleTemplate` | Required when `destinationType: kubernetes`. Can be omitted for SSH rules. Use a pointer in YAML — to omit it, do not include the key at all (not set as empty string). |
+
+### Behavior
+
+- Rules are loaded during server startup via `loadConfig()`, within the same transaction as user/bootstrap data
+- **Upsert by name**: If a rule with the given `name` already exists in the database, it is updated in-place (preserving its original ID and creation timestamp). If no matching rule exists, a new one is created.
+- Rules loaded from config are marked with `CreatedBy = system`, so they participate in the auto-grant lifecycle — stale grants are cleaned up on re-evaluation
+- **Validation**: Config validation runs at startup. Invalid regex, missing required fields (nameTemplate for all types, roleTemplate for kubernetes), or invalid destinationType values cause server startup to fail with a descriptive error including the rule name.
+- **Multi-org limitation**: Bootstrap config loads rules into the default organization only. In multi-org deployments, each org's mapping rules must be managed via UI or API
+
+### Example: Kubernetes + SSH Rules
+
+```yaml
+mappingRules:
+  # Kubernetes example — roleTemplate is required for kubernetes destinations.
+  - name: platform-admins
+    sourceGroupRegex: 'platform-.*'
+    destinationType: kubernetes
+    nameTemplate: cluster-platform-prod
+    namespaceTemplate: platform
+    roleTemplate: platform-admin
+
+  # SSH example — roleTemplate is optional (not used for SSH).
+  - name: ssh-access
+    sourceGroupRegex: 'ssh-.*'
+    destinationType: ssh
+    nameTemplate: bastion-hosts
+```
+
+### Declarative Management
+
+The config file enables **declarative** mapping rule management:
+1. Add/update rules in your server.yaml
+2. Restart the Infra server
+3. The engine evaluates and creates/updates grants automatically
+
+Changes to config are applied on every restart — there is no need for a separate migration step or API call.
+
 ## Permissions
 
 | Role | Can View Rules | Can Create/Edit/Delete Rules |
