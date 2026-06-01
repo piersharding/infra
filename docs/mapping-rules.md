@@ -161,8 +161,9 @@ The mapping rule engine also manages the lifecycle of identity provider-synced g
 
 - **Sync**: When an IDP syncs groups to Infra, they are marked as "provider-created" (`created_by_provider != 0`)
 - **Matching**: During every evaluation cycle (triggered by rule changes, destination updates, group creation, or login), the engine checks each provider-created group against all active mapping rules
-- **Orphan removal**: If a provider-created group does **not** match any active mapping rule's `source_group_regex`, it is deleted from Infra. This prevents unbounded storage of synced groups that are no longer relevant
-- **No rules = full cleanup**: When there are zero active mapping rules, all IDP-synced groups become orphans and are removed on the next evaluation cycle
+- **Orphan removal**: If a provider-created group does **not** match any active mapping rule's `source_group_regex` AND is not referenced by an active non-auto-grant as its subject, it is deleted from Infra. This prevents unbounded storage of synced groups that are no longer relevant.
+- **Grant reference preservation**: A manual (non-auto) grant referencing a provider-created group as its subject will preserve the group even if no mapping rule matches it. Soft-deleted grants do not count — only active grants (`deleted_at IS NULL`) are considered.
+- **No rules = full cleanup**: When there are zero active mapping rules, all IDP-synced groups that lack an active grant reference become orphans and are removed on the next evaluation cycle
 - **Locally-created groups** (created manually in the UI) are never deleted by this process — only provider-synced ones
 
 This means that if you delete a mapping rule whose regex was matching certain IDP groups, those groups will be cleaned up on the next evaluation. If you need to preserve an IDP group without granting access via mapping rules, create it as a local group in Infra (Settings → Groups) instead of syncing it from your identity provider.

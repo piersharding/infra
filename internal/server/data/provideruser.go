@@ -303,7 +303,8 @@ func ProvisionProviderUser(tx WriteTxn, user *models.ProviderUser) error {
 
 // filterIDPGroups filters incoming IDP group names to only those that:
 // 1. Are locally created groups (CreatedByProvider is NULL), OR
-// 2. Match the source_group_regex of any active mapping rule for this org.
+// 2. Match the source_group_regex of any active mapping rule for this org, OR
+// 3. Are referenced by a non-auto-grant as their subject.
 // Non-matching groups are logged at WARN level and dropped from the result.
 func filterIDPGroups(tx ReadTxn, incoming []string) []string {
 	allowed := make(map[string]bool)
@@ -347,6 +348,19 @@ func filterIDPGroups(tx ReadTxn, incoming []string) []string {
 				}
 			}
 		}
+	}
+
+	// Load group names referenced by non-auto-grants as their subject.
+	rowsWithGrants, err := tx.Query(`SELECT DISTINCT g.name FROM groups g JOIN grants r ON r.subject_id = g.id AND r.subject_kind = 2 WHERE g.deleted_at IS NULL AND r.deleted_at IS NULL AND g.organization_id = ? AND r.organization_id = ? AND (r.auto_grant IS NULL OR r.auto_grant = false)`, tx.OrganizationID(), tx.OrganizationID())
+	if err != nil {
+		logging.L.Warn().Err(err).Msg("failed to load grant-referenced group names for IDP filter")
+	} else {
+		for rowsWithGrants.Next() {
+			var name string
+			rowsWithGrants.Scan(&name)
+			allowed[name] = true
+		}
+		rowsWithGrants.Close()
 	}
 
 	// Filter incoming to only allowed groups, preserving order.

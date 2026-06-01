@@ -1621,3 +1621,59 @@ func TestExpandGlobPtr(t *testing.T) {
 		assert.Assert(t, got == nil)
 	})
 }
+
+// TestCleanupOrphanedGroupsPreservesGrantReferencedGroup verifies that cleanupOrphanedGroups
+// does NOT delete an IDP-synced group when a non-auto-grant still references it as subject.
+func TestCleanupOrphanedGroupsPreservesGrantReferencedGroup(t *testing.T) {
+	srv := setupServer(t, withAdminUser)
+
+	orgID := srv.db.DefaultOrg.ID
+
+	rawTx, rawErr := srv.db.Begin(context.Background(), nil)
+	assert.NilError(t, rawErr)
+	tx := rawTx.WithOrgID(orgID)
+	defer func() { _ = tx.Rollback() }()
+
+	// Create an IDP-synced group (created_by_provider != 0).
+	idpGroup := models.Group{
+		Name:               "idp-admins",
+		CreatedByProvider:  1, // IDP-created
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+	}
+	assert.NilError(t, data.CreateGroup(tx, &idpGroup))
+
+	// Create a non-auto-grant referencing the IDP group.
+	manualGrant := &models.Grant{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		CreatedBy:          99, // not CreatedBySystem
+		Subject:            models.NewSubjectForGroup(idpGroup.ID),
+		Privilege:          "connect",
+		Resource:           idpGroup.Name + "-host",
+	}
+	assert.NilError(t, data.CreateGrant(tx, manualGrant))
+
+	// Create a mapping rule that does NOT match the group name.
+	mapping := &models.MappingRule{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: orgID},
+		RuleName:           "other-rule",
+		SourceGroupRegex:   "^ops-(.*)$", // does NOT match "idp-admins"
+		DestinationType:    models.DestinationTypeSSH,
+		NameTemplate:       "ssh-$1",
+	}
+	assert.NilError(t, data.CreateMappingRule(tx, mapping))
+
+	// Run the engine — cleanupOrphanedGroups should preserve idpGroup because of manualGrant.
+	assert.NilError(t, EvaluateMappingRules(tx))
+
+	// Verify the group still exists (not soft-deleted).
+	storedGroup, err := data.GetGroup(tx, data.GetGroupOptions{ByID: idpGroup.ID})
+	assert.NilError(t, err, "expected IDP-synced group to survive cleanup when referenced by a non-auto-grant")
+	assert.Assert(t, storedGroup != nil && storedGroup.Name == "idp-admins",
+		"expected 'idp-admins' to still exist; got %+v", storedGroup)
+
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}

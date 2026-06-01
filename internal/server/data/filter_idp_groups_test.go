@@ -816,3 +816,77 @@ func (f *filteringOIDCClient) RefreshAccessToken(_ context.Context, pu *models.P
 func (f *filteringOIDCClient) GetUserInfo(_ context.Context, pu *models.ProviderUser) (*providers.UserInfoClaims, error) {
 	return &providers.UserInfoClaims{Email: f.UserEmailResp, Groups: f.UserGroupsResp}, nil
 }
+
+// TestFilterIDPGroups_GrantReferencedGroupAllowed verifies that an IDP-synced group
+// referenced by a non-auto-grant as its subject is NOT filtered out, even when no mapping
+// rule matches and the group itself is not locally created. This ensures manual access via
+// grants survives IDP sync filtering.
+func TestFilterIDPGroups_GrantReferencedGroupAllowed(t *testing.T) {
+	runDBTests(t, func(t *testing.T, db *DB) {
+		org := &models.Organization{Name: "filter-grant-ref", Domain: "example.com"}
+		gotassert.NilError(t, CreateOrganization(db, org))
+
+		tx := txnForTestCase(t, db, org.ID)
+
+		// Create an IDP-synced group (created_by_provider != 0).
+		idpGroup := models.Group{
+			Name:               "idp-admins",
+			CreatedByProvider:  1, // IDP-created
+			OrganizationMember: models.OrganizationMember{OrganizationID: org.ID},
+		}
+		gotassert.NilError(t, CreateGroup(tx, &idpGroup))
+
+		// Create a user.
+		user := &models.Identity{Name: "grant-ref@example.com"}
+		gotassert.NilError(t, CreateIdentity(tx, user))
+
+		// Create a non-auto-grant referencing the IDP group as subject.
+		manualGrant := models.Grant{
+			Model:              models.Model{},
+			OrganizationMember: models.OrganizationMember{OrganizationID: org.ID},
+			CreatedBy:          99, // not CreatedBySystem (not auto)
+			Subject:            models.NewSubjectForGroup(idpGroup.ID),
+			Privilege:          "connect",
+			Resource:           idpGroup.Name + "-host",
+		}
+		gotassert.NilError(t, CreateGrant(tx, &manualGrant))
+
+		pu := &models.ProviderUser{
+			ProviderID:   InfraProvider(db).ID,
+			IdentityID:   user.ID,
+			Email:        user.Name,
+			AccessToken:  "tok",
+			RefreshToken: "ref",
+			ExpiresAt:    time.Now().Add(1 * time.Hour),
+			Active:       true,
+		}
+
+		// IDP returns the group name that has no matching rule but is referenced by a grant.
+		oidc := &filteringOIDCClient{
+			UserGroupsResp: []string{"idp-admins"}, // matches grant reference, not local or rule
+		}
+
+		groups, err := SyncProviderUser(context.Background(), tx, pu, oidc)
+		gotassert.NilError(t, err)
+
+		// Verify the group IS present — preserved because of non-auto-grant.
+		var found bool
+		for _, g := range groups {
+			if g.Name == "idp-admins" {
+				found = true
+				break
+			}
+		}
+		gotassert.Assert(t, found, "expected 'idp-admins' to be present (referenced by non-auto-grant)")
+
+		// Verify the user has a group assignment.
+		storedGroups, err := ListGroups(tx, ListGroupsOptions{ByGroupMember: user.ID})
+		gotassert.NilError(t, err)
+		gotassert.Assert(t, len(storedGroups) == 1 && storedGroups[0].Name == "idp-admins",
+			"expected 'idp-admins' assigned to user; got %d groups", len(storedGroups))
+
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit: %v", err)
+		}
+	})
+}

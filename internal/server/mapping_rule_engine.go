@@ -659,6 +659,23 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 
 // cleanupOrphanedGroups removes group rows synced from an IDP that don't match any active mapping rule.
 func cleanupOrphanedGroups(tx data.WriteTxn, rules []models.MappingRule) error {
+	// Load group IDs that have at least one non-soft-deleted non-auto-grant
+	// referencing them. These groups must not be deleted.
+	rowsWithGrants, err := tx.Query(`SELECT subject_id FROM grants WHERE deleted_at IS NULL AND organization_id = ? AND subject_kind = 2 AND (auto_grant IS NULL OR auto_grant = false)`, tx.OrganizationID())
+	if err != nil {
+		return fmt.Errorf("query grant-referenced groups: %w", err)
+	}
+	grantReferencedIDs := make(map[uid.ID]bool)
+	for rowsWithGrants.Next() {
+		var subjectID uid.ID
+		if err := rowsWithGrants.Scan(&subjectID); err != nil {
+			logging.L.Warn().Err(err).Str("group", "unknown").Msg("failed to scan grant-referenced group ID")
+			continue
+		}
+		grantReferencedIDs[subjectID] = true
+	}
+	rowsWithGrants.Close()
+
 	// Pre-compile each rule's regex individually to avoid ReDoS risk from
 	// combining patterns with "|" (a single catastrophic pattern like ^(a+)+$
 	// would cause exponential backtracking across all group names).
@@ -684,6 +701,11 @@ func cleanupOrphanedGroups(tx data.WriteTxn, rules []models.MappingRule) error {
 		var name string
 		if err := rows.Scan(&groupID, &name); err != nil {
 			logging.L.Warn().Err(err).Str("group", name).Msg("failed to scan orphaned group")
+			continue
+		}
+
+		// Skip groups that are still referenced by a non-auto-grant (manual access).
+		if grantReferencedIDs[groupID] {
 			continue
 		}
 
