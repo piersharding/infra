@@ -41,3 +41,17 @@ users:
 #     infraRole: admin
 #     name: admin@local
 #     password: file:internal/server/testdata/initial-admin-password-secret/password
+#
+mappingRules:
+  # Kubernetes example — role_template is required for kubernetes destinations.
+  - name: platform-admins
+    sourceGroupRegex: 'platform-.*'
+    destinationType: kubernetes
+    nameTemplate: cluster-platform-prod
+    namespaceTemplate: platform
+    roleTemplate: platform-admin
+  # SSH example — role_template is optional (not used for SSH).
+  - name: ssh-access
+    sourceGroupRegex: 'ssh-.*'
+    destinationType: ssh
+    nameTemplate: bastion-hosts

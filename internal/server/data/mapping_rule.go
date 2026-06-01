@@ -73,7 +73,8 @@ func DeleteMappingRule(tx WriteTxn, id uid.ID) error {
 
 // GetMappingRuleOptions holds the options for fetching a single mapping rule.
 type GetMappingRuleOptions struct {
-	ByID uid.ID
+	ByID   uid.ID
+	ByName string
 }
 
 // GetMappingRule fetches a single non-deleted mapping rule within the transaction's org scope.
@@ -82,8 +83,13 @@ func GetMappingRule(tx ReadTxn, opts GetMappingRuleOptions) (*models.MappingRule
 	query := querybuilder.New("SELECT")
 	query.B(columnsForSelect(table))
 	query.B("FROM mapping_rules")
-	query.B("WHERE deleted_at is null AND organization_id = ? AND id = ?",
-		tx.OrganizationID(), opts.ByID)
+	if opts.ByName != "" {
+		query.B("WHERE deleted_at is null AND organization_id = ? AND rule_name = ?",
+			tx.OrganizationID(), opts.ByName)
+	} else {
+		query.B("WHERE deleted_at is null AND organization_id = ? AND id = ?",
+			tx.OrganizationID(), opts.ByID)
+	}
 
 	fields := table.ScanFields()
 	err := tx.QueryRow(query.String(), query.Args...).Scan(fields...)

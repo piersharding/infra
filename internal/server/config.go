@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/mail"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 type BootstrapConfig struct {
 	DefaultOrganizationDomain string
 	Users                     []User
+	MappingRules              []MappingRuleConfig
 }
 
 type User struct {
@@ -35,6 +37,52 @@ type User struct {
 func (u User) ValidationRules() []validate.ValidationRule {
 	return []validate.ValidationRule{
 		validate.Required("name", u.Name),
+	}
+}
+
+type MappingRuleConfig struct {
+	Name              string  `yaml:"name"`
+	SourceGroupRegex  string  `yaml:"sourceGroupRegex"`
+	DestinationType   string  `yaml:"destinationType"`
+	NameTemplate      string  `yaml:"nameTemplate"`
+	NamespaceTemplate string  `yaml:"namespaceTemplate"`
+	RoleTemplate      *string `yaml:"roleTemplate"`
+}
+
+func (c MappingRuleConfig) ValidationRules() []validate.ValidationRule {
+	rules := make([]validate.ValidationRule, 0, 4)
+	rules = append(rules,
+		validate.Required("mapping rule name", c.Name),
+		validate.Enum("destinationType", c.DestinationType, []string{"kubernetes", "ssh"}),
+	)
+	if c.SourceGroupRegex == "" {
+		rules = append(rules, validate.Required("sourceGroupRegex", c.SourceGroupRegex))
+	} else if _, err := regexp.Compile(c.SourceGroupRegex); err != nil {
+		rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
+			return validate.Fail("sourceGroupRegex", "invalid regex: "+err.Error())
+		}))
+	}
+	if c.NameTemplate == "" {
+		rules = append(rules, validate.Required("nameTemplate", c.NameTemplate))
+	}
+	return rules
+}
+
+// mappingRuleFromConfig converts a MappingRuleConfig to a models.MappingRule.
+// NamespaceTemplate: empty string → nil, non-empty → &val (data layer only reads when non-nil).
+// RoleTemplate: passed through directly (*string in both types).
+func mappingRuleFromConfig(c MappingRuleConfig) *models.MappingRule {
+	var nsTemplate *string
+	if c.NamespaceTemplate != "" {
+		nsTemplate = &c.NamespaceTemplate
+	}
+	return &models.MappingRule{
+		RuleName:          c.Name,
+		SourceGroupRegex:  c.SourceGroupRegex,
+		DestinationType:   models.DestinationType(c.DestinationType),
+		NameTemplate:      c.NameTemplate,
+		NamespaceTemplate: nsTemplate,
+		RoleTemplate:      c.RoleTemplate,
 	}
 }
 
@@ -98,6 +146,12 @@ func (s Server) loadConfig(config BootstrapConfig) error {
 	for _, u := range config.Users {
 		if err := s.loadUser(tx, u); err != nil {
 			return fmt.Errorf("load user %v: %w", u.Name, err)
+		}
+	}
+
+	for i := range config.MappingRules {
+		if err := s.loadMappingRule(tx, &config.MappingRules[i]); err != nil {
+			return fmt.Errorf("load mapping rule %q: %w", config.MappingRules[i].Name, err)
 		}
 	}
 
@@ -253,4 +307,36 @@ func (s Server) loadAccessKey(db data.WriteTxn, identity *models.Identity, key S
 	accessKey.Secret = secret
 
 	return data.UpdateAccessKey(db, accessKey)
+}
+
+func (s Server) loadMappingRule(tx data.WriteTxn, input *MappingRuleConfig) error {
+	// Validate cross-field: kubernetes rules require role_template.
+	if input.DestinationType == "kubernetes" && input.RoleTemplate == nil {
+		return fmt.Errorf("role_template is required for kubernetes mapping rules")
+	}
+
+	existing, err := data.GetMappingRule(tx, data.GetMappingRuleOptions{ByName: input.Name})
+	if err != nil {
+		if !errors.Is(err, internal.ErrNotFound) {
+			return err
+		}
+		// Not found — create new rule.
+		rule := mappingRuleFromConfig(*input)
+		rule.CreatedBy = models.CreatedBySystem
+		return data.CreateMappingRule(tx, rule)
+	}
+
+	// Found — update in-place to preserve ID/OrgID/CreatedAt.
+	existing.RuleName = input.Name
+	existing.SourceGroupRegex = input.SourceGroupRegex
+	existing.DestinationType = models.DestinationType(input.DestinationType)
+	existing.NameTemplate = input.NameTemplate
+	if input.NamespaceTemplate != "" {
+		ns := input.NamespaceTemplate
+		existing.NamespaceTemplate = &ns
+	} else {
+		existing.NamespaceTemplate = nil
+	}
+	existing.RoleTemplate = input.RoleTemplate
+	return data.UpdateMappingRule(tx, existing)
 }
