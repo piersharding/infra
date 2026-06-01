@@ -504,6 +504,11 @@ func TestEvaluateMappingRulesK8sWithNamespaceTemplate(t *testing.T) {
 
 	assert.NilError(t, data.CreateGroup(tx, &group))
 
+	// Set up role replacements so "admin" → cluster-admin (replaces previous hardcoded behavior).
+	SetRoleReplacements([]models.MappingRuleReplacement{
+		{From: "admin", To: []string{"cluster-admin"}},
+	})
+	defer func() { SetRoleReplacements(nil) }()
 	assert.NilError(t, EvaluateMappingRules(tx))
 
 	allGrants, err := data.ListGrants(tx, data.ListGrantsOptions{})
@@ -933,9 +938,14 @@ func TestApplyTemplateMixedSingleAndMultiDigitRefs(t *testing.T) {
 	assert.Equal(t, got, "team.platform.prod")
 }
 
-// TestResolvePrivilegeAIVAdminTranslation verifies that the aivadmin role is translated to admin,
-// which then chains to cluster-admin for full Kubernetes cluster-wide access.
-func TestResolvePrivilegeAIVAdminTranslation(t *testing.T) {
+// TestResolvePrivilegeWithRoleReplacements verifies that role replacements
+// configured via SetRoleReplacements are applied correctly in resolvePrivilege.
+func TestResolvePrivilegeWithRoleReplacements(t *testing.T) {
+	replacements := []models.MappingRuleReplacement{
+		{From: "aivadmin", To: []string{"aivadmin", "admin"}},
+		{From: "admin", To: []string{"cluster-admin"}},
+	}
+
 	tests := []struct {
 		name         string
 		roleTemplate string
@@ -949,7 +959,7 @@ func TestResolvePrivilegeAIVAdminTranslation(t *testing.T) {
 			expect:       []string{"aivadmin", "admin"},
 		},
 		{
-			name:         "admin still maps to cluster-admin (unchanged)",
+			name:         "admin maps to cluster-admin via replacement",
 			roleTemplate: "admin",
 			destType:     models.DestinationTypeKubernetes,
 			expect:       []string{"cluster-admin"},
@@ -964,6 +974,7 @@ func TestResolvePrivilegeAIVAdminTranslation(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			SetRoleReplacements(replacements)
 			mapping := models.MappingRule{
 				DestinationType: tc.destType,
 				RoleTemplate:    &tc.roleTemplate,
@@ -973,6 +984,9 @@ func TestResolvePrivilegeAIVAdminTranslation(t *testing.T) {
 			assert.DeepEqual(t, got, tc.expect)
 		})
 	}
+
+	// Reset global state.
+	SetRoleReplacements(nil)
 }
 
 // TestCleanupStaleGrantsCrossOrgIsolation verifies that cleanup in one organization's context
@@ -1676,4 +1690,135 @@ func TestCleanupOrphanedGroupsPreservesGrantReferencedGroup(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
+}
+
+// === Tests for resolveRoles (global role replacements) ===
+
+func TestResolveRolesPassthrough(t *testing.T) {
+	tests := []struct {
+		name         string
+		baseRole     string
+		replacements []models.MappingRuleReplacement
+		expect       []string
+	}{
+		{
+			name:         "empty replacements — passthrough",
+			baseRole:     "custom-role",
+			replacements: nil,
+			expect:       []string{"custom-role"},
+		},
+		{
+			name:     "no matching replacement — passthrough",
+			baseRole: "my-custom-role",
+			replacements: []models.MappingRuleReplacement{
+				{From: "admin", To: []string{"cluster-admin"}},
+			},
+			expect: []string{"my-custom-role"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			SetRoleReplacements(tt.replacements)
+			got, err := resolveRoles(tt.baseRole, getGlobalRoleReplacements())
+			assert.NilError(t, err)
+			assert.DeepEqual(t, got, tt.expect)
+		})
+	}
+}
+
+func TestResolveRolesSingleToSingle(t *testing.T) {
+	replacements := []models.MappingRuleReplacement{
+		{From: "admin", To: []string{"cluster-admin"}},
+	}
+	SetRoleReplacements(replacements)
+
+	got, err := resolveRoles("admin", getGlobalRoleReplacements())
+	assert.NilError(t, err)
+	assert.DeepEqual(t, got, []string{"cluster-admin"})
+}
+
+func TestResolveRolesSingleToMany(t *testing.T) {
+	replacements := []models.MappingRuleReplacement{
+		{From: "aivadmin", To: []string{"aivadmin", "admin"}},
+	}
+	SetRoleReplacements(replacements)
+
+	got, err := resolveRoles("aivadmin", getGlobalRoleReplacements())
+	assert.NilError(t, err)
+	assert.DeepEqual(t, got, []string{"aivadmin", "admin"})
+}
+
+func TestResolveRolesDeduplication(t *testing.T) {
+	replacements := []models.MappingRuleReplacement{
+		{From: "admin", To: []string{"cluster-admin", "cluster-admin"}}, // duplicate in to list
+	}
+	SetRoleReplacements(replacements)
+
+	got, err := resolveRoles("admin", getGlobalRoleReplacements())
+	assert.NilError(t, err)
+	assert.DeepEqual(t, got, []string{"cluster-admin"})
+}
+
+func TestResolveRolesEmptyBaseRole(t *testing.T) {
+	replacements := []models.MappingRuleReplacement{
+		{From: "admin", To: []string{"cluster-admin"}},
+	}
+	SetRoleReplacements(replacements)
+
+	got, err := resolveRoles("", getGlobalRoleReplacements())
+	assert.NilError(t, err)
+	assert.DeepEqual(t, got, []string{""})
+}
+
+func TestResolvePrivilegeWithGlobalReplacements(t *testing.T) {
+	tests := []struct {
+		name         string
+		roleTemplate string
+		destType     models.DestinationType
+		replacements []models.MappingRuleReplacement
+		expect       []string
+	}{
+		{
+			name:         "aivadmin returns both privileges via replacement",
+			roleTemplate: "aivadmin",
+			destType:     models.DestinationTypeKubernetes,
+			replacements: []models.MappingRuleReplacement{
+				{From: "aivadmin", To: []string{"aivadmin", "admin"}},
+			},
+			expect: []string{"aivadmin", "admin"},
+		},
+		{
+			name:         "admin maps to cluster-admin via replacement",
+			roleTemplate: "admin",
+			destType:     models.DestinationTypeKubernetes,
+			replacements: []models.MappingRuleReplacement{
+				{From: "admin", To: []string{"cluster-admin"}},
+			},
+			expect: []string{"cluster-admin"},
+		},
+		{
+			name:         "custom role passes through unchanged (no matching replacement)",
+			roleTemplate: "my-custom-role",
+			destType:     models.DestinationTypeKubernetes,
+			replacements: nil,
+			expect:       []string{"my-custom-role"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			SetRoleReplacements(tc.replacements)
+			mapping := models.MappingRule{
+				DestinationType: tc.destType,
+				RoleTemplate:    &tc.roleTemplate,
+			}
+			got, err := resolvePrivilege(mapping, "test-group", mustCompileRegex("^(.*)$"))
+			assert.NilError(t, err)
+			assert.DeepEqual(t, got, tc.expect)
+		})
+	}
+
+	// Reset global state.
+	SetRoleReplacements(nil)
 }

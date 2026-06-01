@@ -416,6 +416,25 @@ users:
   - infraRole: view
     name: test01@local.net
     password: "${INFRA_PASSWORD}"
+mappingRulesConfig:
+  roleReplacements:
+    - from: admin
+      to: [cluster-admin]
+    - from: aivadmin
+      to: [aivadmin, admin]
+  mappingRules:
+    # Kubernetes example — role_template is required for kubernetes destinations.
+    - name: Bootstrap Example K8s Rule
+      sourceGroupRegex: Example
+      destinationType: kubernetes
+      nameTemplate: minikube-k8s
+      namespaceTemplate: default
+      roleTemplate: view
+    # SSH example — role_template is optional (not used for SSH).
+    - name: Bootstrap Example SSH Rule
+      sourceGroupRegex: Example
+      destinationType: ssh
+      nameTemplate: ssh01
 endef
 export INFRA_SERVER_CONF
 

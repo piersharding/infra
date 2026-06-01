@@ -13,6 +13,7 @@ import (
 	"github.com/infrahq/infra/internal"
 	"github.com/infrahq/infra/internal/server/data"
 	"github.com/infrahq/infra/internal/server/models"
+	"github.com/infrahq/infra/internal/validate"
 )
 
 func TestLoadConfigEmpty(t *testing.T) {
@@ -202,21 +203,23 @@ func TestLoadMappingRulesCreate(t *testing.T) {
 	s := setupServer(t)
 
 	config := BootstrapConfig{
-		MappingRules: []MappingRuleConfig{
-			{
-				Name:              "platform-admins",
-				SourceGroupRegex:  `platform-.*`,
-				DestinationType:   "kubernetes",
-				NameTemplate:      "cluster-platform-prod",
-				NamespaceTemplate: "platform",
-				RoleTemplate:      strPtr("platform-admin"),
-			},
-			{
-				Name:              "ssh-access",
-				SourceGroupRegex:  `ssh-.*`,
-				DestinationType:   "ssh",
-				NameTemplate:      "bastion-hosts",
-				NamespaceTemplate: "",
+		MappingRulesConfig: &MappingRulesConfig{
+			MappingRules: []MappingRuleConfig{
+				{
+					Name:              "platform-admins",
+					SourceGroupRegex:  `platform-.*`,
+					DestinationType:   "kubernetes",
+					NameTemplate:      "cluster-platform-prod",
+					NamespaceTemplate: "platform",
+					RoleTemplate:      strPtr("platform-admin"),
+				},
+				{
+					Name:              "ssh-access",
+					SourceGroupRegex:  `ssh-.*`,
+					DestinationType:   "ssh",
+					NameTemplate:      "bastion-hosts",
+					NamespaceTemplate: "",
+				},
 			},
 		},
 	}
@@ -229,7 +232,7 @@ func TestLoadMappingRulesCreate(t *testing.T) {
 	rule, err := data.GetMappingRule(tx, data.GetMappingRuleOptions{ByName: "platform-admins"})
 	assert.NilError(t, err)
 	assert.Equal(t, rule.RuleName, "platform-admins")
-	assert.Assert(t, is.DeepEqual(rule.SourceGroupRegex, `platform-.*`))
+	assert.Assert(t, is.DeepEqual(rule.SourceGroupRegex, `^platform-.*$`))
 	assert.Equal(t, string(rule.DestinationType), "kubernetes")
 	assert.Equal(t, rule.NameTemplate, "cluster-platform-prod")
 	assert.Assert(t, rule.NamespaceTemplate != nil)
@@ -240,7 +243,7 @@ func TestLoadMappingRulesCreate(t *testing.T) {
 	rule2, err := data.GetMappingRule(tx, data.GetMappingRuleOptions{ByName: "ssh-access"})
 	assert.NilError(t, err)
 	assert.Equal(t, rule2.RuleName, "ssh-access")
-	assert.Assert(t, is.DeepEqual(rule2.SourceGroupRegex, `ssh-.*`))
+	assert.Assert(t, is.DeepEqual(rule2.SourceGroupRegex, `^ssh-.*$`))
 	assert.Equal(t, string(rule2.DestinationType), "ssh")
 	assert.Equal(t, rule2.NameTemplate, "bastion-hosts")
 	assert.Assert(t, rule2.NamespaceTemplate == nil)
@@ -252,14 +255,16 @@ func TestLoadMappingRulesUpsert(t *testing.T) {
 
 	// First load: create a rule
 	config1 := BootstrapConfig{
-		MappingRules: []MappingRuleConfig{
-			{
-				Name:              "platform-admins",
-				SourceGroupRegex:  `platform-.*`,
-				DestinationType:   "kubernetes",
-				NameTemplate:      "cluster-platform-prod",
-				NamespaceTemplate: "platform",
-				RoleTemplate:      strPtr("platform-admin"),
+		MappingRulesConfig: &MappingRulesConfig{
+			MappingRules: []MappingRuleConfig{
+				{
+					Name:              "platform-admins",
+					SourceGroupRegex:  `platform-.*`,
+					DestinationType:   "kubernetes",
+					NameTemplate:      "cluster-platform-prod",
+					NamespaceTemplate: "platform",
+					RoleTemplate:      strPtr("platform-admin"),
+				},
 			},
 		},
 	}
@@ -273,14 +278,16 @@ func TestLoadMappingRulesUpsert(t *testing.T) {
 
 	// Second load: update the same rule (same name, different values)
 	config2 := BootstrapConfig{
-		MappingRules: []MappingRuleConfig{
-			{
-				Name:              "platform-admins",
-				SourceGroupRegex:  `platform-v2-.*`,
-				DestinationType:   "kubernetes",
-				NameTemplate:      "cluster-platform-prod-v2",
-				NamespaceTemplate: "platform-v2",
-				RoleTemplate:      strPtr("platform-admin"),
+		MappingRulesConfig: &MappingRulesConfig{
+			MappingRules: []MappingRuleConfig{
+				{
+					Name:              "platform-admins",
+					SourceGroupRegex:  `platform-v2-.*`,
+					DestinationType:   "kubernetes",
+					NameTemplate:      "cluster-platform-prod-v2",
+					NamespaceTemplate: "platform-v2",
+					RoleTemplate:      strPtr("platform-admin"),
+				},
 			},
 		},
 	}
@@ -292,7 +299,7 @@ func TestLoadMappingRulesUpsert(t *testing.T) {
 	updatedRule, err := data.GetMappingRule(tx, data.GetMappingRuleOptions{ByName: "platform-admins"})
 	assert.NilError(t, err)
 	assert.Equal(t, originalRule.ID, updatedRule.ID) // Same record (not re-created)
-	assert.Assert(t, is.DeepEqual(updatedRule.SourceGroupRegex, `platform-v2-.*`))
+	assert.Assert(t, is.DeepEqual(updatedRule.SourceGroupRegex, `^platform-v2-.*$`))
 
 	// Original name should no longer exist as a separate rule.
 	_, err = data.GetMappingRule(tx, data.GetMappingRuleOptions{ByName: "old-platform-admins"})
@@ -304,8 +311,10 @@ func TestLoadMappingRulesValidationErrors(t *testing.T) {
 
 	t.Run("missing name returns error", func(t *testing.T) {
 		config := BootstrapConfig{
-			MappingRules: []MappingRuleConfig{
-				{SourceGroupRegex: `platform-.*`, DestinationType: "kubernetes", NameTemplate: "cluster"},
+			MappingRulesConfig: &MappingRulesConfig{
+				MappingRules: []MappingRuleConfig{
+					{SourceGroupRegex: `platform-.*`, DestinationType: "kubernetes", NameTemplate: "cluster"},
+				},
 			},
 		}
 
@@ -315,8 +324,10 @@ func TestLoadMappingRulesValidationErrors(t *testing.T) {
 
 	t.Run("invalid regex returns error", func(t *testing.T) {
 		config := BootstrapConfig{
-			MappingRules: []MappingRuleConfig{
-				{Name: "bad-regex", SourceGroupRegex: `[`, DestinationType: "kubernetes", NameTemplate: "cluster"},
+			MappingRulesConfig: &MappingRulesConfig{
+				MappingRules: []MappingRuleConfig{
+					{Name: "bad-regex", SourceGroupRegex: `[`, DestinationType: "kubernetes", NameTemplate: "cluster"},
+				},
 			},
 		}
 
@@ -326,8 +337,10 @@ func TestLoadMappingRulesValidationErrors(t *testing.T) {
 
 	t.Run("missing nameTemplate returns error", func(t *testing.T) {
 		config := BootstrapConfig{
-			MappingRules: []MappingRuleConfig{
-				{Name: "no-template", SourceGroupRegex: `platform-.*`, DestinationType: "kubernetes"},
+			MappingRulesConfig: &MappingRulesConfig{
+				MappingRules: []MappingRuleConfig{
+					{Name: "no-template", SourceGroupRegex: `platform-.*`, DestinationType: "kubernetes"},
+				},
 			},
 		}
 
@@ -337,8 +350,10 @@ func TestLoadMappingRulesValidationErrors(t *testing.T) {
 
 	t.Run("missing roleTemplate for kubernetes returns error", func(t *testing.T) {
 		config := BootstrapConfig{
-			MappingRules: []MappingRuleConfig{
-				{Name: "k8s-no-role", SourceGroupRegex: `platform-.*`, DestinationType: "kubernetes", NameTemplate: "cluster"},
+			MappingRulesConfig: &MappingRulesConfig{
+				MappingRules: []MappingRuleConfig{
+					{Name: "k8s-no-role", SourceGroupRegex: `platform-.*`, DestinationType: "kubernetes", NameTemplate: "cluster"},
+				},
 			},
 		}
 
@@ -348,8 +363,10 @@ func TestLoadMappingRulesValidationErrors(t *testing.T) {
 
 	t.Run("SSH destination works without roleTemplate", func(t *testing.T) {
 		config := BootstrapConfig{
-			MappingRules: []MappingRuleConfig{
-				{Name: "ssh-no-role", SourceGroupRegex: `ssh-.*`, DestinationType: "ssh", NameTemplate: "bastion"},
+			MappingRulesConfig: &MappingRulesConfig{
+				MappingRules: []MappingRuleConfig{
+					{Name: "ssh-no-role", SourceGroupRegex: `ssh-.*`, DestinationType: "ssh", NameTemplate: "bastion"},
+				},
 			},
 		}
 
@@ -386,4 +403,81 @@ func getTestDefaultOrgUserDetails(t *testing.T, server *Server, name string) (*m
 	}
 
 	return user, credential, accessKey
+}
+
+func TestValidateBootstrapConfigWithRoleReplacements(t *testing.T) {
+	// Test that validation rules are produced correctly for role replacements.
+
+	t.Run("valid role replacements produce no errors", func(t *testing.T) {
+		config := BootstrapConfig{
+			MappingRulesConfig: &MappingRulesConfig{
+				RoleReplacements: []models.MappingRuleReplacement{
+					{From: "admin", To: []string{"cluster-admin"}},
+					{From: "aivadmin", To: []string{"aivadmin", "admin"}},
+				},
+			},
+		}
+
+		err := validate.Validate(config)
+		assert.NilError(t, err)
+	})
+
+	t.Run("empty from returns validation error", func(t *testing.T) {
+		config := BootstrapConfig{
+			MappingRulesConfig: &MappingRulesConfig{
+				RoleReplacements: []models.MappingRuleReplacement{
+					{From: "", To: []string{"cluster-admin"}},
+				},
+			},
+		}
+
+		err := validate.Validate(config)
+		assert.ErrorContains(t, err, "role replacement 'from' must not be empty")
+	})
+
+	t.Run("empty to returns validation error", func(t *testing.T) {
+		config := BootstrapConfig{
+			MappingRulesConfig: &MappingRulesConfig{
+				RoleReplacements: []models.MappingRuleReplacement{
+					{From: "admin", To: []string{}},
+				},
+			},
+		}
+
+		err := validate.Validate(config)
+		assert.ErrorContains(t, err, "'to' must have at least one value")
+	})
+
+	t.Run("empty to entry returns validation error", func(t *testing.T) {
+		config := BootstrapConfig{
+			MappingRulesConfig: &MappingRulesConfig{
+				RoleReplacements: []models.MappingRuleReplacement{
+					{From: "admin", To: []string{"cluster-admin", ""}},
+				},
+			},
+		}
+
+		err := validate.Validate(config)
+		assert.ErrorContains(t, err, "'to' entries must not be empty")
+	})
+
+	t.Run("duplicate from values returns validation error", func(t *testing.T) {
+		config := BootstrapConfig{
+			MappingRulesConfig: &MappingRulesConfig{
+				RoleReplacements: []models.MappingRuleReplacement{
+					{From: "admin", To: []string{"cluster-admin"}},
+					{From: "admin", To: []string{"super-admin"}},
+				},
+			},
+		}
+
+		err := validate.Validate(config)
+		assert.ErrorContains(t, err, "duplicate from value")
+	})
+
+	t.Run("nil MappingRulesConfig is safe", func(t *testing.T) {
+		config := BootstrapConfig{}
+		err := validate.Validate(config)
+		assert.NilError(t, err) // Should not panic or error on nil config
+	})
 }

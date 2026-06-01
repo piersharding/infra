@@ -1,6 +1,8 @@
 package models
 
 import (
+	"fmt"
+
 	"github.com/infrahq/infra/api"
 	"github.com/infrahq/infra/uid"
 )
@@ -12,6 +14,30 @@ const (
 	DestinationTypeKubernetes DestinationType = "kubernetes"
 	DestinationTypeSSH        DestinationType = "ssh"
 )
+
+// MappingRuleReplacement defines a single role name replacement.
+// From is the source role name; To is the list of roles it should be replaced with.
+type MappingRuleReplacement struct {
+	From string   `config:"from"`
+	To   []string `config:"to"`
+}
+
+// Validate checks that this replacement has non-empty from and to values,
+// returning an error describing what is wrong.
+func (r *MappingRuleReplacement) Validate() error {
+	if r.From == "" {
+		return fmt.Errorf("role replacement 'from' must not be empty")
+	}
+	if len(r.To) == 0 {
+		return fmt.Errorf("role replacement for %q: 'to' must have at least one value", r.From)
+	}
+	for _, t := range r.To {
+		if t == "" {
+			return fmt.Errorf("role replacement for %q: 'to' entries must not be empty", r.From)
+		}
+	}
+	return nil
+}
 
 // MappingRule defines a rule that matches identity provider groups (via regex) to
 // destinations, automatically creating grants with templated resource/role names.

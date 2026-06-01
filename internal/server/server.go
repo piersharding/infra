@@ -249,6 +249,13 @@ func New(options Options) (*Server, error) {
 		return nil, fmt.Errorf("configs: %w", err)
 	}
 
+	// Set global role replacements from bootstrap config.
+	if server.options.MappingRulesConfig != nil && len(server.options.MappingRulesConfig.RoleReplacements) > 0 {
+		SetRoleReplacements(server.options.MappingRulesConfig.RoleReplacements)
+	} else {
+		SetRoleReplacements(nil)
+	}
+
 	if err := server.listen(); err != nil {
 		return nil, fmt.Errorf("listening: %w", err)
 	}

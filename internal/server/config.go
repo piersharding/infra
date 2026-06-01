@@ -21,10 +21,16 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
+// MappingRulesConfig groups all mapping-rule-related bootstrap configuration.
+type MappingRulesConfig struct {
+	RoleReplacements []models.MappingRuleReplacement `config:"roleReplacements"`
+	MappingRules     []MappingRuleConfig             `config:"mappingRules"`
+}
+
 type BootstrapConfig struct {
 	DefaultOrganizationDomain string
 	Users                     []User
-	MappingRules              []MappingRuleConfig
+	MappingRulesConfig        *MappingRulesConfig
 }
 
 type User struct {
@@ -78,7 +84,7 @@ func mappingRuleFromConfig(c MappingRuleConfig) *models.MappingRule {
 	}
 	return &models.MappingRule{
 		RuleName:          c.Name,
-		SourceGroupRegex:  c.SourceGroupRegex,
+		SourceGroupRegex:  anchorRegex(c.SourceGroupRegex),
 		DestinationType:   models.DestinationType(c.DestinationType),
 		NameTemplate:      c.NameTemplate,
 		NamespaceTemplate: nsTemplate,
@@ -87,8 +93,28 @@ func mappingRuleFromConfig(c MappingRuleConfig) *models.MappingRule {
 }
 
 func (c BootstrapConfig) ValidationRules() []validate.ValidationRule {
-	// no-op implement to satisfy the interface
-	return nil
+	if c.MappingRulesConfig == nil {
+		return nil
+	}
+	rules := make([]validate.ValidationRule, 0)
+	seenFrom := make(map[string]bool, len(c.MappingRulesConfig.RoleReplacements))
+	for _, rr := range c.MappingRulesConfig.RoleReplacements {
+		if err := (&models.MappingRuleReplacement{From: rr.From, To: rr.To}).Validate(); err != nil {
+			rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
+				return validate.Fail("roleReplacements", fmt.Sprintf("%s in %q", err.Error(), rr.From))
+			}))
+		}
+		if seenFrom[rr.From] {
+			rules = append(rules, validate.ValidatorFunc(func() *validate.Failure {
+				return &validate.Failure{Name: "roleReplacements", Problems: []string{fmt.Sprintf("duplicate from value %q", rr.From)}}
+			}))
+		}
+		seenFrom[rr.From] = true
+	}
+	for _, mr := range c.MappingRulesConfig.MappingRules {
+		rules = append(rules, mr.ValidationRules()...)
+	}
+	return rules
 }
 
 // Secret provides backwards compatibility for the old secret loading microformat
@@ -149,9 +175,11 @@ func (s Server) loadConfig(config BootstrapConfig) error {
 		}
 	}
 
-	for i := range config.MappingRules {
-		if err := s.loadMappingRule(tx, &config.MappingRules[i]); err != nil {
-			return fmt.Errorf("load mapping rule %q: %w", config.MappingRules[i].Name, err)
+	if config.MappingRulesConfig != nil {
+		for i := range config.MappingRulesConfig.MappingRules {
+			if err := s.loadMappingRule(tx, &config.MappingRulesConfig.MappingRules[i]); err != nil {
+				return fmt.Errorf("load mapping rule %q: %w", config.MappingRulesConfig.MappingRules[i].Name, err)
+			}
 		}
 	}
 
@@ -328,7 +356,7 @@ func (s Server) loadMappingRule(tx data.WriteTxn, input *MappingRuleConfig) erro
 
 	// Found — update in-place to preserve ID/OrgID/CreatedAt.
 	existing.RuleName = input.Name
-	existing.SourceGroupRegex = input.SourceGroupRegex
+	existing.SourceGroupRegex = anchorRegex(input.SourceGroupRegex)
 	existing.DestinationType = models.DestinationType(input.DestinationType)
 	existing.NameTemplate = input.NameTemplate
 	if input.NamespaceTemplate != "" {

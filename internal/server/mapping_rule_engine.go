@@ -19,6 +19,21 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
+// globalRoleReplacements holds globally configured role name replacements loaded
+// from BootstrapConfig.MappingRulesConfig.RoleReplacements at server startup.
+var globalRoleReplacements []models.MappingRuleReplacement
+
+// SetRoleReplacements sets the global role replacement list. Safe to call once
+// during server startup before any EvaluateMappingRules invocation occurs.
+func SetRoleReplacements(rr []models.MappingRuleReplacement) {
+	globalRoleReplacements = rr
+}
+
+// getGlobalRoleReplacements returns the current global role replacements.
+func getGlobalRoleReplacements() []models.MappingRuleReplacement {
+	return globalRoleReplacements
+}
+
 // EvaluateMappingRules processes all active mapping rules against the current set of groups,
 // creating or updating grants where a group's name matches a rule's SourceGroupRegex.
 // It first acquires an xact-scoped PostgreSQL advisory lock to prevent concurrent evaluations
@@ -330,12 +345,35 @@ func filterValidMappings(mappings []models.MappingRule) []models.MappingRule {
 	return valid
 }
 
+// resolveRoles resolves a single base role name through the global role replacements,
+// returning all output roles in order of first appearance with duplicates removed.
+// It applies each replacement whose "from" matches the input role, replacing it
+// with all of that replacement's "to" values. Roles not matched by any replacement
+// are passed through unchanged (passthrough).
+func resolveRoles(baseRole string, replacements []models.MappingRuleReplacement) ([]string, error) {
+	if len(replacements) == 0 || baseRole == "" {
+		return []string{baseRole}, nil
+	}
+	for _, rr := range replacements {
+		if rr.From == baseRole {
+			// Found a matching replacement — apply all "to" values.
+			seen := make(map[string]bool, len(rr.To))
+			var result []string
+			for _, t := range rr.To {
+				if !seen[t] {
+					result = append(result, t)
+					seen[t] = true
+				}
+			}
+			return result, nil
+		}
+	}
+	// No matching replacement — passthrough.
+	return []string{baseRole}, nil
+}
+
 // resolvePrivilege determines the privilege strings for a mapping rule.
-// SSH always maps to ["connect"]; K8s uses RoleTemplate (applied via template), falling back to ["view"].
-// For Kubernetes, if the resolved role is exactly "admin", it is translated to "cluster-admin"
-// because the built-in ClusterRole "admin" only provides namespace-level permissions,
-// while "cluster-admin" grants full cluster-wide access as intended by admin rules.
-// aivadmin returns both its own privilege and admin in addition.
+// SSH always maps to ["connect"]; K8s uses RoleTemplate (applied via template), falling back to ["view"]
 func resolvePrivilege(mapping models.MappingRule, grpName string, re *regexp.Regexp) ([]string, error) {
 	switch models.DestinationType(mapping.DestinationType) {
 	case models.DestinationTypeSSH:
@@ -346,15 +384,11 @@ func resolvePrivilege(mapping models.MappingRule, grpName string, re *regexp.Reg
 			if err != nil {
 				return nil, fmt.Errorf("apply role template: %w", err)
 			}
-			// aivadmin includes admin in addition to its own privilege.
-			if role == "aivadmin" {
-				return []string{"aivadmin", "admin"}, nil
+			roles, err := resolveRoles(role, getGlobalRoleReplacements())
+			if err != nil {
+				return nil, fmt.Errorf("resolve roles for %q: %w", role, err)
 			}
-			// Translate admin → cluster-admin for full cluster-wide access.
-			if role == "admin" {
-				role = "cluster-admin"
-			}
-			return []string{role}, nil
+			return roles, nil
 		}
 		return []string{"view"}, nil // least-privileged valid RBAC role
 	default:
