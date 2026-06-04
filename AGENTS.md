@@ -624,16 +624,16 @@ Eval status is exposed via `GET /api/mapping-rules/eval-status` and displayed as
 | `internal/server/data/migrations.go` | Migrations: `mapping_rules` table + `auto_grant` column on `grants` + partial index |
 | `internal/server/data/schema.sql` | `mapping_rules` DDL with unique partial index |
 | `internal/connector/ssh.go` | `resolveUsersFromGrants`: resolves group-based grants to individual users |
-| `ui/pages/mapping-rules/index.js` | List page with inline add dialog, pagination, search, live regex preview |
-| `ui/pages/mapping-rules/add.js` | Add/edit form with live regex/template preview, unsaved changes warning |
+| `ui/pages/mapping-rules/index.js` | List page + inline add/edit dialog (`AddMappingRuleDialog`) with live regex/template preview, unsaved changes warning |
 | `ui/lib/mappingRules.js` | Client-side `previewRegex()` and `previewTemplate()` utilities |
 | `internal/server/config.go` | BootstrapConfig (Users + MappingRules), loadMappingRules, mappingRuleFromConfig helper — loads config rules before IDP sync evaluation |
-| `docs/mapping-rules.md` | End-user documentation with examples, template syntax, and configuration file reference |
+| `docs/dev/mapping-rules.md` | End-user documentation with examples, template syntax, and configuration file reference |
+| `CHANGELOG.md` (project root) | Changelog of mapping rule features, changes, and fixes |
 
 ### Engine Behavior
 
 - **Triggered by**: rule CRUD (create/update/delete), group creation, server startup, login (to catch IDP-synced groups). Config-loaded rules are persisted in `loadConfig()` before `EvaluateMappingRulesAsync` runs at startup — ensuring grants exist when IDP sync begins.
-- **Bootstrap config**: Mapping rules can be defined in the server YAML via `mappingRules:` under `BootstrapConfig`. Rules are loaded during `NewServer()`, upserted by name, and marked with `CreatedBy = system`. See `docs/mapping-rules.md` for YAML syntax.
+- **Bootstrap config**: Mapping rules can be defined in the server YAML via `mappingRules:` under `BootstrapConfig`. Rules are loaded during `NewServer()`, upserted by name, and marked with `CreatedBy = system`. See `docs/dev/mapping-rules.md` for YAML syntax.
 - **Admin-only**: All mapping rule endpoints require `InfraAdminRole` — the UI already enforces this
 - **Async execution**: All request-triggered evaluations run asynchronously in a background goroutine with their own DB transaction, so the API response is not blocked by evaluation
 - **No semaphore or shutdown context needed**: `EvaluateMappingRules` is idempotent — early termination is harmless because the next run picks up the correct state. `pg_try_advisory_xact_lock(orgID)` already serializes concurrent evaluations per org. Together these make additional semaphores or shutdown-context plumbing unnecessary.
@@ -657,7 +657,7 @@ Eval status is exposed via `GET /api/mapping-rules/eval-status` and displayed as
 9. **Engine**: If changing evaluation logic, update `internal/server/mapping_rule_engine.go`
 10. **Tests**: Add tests at every layer (engine, handlers, access, data, integration)
 11. **Frontend**: Update `ui/pages/mapping-rules/` and `ui/lib/mappingRules.js`
-12. **Docs**: Update `docs/mapping-rules.md`
+12. **Docs**: Update `docs/dev/mapping-rules.md` and `CHANGELOG.md`
 
 ### API Endpoints
 

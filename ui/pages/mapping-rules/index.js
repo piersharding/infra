@@ -19,7 +19,7 @@ import SearchInput from '../../components/search-input'
 import Notification from '../../components/notification'
 import { useUser } from '../../lib/hooks'
 import { useSearch } from '../../lib/useSearch'
-import { previewRegex, previewTemplate } from '../../lib/mappingRules'
+import { previewTemplate } from '../../lib/mappingRules'
 
 // AddMappingRuleDialog renders an inline dialog form for creating or editing a mapping rule.
 // It shares state with the parent list page via props and triggers onMutate() on success,
@@ -28,7 +28,6 @@ function AddMappingRuleDialog({
   open,
   setOpen,
   editingRule,
-  groups,
   onMutate,
 }) {
   const [ruleName, setRuleName] = useState('')
@@ -37,6 +36,8 @@ function AddMappingRuleDialog({
   const [nameTemplate, setNameTemplate] = useState('')
   const [namespaceTemplate, setNamespaceTemplate] = useState('')
   const [roleTemplate, setRoleTemplate] = useState('')
+  // Manual test name for users to verify their regex against custom input.
+  const [testGroupName, setTestGroupName] = useState('')
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
 
@@ -74,17 +75,19 @@ function AddMappingRuleDialog({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasUnsavedChanges])
 
-  const matchedGroups = useMemo(() => {
-    if (!sourceGroupRegex || !groups?.length) return []
+  // Check whether the user's manual test name matches their regex.
+  const testGroupMatched = useMemo(() => {
+    if (!testGroupName.trim() || !sourceGroupRegex) return null
     try {
-      return previewRegex(
-        sourceGroupRegex,
-        groups.map(g => g.name)
-      )
+      let anchored = sourceGroupRegex.trim()
+      if (anchored && !anchored.startsWith('^')) anchored = '^' + anchored
+      if (anchored && !anchored.endsWith('$')) anchored = anchored + '$'
+      const re = new RegExp(anchored)
+      return re.test(testGroupName.trim())
     } catch {
-      return []
+      return null
     }
-  }, [sourceGroupRegex, groups])
+  }, [testGroupName, sourceGroupRegex])
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -242,12 +245,38 @@ function AddMappingRuleDialog({
                     </p>
                   )}
                 </div>
-                {matchedGroups.length > 0 && (
-                  <div className='rounded-md bg-green-50 p-2 text-xs'>
-                    <span className='font-medium'>Matches:</span>{' '}
-                    {matchedGroups.join(', ')}
+
+                {/* Try-it-yourself test */}
+                <div className='mt-3 rounded-md border-2 border-dashed border-blue-300 bg-blue-50 p-3'>
+                  <label
+                    htmlFor='mr-test-name'
+                    className='text-xs font-semibold text-blue-800'
+                  >
+                    Try it — type a group name to test your regex:
+                  </label>
+                  <div className='mt-1 flex items-center gap-2'>
+                    <input
+                      id='mr-test-name'
+                      type='text'
+                      value={testGroupName}
+                      onChange={e => setTestGroupName(e.target.value)}
+                      placeholder="e.g., team-platform, ops-general"
+                      className='block w-full rounded-md border border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-2 py-1'
+                    />
+                    {testGroupMatched === true && (
+                      <div className='flex flex-col items-center gap-0.5 text-green-700'>
+                        <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor' className='w-6 h-6'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15l-4-4 1.41-1.41L11 14.17l6.59-6.59L19 9l-8 8z'/></svg>
+                        <span className='whitespace-nowrap text-xs font-bold'>matches</span>
+                      </div>
+                    )}
+                    {testGroupMatched === false && (
+                      <div className='flex flex-col items-center gap-0.5 text-red-700'>
+                        <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor' className='w-6 h-6'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z'/></svg>
+                        <span className='whitespace-nowrap text-xs font-bold'>no match</span>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
                 <div>
                   <label
                     htmlFor='mr-template'
@@ -350,6 +379,8 @@ function AddMappingRuleDialog({
 // - delete confirmation modal
 // - live evaluation status banner
 // - search/filter by rule name
+export { AddMappingRuleDialog }
+
 export default function GroupsMapping() {
   const router = useRouter()
   const page = Math.max(parseInt(router.query.p) || 1, 1)
@@ -385,8 +416,7 @@ export default function GroupsMapping() {
   const totalPages = mappingsData?.totalPages || 0
   const totalCount = mappingsData?.totalCount || 0
 
-  const { data: groupsData } = useSWR('/api/groups') || {}
-  const groups = (groupsData?.items || []).map(g => g.name)
+
 
   const { data: evalStatus } = useSWR('/api/mapping-rules/eval-status')
   const lastEvalTime = evalStatus?.last_run_at
@@ -784,7 +814,6 @@ export default function GroupsMapping() {
           if (!val) setEditingRuleId(null)
         }}
         editingRule={editingRuleId}
-        groups={groups.map(g => g.name)}
         onMutate={() => {
           mutate(apiUrl)
           setEditingRuleId(null)

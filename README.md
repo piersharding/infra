@@ -22,7 +22,7 @@ For documentation, see the [docs](./docs)
 
 ## Mapping Rules
 
-Infra supports group mapping rules that automatically create access grants based on IDP group membership. When the last mapping rule is removed, provider-synced groups that don't match any rule are automatically cleaned up — they serve no access purpose and are safely removed. Only groups synced from an identity provider are affected; locally-created groups are always preserved. See `docs/mapping-rules.md` for full documentation.
+Infra supports group mapping rules that automatically create access grants based on IDP group membership. When the last mapping rule is removed, provider-synced groups that don't match any rule are automatically cleaned up — they serve no access purpose and are safely removed. Only groups synced from an identity provider are affected; locally-created groups are always preserved. See `docs/dev/mapping-rules.md` for full documentation.
 
 
 ## How to set up locally

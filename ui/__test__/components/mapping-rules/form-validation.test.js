@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import AddGroupsMapping from '../../../pages/mapping-rules/add'
+import { AddMappingRuleDialog as AddGroupsMapping } from '../../../pages/mapping-rules/index'
 
 // Mock fetch to prevent actual API calls during tests. Returns a successful empty response.
 global.fetch = jest.fn(() =>
@@ -19,6 +19,14 @@ jest.mock('../../../lib/hooks', () => ({
 describe('Groups Mapping — create dialog form validation', () => {
   let user = null
 
+  const dialogProps = {
+    open: true,
+    setOpen: jest.fn(),
+    editingRule: null,
+    groups: [],
+    onMutate: jest.fn(),
+  }
+
   beforeEach(() => {
     global.fetch.mockClear()
     // Use real timers — the project does not enable fakeTimers globally,
@@ -27,7 +35,9 @@ describe('Groups Mapping — create dialog form validation', () => {
   })
 
   it('renders required fields for kubernetes destination type', async () => {
-    render(<AddGroupsMapping />)
+    await act(async () => {
+      render(<AddGroupsMapping {...dialogProps} />)
+    })
 
     expect(screen.getByLabelText(/Rule Name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Group Matching Regex/i)).toBeInTheDocument()
@@ -40,7 +50,9 @@ describe('Groups Mapping — create dialog form validation', () => {
   })
 
   it('shows role template only when destination type is kubernetes', async () => {
-    render(<AddGroupsMapping />)
+    await act(async () => {
+      render(<AddGroupsMapping {...dialogProps} />)
+    })
 
     const select = screen.getByLabelText(/Destination Type/i)
     await user.selectOptions(select, 'ssh')
@@ -50,7 +62,9 @@ describe('Groups Mapping — create dialog form validation', () => {
   })
 
   it('shows namespace template regex only when destination type is kubernetes', async () => {
-    render(<AddGroupsMapping />)
+    await act(async () => {
+      render(<AddGroupsMapping {...dialogProps} />)
+    })
 
     const select = screen.getByLabelText(/Destination Type/i)
     await user.selectOptions(select, 'ssh')
@@ -62,7 +76,9 @@ describe('Groups Mapping — create dialog form validation', () => {
   })
 
   it('rejects empty required fields on submit', async () => {
-    render(<AddGroupsMapping />)
+    await act(async () => {
+      render(<AddGroupsMapping {...dialogProps} />)
+    })
 
     // Use fireEvent.submit which properly triggers form submission in jsdom.
     const { fireEvent } = require('@testing-library/dom')
@@ -85,7 +101,9 @@ describe('Groups Mapping — create dialog form validation', () => {
   })
 
   it('shows role template as visible and required for kubernetes destination', async () => {
-    render(<AddGroupsMapping />)
+    await act(async () => {
+      render(<AddGroupsMapping {...dialogProps} />)
+    })
 
     // Default is kubernetes, so role_template should be visible
     const roleLabel = screen.getByLabelText(/Role Template/i)
