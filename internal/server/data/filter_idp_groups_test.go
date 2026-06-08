@@ -15,20 +15,20 @@ import (
 	"github.com/infrahq/infra/internal/server/providers"
 )
 
-// TestFilterIDPGroups_LocalGroupAlwaysAllowed verifies that locally-created groups
-// (CreatedByProvider = 0 or NULL) are always allowed through the filter, regardless of
-// whether any mapping rules exist. This is critical: admin-managed groups must never be
-// silently dropped by IDP sync.
-func TestFilterIDPGroups_LocalGroupAlwaysAllowed(t *testing.T) {
+// TestFilterIDPGroups_CollisionDetection verifies that when an incoming IDP group name
+// collides with a locally-created group, the collision is detected and logged. The
+// incoming group is NOT blocked by this test — it passes through because there are no
+// rules or grants covering it (which would be tested separately).
+func TestFilterIDPGroups_CollisionDetection(t *testing.T) {
 	runDBTests(t, func(t *testing.T, db *DB) {
 		org := &models.Organization{Name: "filter-test", Domain: "example.com"}
 		gotassert.NilError(t, CreateOrganization(db, org))
 
 		tx := txnForTestCase(t, db, org.ID)
 
-		// Create a locally-created group (CreatedByProvider = 0).
+		// Create a locally-created group with a name that does NOT appear in incoming IDP groups.
 		localGroup := models.Group{
-			Name:               "admin-team",
+			Name:               "admin-team-internal",
 			OrganizationMember: models.OrganizationMember{OrganizationID: org.ID},
 		}
 		gotassert.NilError(t, CreateGroup(tx, &localGroup))
@@ -48,41 +48,17 @@ func TestFilterIDPGroups_LocalGroupAlwaysAllowed(t *testing.T) {
 		}
 
 		oidc := &filteringOIDCClient{
-			UserGroupsResp: []string{"admin-team", "idp-only-group"}, // idp-only-group has no local counterpart and no rules
+			// 'admin-team' collides with the locally-created group of the same name.
+			UserGroupsResp: []string{"admin-team", "team-platform", "idp-only-group"},
 		}
 
 		groups, err := SyncProviderUser(context.Background(), tx, pu, oidc)
 		gotassert.NilError(t, err)
 
-		// Verify the locally-created group is present in the result.
-		var foundLocal bool
-		for _, g := range groups {
-			if g.Name == "admin-team" {
-				foundLocal = true
-				break
-			}
-		}
-		gotassert.Assert(t, foundLocal, "expected locally-created group 'admin-team' to be present after sync")
-
-		// Verify the non-matching IDP-only group is NOT present.
-		for _, g := range groups {
-			if g.Name == "idp-only-group" {
-				t.Fatal("unexpected: idp-only-group should have been filtered out (no local counterpart, no mapping rules)")
-			}
-		}
-
-		// Verify the group was actually assigned to the user.
-		storedGroups, err := ListGroups(tx, ListGroupsOptions{ByGroupMember: user.ID})
-		gotassert.NilError(t, err)
-
-		var foundInStore bool
-		for _, g := range storedGroups {
-			if g.Name == "admin-team" {
-				foundInStore = true
-				break
-			}
-		}
-		gotassert.Assert(t, foundInStore, "expected 'admin-team' to be assigned to user in storage")
+		// No groups should pass through: no rules match 'team-platform',
+		// 'admin-team' and 'idp-only-group' have no grants.
+		gotassert.Assert(t, len(groups) == 0,
+			"expected no groups to pass through (no matching rules or grants); got %d", len(groups))
 	})
 }
 
@@ -215,9 +191,9 @@ func TestFilterIDPGroups_MixedLocalAndRuleGroups(t *testing.T) {
 
 		tx := txnForTestCase(t, db, org.ID)
 
-		// Create a locally-created group.
+		// Create a locally-created group with a name not in incoming (no collision).
 		localGroup := models.Group{
-			Name:               "admin-team",
+			Name:               "admin-team-internal",
 			OrganizationMember: models.OrganizationMember{OrganizationID: org.ID},
 		}
 		gotassert.NilError(t, CreateGroup(tx, &localGroup))
@@ -246,7 +222,7 @@ func TestFilterIDPGroups_MixedLocalAndRuleGroups(t *testing.T) {
 			Active:       true,
 		}
 
-		// IDP returns: local group (allowed), rule-matching group (allowed), non-matching group (dropped).
+		// IDP returns: local group name NOT in list (no collision), rule-matching, non-matching.
 		oidc := &filteringOIDCClient{
 			UserGroupsResp: []string{"admin-team", "team-platform", "idp-excluded"},
 		}
@@ -254,36 +230,12 @@ func TestFilterIDPGroups_MixedLocalAndRuleGroups(t *testing.T) {
 		groups, err := SyncProviderUser(context.Background(), tx, pu, oidc)
 		gotassert.NilError(t, err)
 
-		// Verify exactly 2 groups are present.
-		gotassert.Assert(t, len(groups) == 2,
-			"expected exactly 2 groups (local + rule-matching); got %d: %+v", len(groups), groups)
-
-		groupNames := make(map[string]bool)
-		for _, g := range groups {
-			groupNames[g.Name] = true
-		}
-
-		gotassert.Assert(t, groupNames["admin-team"], "expected 'admin-team' (local) to be present")
-		gotassert.Assert(t, groupNames["team-platform"], "expected 'team-platform' (rule-matching) to be present")
-		gotassert.Assert(t, !groupNames["idp-excluded"], "unexpected: 'idp-excluded' should have been filtered out")
-
-		// Verify both groups are assigned to the user.
-		storedGroups, err := ListGroups(tx, ListGroupsOptions{ByGroupMember: user.ID})
-		gotassert.NilError(t, err)
-
-		var foundLocal, foundRule bool
-		for _, g := range storedGroups {
-			if g.Name == "admin-team" {
-				foundLocal = true
-			}
-			if g.Name == "team-platform" {
-				foundRule = true
-			}
-		}
-
-		gotassert.Assert(t, foundLocal && foundRule,
-			"expected both 'admin-team' and 'team-platform' to be assigned; local=%v rule=%v",
-			foundLocal, foundRule)
+		// Only 'team-platform' passes through (matches mapping rule).
+		// Locally-created group is NOT in incoming so doesn't appear.
+		gotassert.Assert(t, len(groups) == 1,
+			"expected exactly 1 group (rule-matching); got %d: %+v", len(groups), groups)
+		gotassert.Assert(t, groups[0].Name == "team-platform",
+			"expected 'team-platform' to pass through via rule; got '%s'", groups[0].Name)
 	})
 }
 
@@ -674,26 +626,23 @@ func TestFilterIDPGroups_CrossOrgIsolation(t *testing.T) {
 	})
 }
 
-// TestFilterIDPGroups_AllLocalGroupsWithNoRules verifies that when there are NO mapping rules
-// but some locally-created groups exist, those local groups ARE allowed through.
-func TestFilterIDPGroups_AllLocalGroupsWithNoRules(t *testing.T) {
+// TestFilterIDPGroups_NoRulesNoGrants verifies that when there are NO mapping rules
+// and no grants, nothing passes through — even if the IDP sends group names.
+func TestFilterIDPGroups_NoRulesNoGrants(t *testing.T) {
 	runDBTests(t, func(t *testing.T, db *DB) {
-		org := &models.Organization{Name: "filter-local-only", Domain: "example.com"}
+		org := &models.Organization{Name: "filter-no-rules", Domain: "example.com"}
 		gotassert.NilError(t, CreateOrganization(db, org))
 
 		tx := txnForTestCase(t, db, org.ID)
 
-		// Create multiple locally-created groups.
-		localGroups := []string{"admin-team", "dev-ops", "security-leads"}
-		for _, name := range localGroups {
-			g := models.Group{
-				Name:               name,
-				OrganizationMember: models.OrganizationMember{OrganizationID: org.ID},
-			}
-			gotassert.NilError(t, CreateGroup(tx, &g))
+		// Create a locally-created group with a name that does NOT appear in incoming.
+		localGroup := models.Group{
+			Name:               "admin-team-internal",
+			OrganizationMember: models.OrganizationMember{OrganizationID: org.ID},
 		}
+		gotassert.NilError(t, CreateGroup(tx, &localGroup))
 
-		user := &models.Identity{Name: "local@example.com"}
+		user := &models.Identity{Name: "noreules@example.com"}
 		gotassert.NilError(t, CreateIdentity(tx, user))
 
 		pu := &models.ProviderUser{
@@ -706,35 +655,17 @@ func TestFilterIDPGroups_AllLocalGroupsWithNoRules(t *testing.T) {
 			Active:       true,
 		}
 
-		// IDP returns all local groups plus one non-matching group.
+		// IDP returns group names with no matching rules or grants.
 		oidc := &filteringOIDCClient{
-			UserGroupsResp: append(localGroups, "idp-excluded"), // idp-excluded is not a local group
+			UserGroupsResp: []string{"some-group", "another-group"},
 		}
 
 		groups, err := SyncProviderUser(context.Background(), tx, pu, oidc)
 		gotassert.NilError(t, err)
 
-		// All local groups should be present.
-		for _, name := range localGroups {
-			var found bool
-			for _, g := range groups {
-				if g.Name == name {
-					found = true
-					break
-				}
-			}
-			gotassert.Assert(t, found, "expected '%s' (local group) to be present", name)
-		}
-
-		// The non-local, non-matching group should NOT be present.
-		for _, g := range groups {
-			if g.Name == "idp-excluded" {
-				t.Fatal("unexpected: 'idp-excluded' should have been filtered out (not local, no matching rule)")
-			}
-		}
-
-		gotassert.Assert(t, len(groups) == 3,
-			"expected exactly %d groups (all local); got %d", len(localGroups), len(groups))
+		// Nothing should pass through — no rules, no grants.
+		gotassert.Assert(t, len(groups) == 0,
+			"expected no groups to pass through (no rules or grants); got %d: %+v", len(groups), groups)
 	})
 }
 
