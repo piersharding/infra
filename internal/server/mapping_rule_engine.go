@@ -19,6 +19,14 @@ import (
 	"github.com/infrahq/infra/uid"
 )
 
+// evalRunning tracks which orgs currently have an evaluation in progress.
+// Evaluated per-org to allow concurrent evaluations across different organizations.
+var (
+	evalMu      sync.Mutex
+	evalRunning = make(map[uid.ID]bool)
+	evalPending = make(map[uid.ID]bool)
+)
+
 // globalRoleReplacements holds globally configured role name replacements loaded
 // from BootstrapConfig.MappingRulesConfig.RoleReplacements at server startup.
 var globalRoleReplacements []models.MappingRuleReplacement
@@ -152,12 +160,34 @@ func GetEvalStatus(orgID uid.ID) *EvalStatusReport {
 // without waiting for evaluation to complete. On completion, the result is
 // recorded in the in-memory evalStatusStore and visible via GetEvalStatus.
 func EvaluateMappingRulesAsync(db *data.DB, orgID uid.ID) {
+	evalMu.Lock()
+	if evalRunning[orgID] {
+		evalPending[orgID] = true
+		evalMu.Unlock()
+		return
+	}
+	evalRunning[orgID] = true
+	evalMu.Unlock()
+
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				err := fmt.Errorf("async mapping eval panicked: %v", r)
 				logging.L.Error().Err(err).Msg("mapping rule evaluation recovered from panic")
 				recordEvalStatus(orgID, err)
+			}
+		}()
+
+		defer func() {
+			evalMu.Lock()
+			if evalPending[orgID] {
+				delete(evalPending, orgID)
+				delete(evalRunning, orgID) // clear so recursive call can start
+				evalMu.Unlock()
+				EvaluateMappingRulesAsync(db, orgID)
+			} else {
+				delete(evalRunning, orgID)
+				evalMu.Unlock()
 			}
 		}()
 
