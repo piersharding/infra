@@ -21,7 +21,7 @@ INFRA_PASSWORD ?= Passw0rd1!Thing
 
 VM_NAME ?= ssh01
 VM_MEM ?= 8192mb
-VM_IMAGE ?= gcr.io/k8s-minikube/kicbase:v0.0.46
+VM_IMAGE ?= gcr.io/k8s-minikube/kicbase:v0.0.50
 INFRA_SERVER_IP_SUFFIX ?= 240
 INFRA_UI_IP_SUFFIX ?= 241
 POSTGRES_IP_SUFFIX ?= 243
@@ -49,6 +49,8 @@ LINT_ARGS ?= --fix
 clean: clean-oci clean-secrets
 
 deploy-local: test-all build docker-build dev-oci dev-connector
+
+deploy-local-no-test: build docker-build dev-oci dev-connector
 
 docker-login:
 	docker login $(DOCKER_HOST) -u$(REPOSITORY_USER) -p $(GITLAB_TOKEN)
@@ -517,6 +519,11 @@ create-groups: get-access-key ## Create test groups in current dev deployment
 	  -H 'Content-Type: application/json' \
 	  -H 'Infra-Version: 0.18.1' \
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "name": "ExampleOther" }' | jq -r '.id'
+	@curl -X POST http://$(INFRA_URL)/api/groups \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
 	  -d '{ "name": "ssh-connect-ssh01" }' | jq -r '.id'
 	@curl -X POST http://$(INFRA_URL)/api/groups \
 	  -H 'Content-Type: application/json' \
@@ -605,7 +612,7 @@ create-destination: get-access-key ## Create test destination in current dev dep
 .PHONY: test-data
 test-data: create-users create-groups add-user-group create-destination add-grants create-mapping-rules
 	make add-user-group USER_NAME=test01@local.net
-	make add-user-group USER_NAME=test02@local.net GROUP_NAME=ssh-connect-ssh01 
+	make add-user-group USER_NAME=test02@local.net GROUP_NAME=ssh-connect-ssh01
 	make add-user-group USER_NAME=admin@local GROUP_NAME=k8s-minikube-admin
 	make add-user-group USER_NAME=test01@local.net GROUP_NAME=k8s-minikube-aivadmin
 	make add-user-group USER_NAME=test02@local.net GROUP_NAME=k8s-minikube-view-kube*
@@ -687,7 +694,6 @@ vm-create: ## Create a kicbase container to emulate a VM
 	ssh-add -L | $(DOCKER_ENGINE) exec -i $(VM_NAME) bash -c "cat - >>/root/.ssh/authorized_keys"
 	# get rid of bad repos
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) bash -c "rm -f /etc/apt/sources.list.d/devel* /etc/apt/sources.list.d/dock*  /etc/apt/sources.list.d/nvidia*"
-	$(DOCKER_ENGINE) exec -ti $(VM_NAME) bash -c "sed -i 's/archive/uk.archive/' /etc/apt/sources.list "
 	make vm-hosts VM_NAME=$(VM_NAME)
 
 clean-infra-network: # delete infra network
