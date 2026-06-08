@@ -19,7 +19,7 @@ graph TD
     subgraph Destination 
     Connector["Infra connector"]
     SSHD("sshd")-->|"infra sshd auth-hosts"|CLI2["Infra CLI"]
-    Connector-->|"useradd,userdel,pkill,read"|LinuxUsers[/"/etc/passwd"/]
+    Connector-->|"useradd,userdel,pkill,chage,read"|LinuxUsers[/"/etc/passwd"/]
     CLI2-->|"read"|LinuxUsers
     CLI2-->|"ListUsers,ListGrants"|API
     end
@@ -39,6 +39,10 @@ to the destination. The connector runs as a `systemd` service that long polls fo
 changes to grants. When a grant is added a user is created on the host,
 and when a grant is removed, the processes for that user are killed, and the user
 is removed.
+
+On every sync cycle the connector also updates password expiration (`chage -M 3650`) for all
+infra-managed local users. This ensures pre-existing managed accounts never hit system-enforced
+password expiry while allowing SSH access.
 
 When a user does `infra login` for the first time, their `~/.ssh/config` is updated
 to use the `infra` CLI to match hostnames to the list of destinations the user has
