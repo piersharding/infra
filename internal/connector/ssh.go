@@ -313,7 +313,7 @@ func updateManagedUsersPasswordExpiration(ctx context.Context, localUsers []linu
 		}
 		logging.L.Debug().
 			Str("operation", "update_password_expiration").
-			Str("username", sanitizeUsernameForLogging(lu.Username)).
+			Str("username", linux.SanitizeUsernameForLogging(lu.Username)).
 			Msg("updating_managed_user_password_expiration")
 
 		if err := linux.SetPasswordExpiration(lu.Username, linux.MaxPasswordAgeDays); err != nil {

@@ -140,7 +140,7 @@ func validateUsernameStrict(username string) error {
 	return nil
 }
 
-func sanitizeUsernameForLogging(username string) string {
+func SanitizeUsernameForLogging(username string) string {
 	if len(username) <= 2 {
 		return "***"
 	}
@@ -214,7 +214,7 @@ func AddUser(apiUser *api.User, group string) error {
 
 	logging.L.Info().
 		Str("operation", "add_user").
-		Str("username", sanitizeUsernameForLogging(apiUser.SSHLoginName)).
+		Str("username", SanitizeUsernameForLogging(apiUser.SSHLoginName)).
 		Str("group", group).
 		Time("timestamp", time.Now()).
 		Msg("user_add_attempt")
@@ -223,7 +223,7 @@ func AddUser(apiUser *api.User, group string) error {
 	if err != nil {
 		logging.L.Error().
 			Str("operation", "add_user").
-			Str("username", sanitizeUsernameForLogging(apiUser.SSHLoginName)).
+			Str("username", SanitizeUsernameForLogging(apiUser.SSHLoginName)).
 			Str("group", group).
 			Err(err).
 			Msg("user_add_failed")
@@ -232,7 +232,7 @@ func AddUser(apiUser *api.User, group string) error {
 
 	logging.L.Info().
 		Str("operation", "add_user").
-		Str("username", sanitizeUsernameForLogging(apiUser.SSHLoginName)).
+		Str("username", SanitizeUsernameForLogging(apiUser.SSHLoginName)).
 		Str("group", group).
 		Time("timestamp", time.Now()).
 		Msg("user_added_successfully")
@@ -241,7 +241,7 @@ func AddUser(apiUser *api.User, group string) error {
 	if err := SetPasswordExpiration(apiUser.SSHLoginName, MaxPasswordAgeDays); err != nil {
 		logging.L.Warn().
 			Str("operation", "set_password_expiration").
-			Str("username", sanitizeUsernameForLogging(apiUser.SSHLoginName)).
+			Str("username", SanitizeUsernameForLogging(apiUser.SSHLoginName)).
 			Err(err).
 			Msg("failed to set password expiration")
 	}
@@ -265,7 +265,7 @@ func SetPasswordExpiration(username string, days int) error {
 
 	logging.L.Debug().
 		Str("operation", "set_password_expiration").
-		Str("username", sanitizeUsernameForLogging(username)).
+		Str("username", SanitizeUsernameForLogging(username)).
 		Int("days", days).
 		Msg("setting_max_password_age")
 
@@ -275,7 +275,7 @@ func SetPasswordExpiration(username string, days int) error {
 
 	logging.L.Debug().
 		Str("operation", "set_password_expiration").
-		Str("username", sanitizeUsernameForLogging(username)).
+		Str("username", SanitizeUsernameForLogging(username)).
 		Int("days", days).
 		Msg("password_max_age_set_successfully")
 
@@ -299,7 +299,7 @@ func KillUserProcesses(localUser LocalUser) error {
 
 	logging.L.Info().
 		Str("operation", "kill_user_processes").
-		Str("username", sanitizeUsernameForLogging(localUser.Username)).
+		Str("username", SanitizeUsernameForLogging(localUser.Username)).
 		Time("timestamp", time.Now()).
 		Msg("process_kill_attempt")
 
@@ -311,13 +311,13 @@ func KillUserProcesses(localUser LocalUser) error {
 	case errors.As(err, &exitError) && exitError.ExitCode() == 1:
 		logging.L.Info().
 			Str("operation", "kill_user_processes").
-			Str("username", sanitizeUsernameForLogging(localUser.Username)).
+			Str("username", SanitizeUsernameForLogging(localUser.Username)).
 			Msg("no_processes_running")
 		return nil
 	case err != nil:
 		logging.L.Error().
 			Str("operation", "kill_user_processes").
-			Str("username", sanitizeUsernameForLogging(localUser.Username)).
+			Str("username", SanitizeUsernameForLogging(localUser.Username)).
 			Err(err).
 			Msg("process_kill_failed")
 		return fmt.Errorf("kill processes: %w", err)
@@ -325,7 +325,7 @@ func KillUserProcesses(localUser LocalUser) error {
 
 	logging.L.Info().
 		Str("operation", "kill_user_processes").
-		Str("username", sanitizeUsernameForLogging(localUser.Username)).
+		Str("username", SanitizeUsernameForLogging(localUser.Username)).
 		Time("timestamp", time.Now()).
 		Msg("processes_killed_successfully")
 
@@ -343,7 +343,7 @@ func RemoveUser(localUser LocalUser) error {
 		if errors.As(err, &unknownUserErr) {
 			logging.L.Info().
 				Str("operation", "remove_user").
-				Str("username", sanitizeUsernameForLogging(localUser.Username)).
+				Str("username", SanitizeUsernameForLogging(localUser.Username)).
 				Msg("user_not_found")
 			return nil // User doesn't exist, nothing to do
 		}
@@ -358,14 +358,14 @@ func RemoveUser(localUser LocalUser) error {
 
 	logging.L.Info().
 		Str("operation", "remove_user").
-		Str("username", sanitizeUsernameForLogging(localUser.Username)).
+		Str("username", SanitizeUsernameForLogging(localUser.Username)).
 		Time("timestamp", time.Now()).
 		Msg("user_remove_attempt")
 
 	if err := cmd.Run(); err != nil {
 		logging.L.Error().
 			Str("operation", "remove_user").
-			Str("username", sanitizeUsernameForLogging(localUser.Username)).
+			Str("username", SanitizeUsernameForLogging(localUser.Username)).
 			Err(err).
 			Msg("user_remove_failed")
 		return fmt.Errorf("userdel: %w", err)
@@ -373,7 +373,7 @@ func RemoveUser(localUser LocalUser) error {
 
 	logging.L.Info().
 		Str("operation", "remove_user").
-		Str("username", sanitizeUsernameForLogging(localUser.Username)).
+		Str("username", SanitizeUsernameForLogging(localUser.Username)).
 		Time("timestamp", time.Now()).
 		Msg("user_removed_successfully")
 
