@@ -254,7 +254,12 @@ func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, gr
 		delete(byUserID, infraUID)
 	}
 
+	// Update password expiration for all existing managed users (not just newly created ones).
+	// This ensures existing users are fixed without manual intervention.
 	var errs []error
+	if err := updateManagedUsersPasswordExpiration(ctx, localUsers); err != nil {
+		errs = append(errs, fmt.Errorf("update password expiration: %w", err))
+	}
 	// attempt to kill any active sessions first, so that processes have time to
 	// exit before we try to remove the user.
 	for _, user := range toDelete {
@@ -288,6 +293,32 @@ func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, gr
 			continue
 		}
 		logging.L.Info().Str("username", user.SSHLoginName).Msg("created user")
+	}
+
+	if len(errs) > 0 {
+		return cliopts.MultiError(errs)
+	}
+	return nil
+}
+
+// updateManagedUsersPasswordExpiration updates password expiration for all
+// managed users on this system. It is called on every sync cycle so that any
+// pre-existing infra-managed user eventually gets the long expiry set without
+// requiring manual intervention.
+func updateManagedUsersPasswordExpiration(ctx context.Context, localUsers []linux.LocalUser) error {
+	var errs []error
+	for _, lu := range localUsers {
+		if !lu.IsManagedByInfra() {
+			continue
+		}
+		logging.L.Debug().
+			Str("operation", "update_password_expiration").
+			Str("username", sanitizeUsernameForLogging(lu.Username)).
+			Msg("updating_managed_user_password_expiration")
+
+		if err := linux.SetPasswordExpiration(lu.Username, linux.MaxPasswordAgeDays); err != nil {
+			errs = append(errs, fmt.Errorf("update password expiration for %s: %w", lu.Username, err))
+		}
 	}
 
 	if len(errs) > 0 {
