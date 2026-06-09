@@ -553,7 +553,7 @@ get-group: get-access-key
 	$(eval GROUP_ID:=$(shell curl -s -X GET http://$(INFRA_URL)/api/groups \
 	  -H 'Content-Type: application/json' \
 	  -H 'Infra-Version: 0.18.1' \
-	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' | jq -r '.items[] | select( .name | contains("$(GROUP_NAME)") ) | .id'))
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' | jq -r '.items[] | select( .name == "$(GROUP_NAME)" ) | .id'))
 	@echo "GROUP_ID=$(GROUP_ID)"
 
 .PHONY: add-user-group
