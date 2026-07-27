@@ -14,6 +14,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -214,6 +216,146 @@ func (f fakeClient) Do(req *http.Request) (*http.Response, error) {
 		Body:       io.NopCloser(&buf),
 	}
 	return resp, nil
+}
+
+func TestProxyMiddleware_BearerTokenIsReadPerRequest(t *testing.T) {
+	pub, priv := generateJWK(t)
+
+	var forwarded []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		forwarded = append(forwarded, req.Header.Get("Authorization"))
+		resp.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	upstreamURL, err := url.Parse(upstream.URL)
+	assert.NilError(t, err)
+
+	opts := Options{Server: ServerOptions{SkipTLSVerify: true, AccessKey: "the-access-key"}}
+	assert.NilError(t, opts.Server.URL.Set("https://127.0.0.1:12345"))
+	authn := newAuthenticator(opts)
+	authn.client = fakeClient{key: *pub}
+
+	// the token file is rotated between the two requests
+	token := "first-token"
+	handler := proxyMiddleware(
+		httputil.NewSingleHostReverseProxy(upstreamURL),
+		authn,
+		func() (string, error) { return token, nil },
+	)
+
+	send := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/apis", nil)
+		req.Header.Set("Authorization", "Bearer "+generateJWT(t, priv, "user@example.com", time.Now().Add(time.Hour)))
+		resp := httptest.NewRecorder()
+		handler(resp, req)
+		return resp
+	}
+
+	assert.Equal(t, send().Code, http.StatusOK)
+	token = "rotated-token"
+	assert.Equal(t, send().Code, http.StatusOK)
+
+	assert.DeepEqual(t, forwarded, []string{"Bearer first-token", "Bearer rotated-token"})
+}
+
+func TestProxyMiddleware_BearerTokenUnavailable(t *testing.T) {
+	pub, priv := generateJWK(t)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		t.Error("request should not have reached the kubernetes API")
+	}))
+	t.Cleanup(upstream.Close)
+
+	upstreamURL, err := url.Parse(upstream.URL)
+	assert.NilError(t, err)
+
+	opts := Options{Server: ServerOptions{SkipTLSVerify: true, AccessKey: "the-access-key"}}
+	assert.NilError(t, opts.Server.URL.Set("https://127.0.0.1:12345"))
+	authn := newAuthenticator(opts)
+	authn.client = fakeClient{key: *pub}
+
+	handler := proxyMiddleware(
+		httputil.NewSingleHostReverseProxy(upstreamURL),
+		authn,
+		func() (string, error) { return "", errors.New("no such file") },
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/apis", nil)
+	req.Header.Set("Authorization", "Bearer "+generateJWT(t, priv, "user@example.com", time.Now().Add(time.Hour)))
+	resp := httptest.NewRecorder()
+	handler(resp, req)
+
+	assert.Equal(t, resp.Code, http.StatusInternalServerError)
+}
+
+func TestCredentialCheck(t *testing.T) {
+	type testCase struct {
+		name        string
+		statusCode  int
+		bearerToken bearerTokenSource
+		expectedErr string
+	}
+
+	testCases := []testCase{
+		{
+			name:       "credentials accepted",
+			statusCode: http.StatusOK,
+		},
+		{
+			name:        "credentials expired",
+			statusCode:  http.StatusUnauthorized,
+			expectedErr: "rejected the connector credentials",
+		},
+		{
+			name:        "credentials forbidden",
+			statusCode:  http.StatusForbidden,
+			expectedErr: "rejected the connector credentials",
+		},
+		{
+			name:        "token unreadable",
+			statusCode:  http.StatusOK,
+			bearerToken: func() (string, error) { return "", errors.New("no such file") },
+			expectedErr: "no such file",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests int
+			upstream := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+				requests++
+				assert.Equal(t, req.URL.Path, "/version")
+				assert.Equal(t, req.Header.Get("Authorization"), "Bearer the-token")
+				resp.WriteHeader(tc.statusCode)
+			}))
+			t.Cleanup(upstream.Close)
+
+			bearerToken := tc.bearerToken
+			if bearerToken == nil {
+				bearerToken = func() (string, error) { return "the-token", nil }
+			}
+
+			check := &credentialCheck{
+				client:      upstream.Client(),
+				url:         upstream.URL + "/version",
+				bearerToken: bearerToken,
+				interval:    time.Hour,
+			}
+
+			err := check.Check(context.Background())
+			if tc.expectedErr != "" {
+				assert.ErrorContains(t, err, tc.expectedErr)
+			} else {
+				assert.NilError(t, err)
+			}
+
+			// the result is cached, so a second call must not reach the API
+			before := requests
+			assert.Equal(t, fmt.Sprint(check.Check(context.Background())), fmt.Sprint(err))
+			assert.Equal(t, requests, before)
+		})
+	}
 }
 
 func TestCertCache_Certificate(t *testing.T) {

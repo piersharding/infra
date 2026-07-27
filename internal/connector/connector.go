@@ -289,6 +289,20 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 	proxy := httputil.NewSingleHostReverseProxy(kubeAPIAddr)
 	proxy.Transport = proxyTransport
 	proxy.ErrorLog = httpErrorLog
+	proxy.ModifyResponse = logUpstreamErrors
+
+	bearerToken := k8s.BearerTokenSource()
+
+	// /version is readable by any authenticated identity, so this reports on
+	// the connector's credentials without depending on its permissions.
+	readyCheck := &credentialCheck{
+		// kept below the probe timeout so a slow API server fails the check
+		// rather than blocking subsequent probes on the cache lock.
+		client:      &http.Client{Transport: proxyTransport, Timeout: 3 * time.Second},
+		url:         kubeAPIAddr.JoinPath("version").String(),
+		bearerToken: bearerToken,
+		interval:    30 * time.Second,
+	}
 
 	metricsServer := &http.Server{
 		ReadHeaderTimeout: 30 * time.Second,
@@ -306,8 +320,11 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 		return err
 	})
 
+	// served on the plaintext listener so that the proxy router keeps
+	// forwarding /readyz through to the kubernetes API.
 	healthOnlyRouter := http.NewServeMux()
 	healthOnlyRouter.HandleFunc("/healthz", healthHandler)
+	healthOnlyRouter.HandleFunc("/readyz", readyHandler(readyCheck))
 
 	plaintextServer := &http.Server{
 		ReadHeaderTimeout: 30 * time.Second,
@@ -326,7 +343,7 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 	})
 
 	authn := newAuthenticator(options)
-	router.HandleFunc("/", proxyMiddleware(proxy, authn, k8s.Config.BearerToken))
+	router.HandleFunc("/", proxyMiddleware(proxy, authn, bearerToken))
 	tlsServer := &http.Server{
 		ReadHeaderTimeout: 30 * time.Second,
 		ReadTimeout:       60 * time.Second,

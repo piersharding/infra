@@ -1,9 +1,11 @@
 package connector
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"strconv"
@@ -17,10 +19,15 @@ import (
 	"github.com/infrahq/infra/metrics"
 )
 
+// bearerTokenSource provides the credentials the connector uses to authenticate
+// to the kubernetes API. It is called per request rather than read once, so
+// that a rotated service account token is picked up without a restart.
+type bearerTokenSource func() (string, error)
+
 func proxyMiddleware(
 	proxy *httputil.ReverseProxy,
 	authn *authenticator,
-	bearerToken string,
+	bearerToken bearerTokenSource,
 ) func(resp http.ResponseWriter, req *http.Request) {
 	return func(resp http.ResponseWriter, req *http.Request) {
 		start := time.Now()
@@ -43,13 +50,121 @@ func proxyMiddleware(
 			return
 		}
 
+		token, err := bearerToken()
+		if err != nil {
+			logging.L.Error().Err(err).Msgf("failed to load kubernetes credentials")
+			resp.WriteHeader(http.StatusInternalServerError)
+			status = http.StatusInternalServerError
+			return
+		}
+
 		req.Header.Set("Impersonate-User", claim.Name)
 		for _, g := range claim.Groups {
 			req.Header.Add("Impersonate-Group", g)
 		}
 
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", bearerToken))
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 		proxy.ServeHTTP(resp, req)
+	}
+}
+
+// logUpstreamErrors reports responses from the kubernetes API that indicate a
+// problem with the connector's own credentials. The reverse proxy passes the
+// upstream response straight back to the client, so without this a connector
+// that cannot authenticate looks healthy while every proxied request fails.
+func logUpstreamErrors(res *http.Response) error {
+	var path string
+	if res.Request != nil {
+		path = res.Request.URL.Path
+	}
+
+	switch {
+	case res.StatusCode == http.StatusUnauthorized, res.StatusCode == http.StatusForbidden:
+		// the end user was already authenticated by proxyMiddleware, so a
+		// rejection here is the connector's credentials being refused.
+		logging.L.Error().
+			Int("status", res.StatusCode).
+			Str("path", path).
+			Msgf("kubernetes API rejected the connector credentials")
+	case res.StatusCode >= 400:
+		logging.L.Debug().
+			Int("status", res.StatusCode).
+			Str("path", path).
+			Msgf("kubernetes API request failed")
+	}
+
+	return nil
+}
+
+// credentialCheck reports whether the kubernetes API still accepts the
+// connector's credentials. Results are cached for interval so that probe
+// traffic does not reach the API server on every request.
+type credentialCheck struct {
+	client      *http.Client
+	url         string
+	bearerToken bearerTokenSource
+	interval    time.Duration
+
+	mu      sync.Mutex
+	checked time.Time
+	err     error
+}
+
+func (c *credentialCheck) Check(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.checked.IsZero() && time.Since(c.checked) < c.interval {
+		return c.err
+	}
+
+	c.err = c.check(ctx)
+	c.checked = time.Now()
+	return c.err
+}
+
+func (c *credentialCheck) check(ctx context.Context) error {
+	token, err := c.bearerToken()
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	res, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	_, _ = io.Copy(io.Discard, res.Body)
+
+	// the endpoint is readable by any authenticated identity, so a rejection
+	// is an authentication failure rather than a missing permission.
+	if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
+		return fmt.Errorf("kubernetes API rejected the connector credentials: %v", res.Status)
+	}
+
+	return nil
+}
+
+func readyHandler(check *credentialCheck) func(resp http.ResponseWriter, req *http.Request) {
+	return func(resp http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet {
+			resp.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		if err := check.Check(req.Context()); err != nil {
+			logging.L.Warn().Err(err).Msgf("connector is not ready")
+			resp.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
+		resp.WriteHeader(http.StatusOK)
 	}
 }
 
