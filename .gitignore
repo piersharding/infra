@@ -18,6 +18,9 @@ PrivateRules.mak
 dist/
 querylinter.so
 
+# build artefacts and CI reports produced by go.mk
+build/
+
 sendgrid.env
 test/root.key
 SECURITY_AUDIT_REPORT.md

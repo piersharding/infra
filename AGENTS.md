@@ -161,15 +161,30 @@ npm run lint    # ESLint
 npm run build   # production build
 ```
 
-### CI/CD Workflows (`.github/workflows/`)
+### CI/CD — GitLab (`.gitlab-ci.yml`)
 
-| File | Trigger | Purpose |
+This is the authoritative pipeline. It uses the SKAO CI templates from
+`ska-telescope/templates-repository` plus the `.make` submodule
+(`ska-cicd-makefile`). Default job image is
+`artefact.skao.int/ska-cicd-runner:1.0.0`.
+
+| Job | Stage | Purpose |
 |---|---|---|
-| `ci-core.yaml` | push / PR | Go vet, golangci-lint, tests with multiple PostgreSQL versions |
-| `ci-ui.yaml` | push / PR | npm lint, build, Jest tests |
-| `fuzz.yaml` | scheduled (weekly) | Go fuzzing for security |
-| `cd-binaries.yaml` | tag | goreleaser cross-platform binary builds |
-| `cd-containers.yaml` | tag | Docker image push to `registry.gitlab.com/ska-telescope/sdi/external/infra` |
+| `go-lint` | lint | `make go-lint` — golangci-lint incl. the querylinter plugin. Overrides image to `golang:1.26` (the runner has no Go) |
+| `go-test` | test | `make go-test` — gotestsum with a `postgres:14-alpine` service; JUnit + cobertura reports |
+| `oci-image-lint` | lint | hadolint over `images/*/Dockerfile` |
+| `oci-image-build` | build | `make oci-build-all` — builds the `infra` and `ui` images |
+| `oci-image-publish` | publish | tag-gated push to the SKA registry |
+| `helm-chart-*` | lint/build/publish | `charts/infra`, `charts/infra-server` |
+
+Go targets live in `go.mk` (namespaced `go-*`, written to SKA conventions so it
+can be contributed to `ska-cicd-makefile`). Version state lives in `.release`.
+
+### Legacy GitHub workflows (`.github/workflows/`)
+
+Inherited from upstream `infrahq/infra` and **not run** on SKAO GitLab. Retained
+for reference only: `ci-core.yaml`, `ci-ui.yaml`, `fuzz.yaml`, `cd-binaries.yaml`,
+`cd-containers.yaml`.
 
 ---
 
