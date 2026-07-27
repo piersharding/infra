@@ -2,5 +2,10 @@ apiVersion: v2
 name: infra-server
 description: A Helm chart for Infra server.
 type: application
+<<<<<<< HEAD
 version: 0.21.16
 appVersion: 0.21.16
+=======
+version: 0.21.13
+appVersion: 0.21.13
+>>>>>>> 9bcca4ff (ST-2918: Bump version)

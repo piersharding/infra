@@ -5,6 +5,11 @@ REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
 TAG ?= 0.21.16
+# TAG and VERSION are not set here on purpose. .make/release.mk derives both
+# from .release (getTag / getVersion in .make/.make-release-support) with a
+# plain `=`, so anything assigned here is silently discarded. Change the
+# version in .release, or override per invocation with `make ... TAG=dev`.
+# Use `make show-version` to see the current value.
 # BUILDVERSION is for client side compatibility - fixed to 0.21.0
 BUILDVERSION ?= 0.21.0
 
@@ -120,9 +125,8 @@ bin/infra: go-build ## build local bin/infra
 # Releasing is driven by the GitLab pipeline, not by this Makefile:
 #
 #   1. make bump-patch-release   (or bump-minor-release / bump-major-release)
-#   2. make set-release          - propagates the version to the Helm charts
-#   3. git commit && git push && merge
-#   4. make git-create-tag && make git-push-tag
+#   2. git commit && git push && merge
+#   3. make git-create-tag && make git-push-tag
 #
 # Pushing the tag runs oci-image-publish and helm-chart-publish. Use
 # `make show-version` to see the current version from .release.
