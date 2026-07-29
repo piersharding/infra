@@ -590,3 +590,117 @@ Detailed structured documentation is available in `.sop/summary/`:
 | `.sop/summary/workflows.md` | Sequence diagrams: login, K8s access grant, IDP sync, SSH, startup |
 | `.sop/summary/dependencies.md` | All Go + frontend dependencies with versions |
 | `.sop/summary/review_notes.md` | Known documentation gaps and recommendations |
+
+---
+
+## Group Mapping Rules
+
+Group Mapping Rules is a rule-based engine that automatically creates access grants based on IDP group membership. The feature spans the full stack: DB migrations, domain model, data layer, authorization, HTTP handlers, a regex-based mapping engine, SSH connector integration, and an admin UI.
+
+### Architecture
+
+```
+Admin UI (/mapping-rules) → API handlers (mapping_rules.go)
+  → access layer (access/mapping_rule.go, InfraAdminRole)
+    → data layer (data/mapping_rule.go)
+      → EvaluateMappingRulesAsync (mapping_rule_engine.go)  ← async, own txn
+        → EvaluateMappingRules (sync)
+          → createOrUpdateGrant + cleanupStaleGrants
+        → recordEvalStatus → evalStatusStore (in-memory)
+```
+
+Eval status is exposed via `GET /api/mapping-rules/eval-status` and displayed as a banner in the UI.
+
+### Key Files
+
+| File | Purpose |
+|---|---|
+| `api/mapping_rule.go` | Request/response types + validation (regex compile check, enum, conditional required) + `MappingRuleEvalStatus` |
+| `internal/server/models/mapping_rule.go` | `MappingRule` domain model, `DestinationType` enum, `ToAPI()` converter |
+| `internal/server/data/mapping_rule.go` | Data layer CRUD + `mappingRulesTable` implementing the `Table` interface |
+| `internal/server/mapping_rules.go` | HTTP handlers (List/Get/Create/Update/Delete/EvalStatus), Create/Update/Delete trigger `EvaluateMappingRulesAsync` |
+| `internal/server/mapping_rule_engine.go` | Core engine: `EvaluateMappingRules`, `EvaluateMappingRulesAsync`, `applyTemplate`, `createOrUpdateGrant`, `cleanupStaleGrants`, `EvalStatusReport` + in-memory status store |
+| `internal/access/mapping_rule.go` | Authorization: all endpoints require `InfraAdminRole` |
+| `internal/server/data/migrations.go` | Migrations: `mapping_rules` table + `auto_grant` column on `grants` + partial index |
+| `internal/server/data/schema.sql` | `mapping_rules` DDL with unique partial index |
+| `internal/connector/ssh.go` | `resolveUsersFromGrants`: resolves group-based grants to individual users |
+| `ui/pages/mapping-rules/index.js` | List page + inline add/edit dialog (`AddMappingRuleDialog`) with live regex/template preview, unsaved changes warning |
+| `ui/lib/mappingRules.js` | Client-side `previewRegex()` and `previewTemplate()` utilities |
+| `internal/server/config.go` | BootstrapConfig (Users + MappingRules), loadMappingRules, mappingRuleFromConfig helper — loads config rules before IDP sync evaluation |
+| `docs/dev/mapping-rules.md` | End-user documentation with examples, template syntax, and configuration file reference |
+| `CHANGELOG.md` (project root) | Changelog of mapping rule features, changes, and fixes |
+
+### Engine Behavior
+
+- **Triggered by**: rule CRUD (create/update/delete), group creation, server startup, login (to catch IDP-synced groups). Config-loaded rules are persisted in `loadConfig()` before `EvaluateMappingRulesAsync` runs at startup — ensuring grants exist when IDP sync begins.
+- **Bootstrap config**: Mapping rules can be defined in the server YAML via `mappingRules:` under `BootstrapConfig`. Rules are loaded during `NewServer()`, upserted by name, and marked with `CreatedBy = system`. See `docs/dev/mapping-rules.md` for YAML syntax.
+- **Admin-only**: All mapping rule endpoints require `InfraAdminRole` — the UI already enforces this
+- **Async execution**: All request-triggered evaluations run asynchronously in a background goroutine with their own DB transaction, so the API response is not blocked by evaluation
+- **No semaphore or shutdown context needed**: `EvaluateMappingRules` is idempotent — early termination is harmless because the next run picks up the correct state. `pg_try_advisory_xact_lock(orgID)` already serializes concurrent evaluations per org. Together these make additional semaphores or shutdown-context plumbing unnecessary.
+- **Eval status visibility**: Result of each async evaluation is recorded in an in-memory `evalStatusStore` and exposed via `GET /api/mapping-rules/eval-status` — the UI shows a success/error banner
+- **Locking**: `pg_try_advisory_xact_lock(orgID)` prevents concurrent evaluation races
+- **Idempotent**: `createOrUpdateGrant` checks for existing grants before creating; marks pre-existing matches as `auto_grant=true`
+- **Auto-grant safety**: Only grants with `AutoGrant=true` (only the mapping engine sets this) are cleaned up. Manually-created grants are never touched.
+- **Graceful degradation**: Invalid regex or template errors are logged and skipped — one bad rule does not crash the engine
+- **Cross-org isolation**: All queries are scoped by `organization_id`
+
+### Adding a Mapping Rule (Developer Guide)
+
+1. **Model**: Already exists in `internal/server/models/mapping_rule.go` — add fields to `MappingRule` struct
+2. **API types**: Define/update request/response in `api/mapping_rule.go`
+3. **Data layer**: Update `mappingRulesTable` in `internal/server/data/mapping_rule.go` — columns, values, scan fields
+4. **Migration**: Add migration in `internal/server/data/migrations.go` + update `schema.sql`
+5. **Run**: `go generate ./internal/server/data`
+6. **Handlers**: Add/update in `internal/server/mapping_rules.go`
+7. **Access**: Update `internal/access/mapping_rule.go` for any permission changes
+8. **Routes**: Registered in `internal/server/routes.go` (get/post/put/del for `/api/mapping-rules`)
+9. **Engine**: If changing evaluation logic, update `internal/server/mapping_rule_engine.go`
+10. **Tests**: Add tests at every layer (engine, handlers, access, data, integration)
+11. **Frontend**: Update `ui/pages/mapping-rules/` and `ui/lib/mappingRules.js`
+12. **Docs**: Update `docs/dev/mapping-rules.md` and `CHANGELOG.md`
+
+### API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/mapping-rules` | InfraAdminRole | List rules (paginated, filterable by name) |
+| GET | `/api/mapping-rules/eval-status` | InfraAdminRole | Last async evaluation result (success/error + timestamp) |
+| GET | `/api/mapping-rules/:id` | InfraAdminRole | Get single rule |
+| POST | `/api/mapping-rules` | InfraAdminRole | Create rule (triggers engine) |
+| PUT | `/api/mapping-rules/:id` | InfraAdminRole | Update rule (triggers engine) |
+| DELETE | `/api/mapping-rules/:id` | InfraAdminRole | Delete rule (triggers engine) |
+
+### Important Gotchas
+
+- **Mutation of existing grants**: `createOrUpdateGrant` marks pre-existing matching grants as `auto_grant=true`. This is intentional — if a user creates a mapping rule that matches an existing manual grant, the user intends for the rule to manage that grant going forward.
+- **SSH privilege is always "connect"**: The engine hardcodes `privilege = "connect"` for SSH destinations. Role template is not used for SSH.
+- **Kubernetes fallback**: When no `RoleTemplate` is set for a Kubernetes rule, the engine falls back to `"view"` (least-privilege valid RBAC role).
+- **Cleanup scope**: `cleanupStaleGrants` only removes grants where `AutoGrant=true` (only the mapping engine sets this). Bootstrap grants and user-created grants are preserved.
+- **Template syntax**: Only `$N` (bare number) is supported. `${...}` syntax is explicitly rejected with an error. Use `$1`, `$2`, etc. for capture group references.
+- **Orphaned group deletion when no rules exist**: `cleanupOrphanedGroups` deletes *all* IDP-synced groups (`created_by_provider != 0`) that do not match any active mapping rule and are not referenced by a non-auto-grant. This is **by design** — provider-synced groups only serve an access-control purpose when referenced by a mapping rule or a manual grant; without either, they are orphaned and safely removed. Locally-created groups (`created_by_provider IS NULL`) are never affected. Admins who want to preserve IDP-synced groups without granting access should create at least one mapping rule with a narrow regex that matches no groups.
+- **filterIDPGroups grant preservation**: `filterIDPGroups` (called during login/SCIM sync) allows IDP-synced groups through if they match a mapping rule regex, are locally created, OR are referenced by a non-auto-grant as their subject. Soft-deleted grants (`deleted_at IS NOT NULL`) do not preserve the group — only active grants count.
+
+### Test Commands
+
+```bash
+# Engine unit tests
+go test ./internal/server/ -run TestEvaluateMappingRules -v
+
+# HTTP handler tests
+go test ./internal/server/ -run TestAPI_MappingRule -v
+
+# Data layer validation tests
+go test ./internal/server/data/ -run TestValidateMappingRule -v
+
+# Access control tests
+go test ./internal/access/ -run TestMappingRule -v
+
+# Integration tests (requires PostgreSQL)
+go test ./internal/server/ -run TestIntegrationMappingRule -v
+
+# Migration tests (requires PostgreSQL)
+go test ./internal/server/data/ -run TestMigrations -v
+
+# Frontend tests
+cd ui && npm test -- --testPathPattern=mapping-rules
+```

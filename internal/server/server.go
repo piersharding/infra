@@ -249,6 +249,13 @@ func New(options Options) (*Server, error) {
 		return nil, fmt.Errorf("configs: %w", err)
 	}
 
+	// Set global role replacements from bootstrap config.
+	if server.options.MappingRulesConfig != nil && len(server.options.MappingRulesConfig.RoleReplacements) > 0 {
+		SetRoleReplacements(server.options.MappingRulesConfig.RoleReplacements)
+	} else {
+		SetRoleReplacements(nil)
+	}
+
 	if err := server.listen(); err != nil {
 		return nil, fmt.Errorf("listening: %w", err)
 	}
@@ -276,6 +283,20 @@ func (s *Server) Run(ctx context.Context) error {
 	group.Go(backgroundJob(ctx, s.db, data.RemoveExpiredPasswordResetTokens, 15*time.Minute))
 	group.Go(backgroundJob(ctx, s.db, data.DeleteExpiredUserPublicKeys, time.Hour))
 
+	// Run a one-time evaluation of group mappings at startup, per-organization.
+	evalTx, beginErr := s.db.Begin(context.Background(), nil)
+	if beginErr != nil {
+		return fmt.Errorf("start transaction for mapping rule evaluation: %w", beginErr)
+	}
+	orgs, err := data.ListOrganizations(evalTx, data.ListOrganizationsOptions{})
+	_ = evalTx.Rollback()
+	if err != nil {
+		return fmt.Errorf("list organizations for mapping rule evaluation: %w", err)
+	}
+	for _, org := range orgs {
+		EvaluateMappingRulesAsync(s.db, org.ID)
+	}
+
 	if s.tel != nil {
 		group.Go(func() error {
 			return runTelemetryHeartbeat(ctx, s.tel)
@@ -295,7 +316,7 @@ func (s *Server) Run(ctx context.Context) error {
 		s.routines[i].stop()
 	}
 
-	err := group.Wait()
+	err = group.Wait()
 	s.tel.Close()
 
 	if err := s.db.Close(); err != nil {

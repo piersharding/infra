@@ -43,13 +43,44 @@ func (a *API) CreateGroup(rCtx access.RequestContext, r *api.CreateGroupRequest)
 		return nil, err
 	}
 
+	// A newly-created group can now match existing group mapping rules,
+	// so we re-evaluate the engine immediately to create access grants for it.
+	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
+
 	return group.ToAPI(), nil
 }
 
 func (a *API) DeleteGroup(rCtx access.RequestContext, r *api.Resource) (*api.EmptyResponse, error) {
-	return nil, access.DeleteGroup(rCtx, r.ID)
+	if err := access.DeleteGroup(rCtx, r.ID); err != nil {
+		return nil, err
+	}
+
+	// When a group is deleted, auto-grants with that group as the subject become orphaned.
+	// Trigger evaluation so cleanupStaleGrants removes them.
+	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
+
+	return &api.EmptyResponse{}, nil
 }
 
+// UpdateUsersInGroup adds/removes users from a group. Unlike CreateGroup and DeleteGroup,
+// this does NOT trigger mapping rule evaluation because changing group membership does not
+// affect which groups match rules — only the set of grants for those matched groups.
 func (a *API) UpdateUsersInGroup(rCtx access.RequestContext, r *api.UpdateUsersInGroupRequest) (*api.EmptyResponse, error) {
 	return nil, access.UpdateUsersInGroup(rCtx, r.GroupID, r.UserIDsToAdd, r.UserIDsToRemove)
+}
+
+// GetUsersInGroup returns all user IDs that are members of the group with ID r.ID.
+// Requires InfraAdminRole or InfraConnectorRole — connectors need this to resolve
+// group-based access grants into individual user grants for SSH/K8s destinations.
+func (a *API) GetUsersInGroup(rCtx access.RequestContext, r *api.Resource) (*api.GetUsersInGroupResponse, error) {
+	roles := []string{models.InfraAdminRole, models.InfraConnectorRole}
+	if err := access.IsAuthorized(rCtx, roles...); err != nil {
+		return nil, access.HandleAuthErr(err, "group", "get users", roles...)
+	}
+
+	users, err := data.GetUsersInGroup(rCtx.DBTxn, r.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &api.GetUsersInGroupResponse{Users: users}, nil
 }

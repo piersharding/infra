@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/jackc/pgconn"
 	"gotest.tools/v3/assert"
 
 	"github.com/infrahq/infra/internal/generate"
@@ -52,19 +54,50 @@ func PostgresDriver(t TestingT, schemaSuffix string) *Driver {
 	db, err := sql.Open("pgx", pgConn)
 	assert.NilError(t, err, "connect to postgresql")
 	t.Cleanup(func() {
-		_, err := db.Exec("DROP SCHEMA IF EXISTS " + name + " CASCADE")
+		// Retry on deadlock since cleanup can race with async test goroutines
+		for i := 0; i < 3; i++ {
+			_, err = db.Exec("DROP SCHEMA IF EXISTS " + name + " CASCADE")
+			if !isDeadlockError(err) {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
 		assert.NilError(t, err)
 		assert.NilError(t, db.Close())
 	})
 
 	// Drop any leftover schema before creating a new one.
-	_, err = db.Exec("DROP SCHEMA IF EXISTS " + name + " CASCADE")
+	for i := 0; i < 3; i++ {
+		_, err = db.Exec("DROP SCHEMA IF EXISTS " + name + " CASCADE")
+		if !isDeadlockError(err) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	assert.NilError(t, err)
-	_, err = db.Exec("CREATE SCHEMA " + name)
+
+	for i := 0; i < 3; i++ {
+		_, err = db.Exec("CREATE SCHEMA " + name)
+		if !isDeadlockError(err) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 	assert.NilError(t, err)
 
 	dsn := pgConn + " search_path=" + name
 	return &Driver{DSN: dsn}
+}
+
+// pgx error code for deadlock detected (SQLSTATE 40P01)
+const pgDeadlockCode = "40P01"
+
+func isDeadlockError(err error) bool {
+	if err == nil {
+		return false
+	}
+	pgErr, ok := err.(*pgconn.PgError)
+	return ok && pgErr.Code == pgDeadlockCode
 }
 
 type Driver struct {

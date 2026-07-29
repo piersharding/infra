@@ -20,15 +20,15 @@ func (g grantsTable) Table() string {
 }
 
 func (g grantsTable) Columns() []string {
-	return []string{"created_at", "created_by", "deleted_at", "id", "organization_id", "privilege", "resource", "subject_id", "subject_kind", "updated_at"}
+	return []string{"auto_grant", "created_at", "created_by", "deleted_at", "id", "organization_id", "privilege", "resource", "subject_id", "subject_kind", "updated_at"}
 }
 
 func (g grantsTable) Values() []any {
-	return []any{g.CreatedAt, g.CreatedBy, g.DeletedAt, g.ID, g.OrganizationID, g.Privilege, g.Resource, g.Subject.ID, g.Subject.Kind, g.UpdatedAt}
+	return []any{g.AutoGrant, g.CreatedAt, g.CreatedBy, g.DeletedAt, g.ID, g.OrganizationID, g.Privilege, g.Resource, g.Subject.ID, g.Subject.Kind, g.UpdatedAt}
 }
 
 func (g *grantsTable) ScanFields() []any {
-	return []any{&g.CreatedAt, &g.CreatedBy, &g.DeletedAt, &g.ID, &g.OrganizationID, &g.Privilege, &g.Resource, &g.Subject.ID, &g.Subject.Kind, &g.UpdatedAt}
+	return []any{&g.AutoGrant, &g.CreatedAt, &g.CreatedBy, &g.DeletedAt, &g.ID, &g.OrganizationID, &g.Privilege, &g.Resource, &g.Subject.ID, &g.Subject.Kind, &g.UpdatedAt}
 }
 
 func CreateGrant(tx WriteTxn, grant *models.Grant) error {
@@ -390,6 +390,71 @@ func deleteGrantsBulk(tx WriteTxn, grants []*models.Grant) error {
 	return err
 }
 
+// ListAutoGrants returns all grants with AutoGrant=true for a given organization.
+// Only the mapping engine sets auto_grant=true, so this query finds engine-created
+// grants eligible for cleanup.
+func ListAutoGrants(tx ReadTxn) ([]models.Grant, error) {
+	table := grantsTable{}
+	query := querybuilder.New("SELECT")
+	query.B(columnsForSelect(table))
+	query.B(", update_index")
+	query.B("FROM grants")
+	query.B("WHERE deleted_at is null")
+	query.B("AND organization_id = ?", tx.OrganizationID())
+	query.B("AND auto_grant = true")
+	query.B("ORDER BY id ASC")
+
+	rows, err := tx.Query(query.String(), query.Args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []models.Grant
+	for rows.Next() {
+		grant := &models.Grant{}
+		fields := append((*grantsTable)(grant).ScanFields(), &grant.UpdateIndex)
+		if err := rows.Scan(fields...); err != nil {
+			return nil, err
+		}
+		result = append(result, *grant)
+	}
+	return result, rows.Err()
+}
+
+// ListNonAutoGrants returns grants that are not auto-granted (user-created or admin-created).
+// Only groups with non-auto-grants should be allowed through the IDP sync filter,
+// because they indicate a user has manually been granted access to something.
+func ListNonAutoGrants(tx ReadTxn) ([]models.Grant, error) {
+	query := querybuilder.New(`SELECT r.auto_grant, r.created_at, r.created_by, r.deleted_at, ` +
+		"r.id, r.organization_id, r.privilege, r.resource, " +
+		"r.subject_id, r.subject_kind, r.updated_at " +
+		"FROM grants r JOIN groups g ON r.subject_id = g.id AND r.subject_kind = 2")
+	query.B("AND r.deleted_at IS NULL")
+	query.B("AND g.organization_id = ?", tx.OrganizationID())
+	query.B("AND r.organization_id = ?", tx.OrganizationID())
+	// Non-auto-grants: auto_grant is false (not just not true — excludes null too).
+	query.B("AND (r.auto_grant IS NULL OR r.auto_grant = false)")
+
+	rows, err := tx.Query(query.String(), query.Args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []models.Grant
+	for rows.Next() {
+		grant := &models.Grant{}
+		fields := (*grantsTable)(grant).ScanFields()
+		if err := rows.Scan(fields...); err != nil {
+			return nil, fmt.Errorf("scan grant: %w", err)
+		}
+		result = append(result, *grant)
+	}
+	return result, rows.Err()
+}
+
+// CountAllGrants counts all non-deleted grants for an organization.
 func CountAllGrants(tx ReadTxn) (int64, error) {
 	return countRows(tx, grantsTable{})
 }

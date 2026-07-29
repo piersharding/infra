@@ -190,6 +190,9 @@ func (a *API) Login(rCtx access.RequestContext, r *api.LoginRequest) (*api.Login
 		return nil, fmt.Errorf("%w: login failed: %w", internal.ErrUnauthorized, err)
 	}
 
+	// Evaluate mapping rules after login to catch any groups created by IDP sync.
+	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
+
 	if onSuccess != nil {
 		onSuccess()
 	}

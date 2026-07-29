@@ -238,3 +238,11 @@ other settings for `useradd` can be customzied with `/etc/defaults/useradd`. See
 
 When a user's access is removed the user and their home directory will be removed from the system
 with `userdel`.
+
+#### Password expiration
+
+Infra sets each managed user's password to expire in 3650 days (~10 years) using
+`chage -M 3650`. This prevents SSH login failures caused by host-enforced password expiry
+policies (e.g., a 90-day rotation requirement). The connector updates this setting on every
+sync cycle, so both newly created users and pre-existing managed accounts are always kept in sync.
+If `chage` is unavailable on the target system, Infra logs a warning but continues to manage the user.

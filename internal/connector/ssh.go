@@ -21,6 +21,7 @@ import (
 	"github.com/infrahq/infra/internal/linux"
 	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/internal/repeat"
+	"github.com/infrahq/infra/uid"
 )
 
 type SSHOptions struct {
@@ -183,9 +184,56 @@ func readHostKeyFile(filename string, out io.Writer) error {
 // etcPasswdFilename is a shim for testing.
 var etcPasswdFilename = "/etc/passwd"
 
-// TODO: grants for groups need to be resolved to a user somehow
+// resolveUsersFromGrants resolves all user IDs from a list of grants.
+// It handles both per-user grants (where grant.User is set) and group-based grants
+// (where grant.Group is set), resolving each group to its member users via the API.
+func resolveUsersFromGrants(ctx context.Context, client apiClient, grants []api.Grant) (map[string]api.Grant, error) {
+	result := make(map[string]api.Grant, len(grants))
+
+	// Track which groups we've already resolved to avoid repeated API calls.
+	resolvedGroups := map[uid.ID][]uid.ID{}
+
+	for _, grant := range grants {
+		// Per-user grant — add directly.
+		if grant.User != 0 {
+			result[grant.User.String()] = grant
+			continue
+		}
+
+		// Group-based grant — resolve the group members.
+		if grant.Group == 0 {
+			continue // neither user nor group set, skip
+		}
+
+		// Check if we already resolved this group.
+		groupUsers, ok := resolvedGroups[grant.Group]
+		if !ok {
+			var err error
+			groupUsers, err = client.GetUsersInGroup(ctx, grant.Group)
+			if err != nil {
+				return nil, fmt.Errorf("get users in group %s: %w", grant.Group.String(), err)
+			}
+			resolvedGroups[grant.Group] = groupUsers
+
+			logging.L.Debug().Str("groupID", grant.Group.String()).Int("members", len(groupUsers)).Msg("resolved group to users for grants")
+		}
+
+		// Add each group member to the result
+		for _, userID := range groupUsers {
+			resolvedGrant := grant // shallow copy
+			resolvedGrant.User = userID
+			result[userID.String()] = resolvedGrant
+		}
+	}
+
+	return result, nil
+}
+
 func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, grants []api.Grant) error {
-	byUserID := grantsByUserID(grants)
+	byUserID, err := resolveUsersFromGrants(ctx, client, grants)
+	if err != nil {
+		return fmt.Errorf("resolve users from grants: %w", err)
+	}
 
 	localUsers, err := linux.ReadLocalUsers(etcPasswdFilename)
 	if err != nil {
@@ -206,7 +254,12 @@ func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, gr
 		delete(byUserID, infraUID)
 	}
 
+	// Update password expiration for all existing managed users (not just newly created ones).
+	// This ensures existing users are fixed without manual intervention.
 	var errs []error
+	if err := updateManagedUsersPasswordExpiration(ctx, localUsers); err != nil {
+		errs = append(errs, fmt.Errorf("update password expiration: %w", err))
+	}
 	// attempt to kill any active sessions first, so that processes have time to
 	// exit before we try to remove the user.
 	for _, user := range toDelete {
@@ -248,12 +301,30 @@ func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, gr
 	return nil
 }
 
-func grantsByUserID(grants []api.Grant) map[string]api.Grant {
-	result := make(map[string]api.Grant, len(grants))
-	for _, grant := range grants {
-		result[grant.User.String()] = grant
+// updateManagedUsersPasswordExpiration updates password expiration for all
+// managed users on this system. It is called on every sync cycle so that any
+// pre-existing infra-managed user eventually gets the long expiry set without
+// requiring manual intervention.
+func updateManagedUsersPasswordExpiration(ctx context.Context, localUsers []linux.LocalUser) error {
+	var errs []error
+	for _, lu := range localUsers {
+		if !lu.IsManagedByInfra() {
+			continue
+		}
+		logging.L.Debug().
+			Str("operation", "update_password_expiration").
+			Str("username", linux.SanitizeUsernameForLogging(lu.Username)).
+			Msg("updating_managed_user_password_expiration")
+
+		if err := linux.SetPasswordExpiration(lu.Username, linux.MaxPasswordAgeDays); err != nil {
+			errs = append(errs, fmt.Errorf("update password expiration for %s: %w", lu.Username, err))
+		}
 	}
-	return result
+
+	if len(errs) > 0 {
+		return cliopts.MultiError(errs)
+	}
+	return nil
 }
 
 type sshdConfig struct {

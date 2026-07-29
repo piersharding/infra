@@ -34,3 +34,14 @@ func (s optionalString) Value() (driver.Value, error) {
 	}
 	return string(s), nil
 }
+
+// optionalStringPtr converts a *string pointer into a database driver.Value.
+// Returns nil (SQL NULL) when the pointer is nil or points to an empty string;
+// otherwise returns the dereferenced string. Used for nullable template fields
+// like namespace_template and role_template that can be "not set" vs "empty string".
+func optionalStringPtr(s *string) any {
+	if s == nil || *s == "" {
+		return nil
+	}
+	return *s
+}

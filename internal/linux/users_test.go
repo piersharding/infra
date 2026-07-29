@@ -390,7 +390,7 @@ func TestSanitizeUsernameForLogging(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := sanitizeUsernameForLogging(tt.username)
+			result := SanitizeUsernameForLogging(tt.username)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -437,6 +437,54 @@ func TestAddUser_Validation(t *testing.T) {
 				assert.Contains(t, err.Error(), "invalid username")
 			} else {
 				// We expect this to fail due to command execution, but not due to validation
+				assert.Error(t, err)
+				assert.NotContains(t, err.Error(), "invalid username")
+			}
+		})
+	}
+}
+
+func TestSetPasswordExpiration(t *testing.T) {
+	tests := []struct {
+		name     string
+		username string
+		days     int
+		wantErr  bool
+	}{
+		{
+			name:     "valid username",
+			username: "alice",
+			days:     3650,
+			wantErr:  false, // will error on command execution but not validation
+		},
+		{
+			name:     "invalid username - too long",
+			username: "123456789012345678901234567890123",
+			days:     3650,
+			wantErr:  true,
+		},
+		{
+			name:     "invalid username - special characters",
+			username: "user@domain",
+			days:     3650,
+			wantErr:  true,
+		},
+		{
+			name:     "invalid username - empty",
+			username: "",
+			days:     3650,
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := SetPasswordExpiration(tt.username, tt.days)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "invalid username")
+			} else {
+				// We expect this to fail due to command execution (no chage in test env), but not due to validation
 				assert.Error(t, err)
 				assert.NotContains(t, err.Error(), "invalid username")
 			}

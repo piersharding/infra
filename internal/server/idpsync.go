@@ -64,6 +64,13 @@ type syncFailureTracker struct {
 }
 
 func newSyncFailureTracker(maxFailures int, window time.Duration) *syncFailureTracker {
+	// Apply defaults matching the documented Options values.
+	if maxFailures <= 0 {
+		maxFailures = 3
+	}
+	if window == 0 {
+		window = 24 * time.Hour
+	}
 	return &syncFailureTracker{
 		entries:       make(map[syncFailureKey]syncFailureEntry),
 		maxFailures:   maxFailures,

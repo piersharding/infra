@@ -75,11 +75,14 @@ func (s *Server) GenerateRoutes() Routes {
 	del(a, authn, "/api/access-keys/:id", a.DeleteAccessKey)
 	del(a, authn, "/api/access-keys", a.DeleteAccessKeys)
 
+	// Group management endpoints — admin-only for create/delete; connector role allowed on get-users.
 	get(a, authn, "/api/groups", a.ListGroups)
 	post(a, authn, "/api/groups", a.CreateGroup)
 	get(a, authn, "/api/groups/:id", a.GetGroup)
 	del(a, authn, "/api/groups/:id", a.DeleteGroup)
 	patch(a, authn, "/api/groups/:id/users", a.UpdateUsersInGroup)
+	// GetUsersInGroup — returns member user IDs for group-based grant resolution by SSH connectors.
+	get(a, authn, "/api/groups/:id/users", a.GetUsersInGroup)
 
 	get(a, authn, "/api/organizations", a.ListOrganizations)
 	post(a, authn, "/api/organizations", a.CreateOrganization)
@@ -98,6 +101,15 @@ func (s *Server) GenerateRoutes() Routes {
 	put(a, authn, "/api/providers/:id", a.UpdateProvider)
 	del(a, authn, "/api/providers/:id", a.DeleteProvider)
 
+	// Mapping rule endpoints — all require InfraAdminRole (CRUD + eval status).
+	get(a, authn, "/api/mapping-rules", a.ListMappingRules)
+	get(a, authn, "/api/mapping-rules/eval-status", a.GetMappingRuleEvalStatus)
+	get(a, authn, "/api/mapping-rules/:id", a.GetMappingRule)
+	post(a, authn, "/api/mapping-rules", a.CreateMappingRule)
+	put(a, authn, "/api/mapping-rules/:id", a.UpdateMappingRule)
+	del(a, authn, "/api/mapping-rules/:id", a.DeleteMappingRule)
+
+	// End of mapping rule routes — next route is destinations
 	get(a, authn, "/api/destinations", a.ListDestinations)
 	get(a, authn, "/api/destinations/:id", a.GetDestination)
 	post(a, authn, "/api/destinations", a.CreateDestination)

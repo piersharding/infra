@@ -3,7 +3,7 @@ import Tippy from '@tippyjs/react'
 import Cookies from 'universal-cookie'
 
 import { googleSocialLoginID } from '../lib/providers'
-import { currentBaseDomain, isIPAddress } from '../lib/login'
+import { currentBaseDomain, stripPort, isIPAddress } from '../lib/login'
 import { providers as providersList } from '../lib/providers'
 
 export function oidcLogin(
@@ -24,13 +24,15 @@ export function oidcLogin(
       path: '/',
       sameSite: 'lax',
     }
-    
-    // Only set domain attribute if not using an IP address
-    // IP addresses cannot have a domain attribute with a leading dot
-    if (!isIPAddress(window.location.host)) {
-      cookieOptions.domain = `.${baseDomain}`
+
+    // Only set domain attribute for valid FQDNs (not IPs, not localhost).
+    // Cookie domains cannot contain ports (RFC 6265), and single-label hostnames
+    // like "localhost" must not have a leading dot.
+    const cleanBaseDomain = stripPort(baseDomain)
+    if (!isIPAddress(cleanBaseDomain) && cleanBaseDomain.includes('.')) {
+      cookieOptions.domain = `.${cleanBaseDomain}`
     }
-    
+
     cookies.set('finishLogin', window.location.host, cookieOptions)
     redirectURL = window.location.protocol + '//' + loginDomain + '/redirect' // go to the social login redirect specified by the server
   }
@@ -88,7 +90,9 @@ function oidc(id, clientID, authURL, scopes, kind, redirectURL, next) {
 
   const stateBytes = new Uint8Array(16)
   crypto.getRandomValues(stateBytes)
-  const state = Array.from(stateBytes, b => b.toString(16).padStart(2, '0')).join('')
+  const state = Array.from(stateBytes, b =>
+    b.toString(16).padStart(2, '0')
+  ).join('')
   window.localStorage.setItem('state', state)
 
   const sendTo = buildOIDCAuthURL(

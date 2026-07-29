@@ -64,6 +64,11 @@ type Options struct {
 	// disable fail-closed behavior (keep existing grants indefinitely).
 	GrantSyncGracePeriod time.Duration
 
+	// ReconcileInterval is the interval at which the connector periodically reconciles
+	// RBAC bindings even when destination metadata hasn't changed. This catches drift
+	// from namespace deletion+recreation cycles within a sync window. Default: 5 minutes.
+	ReconcileInterval time.Duration
+
 	// Kubernetes specific options below here
 	CACert types.StringOrFile
 	CAKey  types.StringOrFile
@@ -118,6 +123,7 @@ type connector struct {
 	options            Options
 	lastGrants         []api.Grant
 	lastSuccessfulSync time.Time
+	lastReconcile      time.Time
 }
 
 type apiClient interface {
@@ -131,6 +137,9 @@ type apiClient interface {
 	// the name of the group or user in the ListGrants response.
 	GetGroup(ctx context.Context, id uid.ID) (*api.Group, error)
 	GetUser(ctx context.Context, id uid.ID) (*api.User, error)
+
+	// GetUsersInGroup returns all user IDs that are members of a group.
+	GetUsersInGroup(ctx context.Context, id uid.ID) ([]uid.ID, error)
 }
 
 type kubeClient interface {
@@ -406,6 +415,20 @@ func httpTransportFromOptions(opts ServerOptions) *http.Transport {
 func syncDestination(ctx context.Context, con *connector) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+
+	// Periodic reconciliation: even when metadata is unchanged, verify RBAC bindings.
+	// Catches drift from namespace deletion+recreation within a sync window.
+	reconcileInterval := con.options.ReconcileInterval
+	if reconcileInterval == 0 {
+		reconcileInterval = 5 * time.Minute // default
+	}
+	if !slicesEqual(con.destination.Resources, []string{}) && time.Since(con.lastReconcile) > reconcileInterval {
+		con.lastReconcile = time.Now()
+		logging.L.Debug().Msg("connector: periodic reconciliation trigger")
+		if err := updateRoles(ctx, con.client, con.k8s, con.lastGrants); err != nil {
+			logging.L.Warn().Err(err).Msg("connector: failed to reconcile RBAC on periodic check")
+		}
+	}
 
 	endpoint, err := getEndpointHostPort(con.k8s, con.options)
 	if err != nil {

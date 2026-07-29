@@ -12,6 +12,7 @@ PrivateRules.mak
 /go/
 /test_output.log
 /.claude
+/.oldsop
 
 # infra binary
 dist/

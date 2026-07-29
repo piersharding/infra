@@ -3,6 +3,11 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/infrahq/infra/api"
+	"github.com/infrahq/infra/internal"
+	"github.com/infrahq/infra/internal/openapi3"
+	"github.com/infrahq/infra/internal/validate"
+	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"net/http"
 	"os"
@@ -11,13 +16,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/infrahq/infra/api"
-	"github.com/infrahq/infra/internal"
-	"github.com/infrahq/infra/internal/openapi3"
-	"github.com/infrahq/infra/internal/validate"
 )
 
 func GenerateOpenAPIDoc() openapi3.Doc {
@@ -73,27 +71,22 @@ func (a *API) register(method, path, funcName string, rqt, rst reflect.Type, req
 	path = pathIDReplacer.ReplaceAllStringFunc(path, func(s string) string {
 		return "{" + strings.TrimLeft(s, ":") + "}"
 	})
-
 	if a.openAPIDoc.Components.Schemas == nil {
 		a.openAPIDoc.Components.Schemas = map[string]*openapi3.SchemaRef{}
 	}
-
 	if a.openAPIDoc.Paths == nil {
 		a.openAPIDoc.Paths = map[string]*openapi3.PathItem{}
 	}
-
 	p, ok := a.openAPIDoc.Paths[path]
 	if !ok {
 		p = &openapi3.PathItem{}
 	}
-
 	op := &openapi3.Operation{}
 	op.OperationID = funcName
 	op.Description = funcName
 	op.Summary = funcName
 	buildRequest(rqt, op, method, requiresAuthentication)
 	op.Responses = buildResponse(a.openAPIDoc.Components.Schemas, rst)
-
 	for _, item := range funcPartialNameToTagNames {
 		if strings.Contains(funcName, item.partial) {
 			op.Tags = append(op.Tags, item.tag)
@@ -102,7 +95,6 @@ func (a *API) register(method, path, funcName string, rqt, rst reflect.Type, req
 	if len(op.Tags) == 0 {
 		op.Tags = append(op.Tags, "Misc")
 	}
-
 	switch method {
 	case "GET":
 		p.Get = op
@@ -117,10 +109,8 @@ func (a *API) register(method, path, funcName string, rqt, rst reflect.Type, req
 	default:
 		panic("unexpected http method " + method)
 	}
-
 	a.openAPIDoc.Paths[path] = p
 }
-
 func getFuncName(i interface{}) string {
 	name := runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 	nameParts := strings.Split(name, ".")
@@ -137,29 +127,23 @@ func createComponent(schemas map[string]*openapi3.SchemaRef, rst reflect.Type) *
 	if rst.Kind() != reflect.Struct {
 		panic(fmt.Sprintf("openapi: unexpected kind %v (%v) for response struct", rst.Kind(), rst))
 	}
-
 	schema := &openapi3.Schema{
 		Properties: map[string]*openapi3.SchemaRef{},
 	}
-
 	// Reformat the name of generic types
 	name := strings.ReplaceAll(rst.Name(), rst.PkgPath()+".", "")
 	name = strings.ReplaceAll(name, "[", "_")
 	name = strings.ReplaceAll(name, "]", "")
-
 	for i := 0; i < rst.NumField(); i++ {
 		f := rst.Field(i)
-
 		if f.Tag.Get("json") == "-" {
 			continue
 		}
-
 		if f.Anonymous {
 			typeOrElem := f.Type
 			if f.Type.Kind() == reflect.Pointer {
 				typeOrElem = f.Type.Elem()
 			}
-
 			if typeOrElem.Kind() == reflect.Struct {
 				for j := 0; j < typeOrElem.NumField(); j++ {
 					af := typeOrElem.Field(j)
@@ -170,50 +154,40 @@ func createComponent(schemas map[string]*openapi3.SchemaRef, rst reflect.Type) *
 		}
 		schema.Properties[getFieldName(f, rst)] = buildProperty(f, f.Type, rst, schema)
 	}
-
 	if _, ok := schemas[name]; ok {
 		return &openapi3.SchemaRef{
 			Ref: "#/components/schemas/" + name,
 		}
 	}
-
 	schemas[name] = &openapi3.SchemaRef{Schema: schema}
 	return &openapi3.SchemaRef{
 		Ref: "#/components/schemas/" + name,
 	}
 }
-
 func buildProperty(f reflect.StructField, t, parent reflect.Type, parentSchema *openapi3.Schema) *openapi3.SchemaRef {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
-
 	s := &openapi3.Schema{}
 	setTypeInfo(t, s)
 	updateSchemaFromStructTags(f, s)
-
 	if s.Type == "array" {
 		s.Items = buildProperty(f, t.Elem(), parent, parentSchema)
 	}
-
 	if s.Type == "object" {
 		s.Properties = map[string]*openapi3.SchemaRef{}
-
 		for i := 0; i < t.NumField(); i++ {
 			f2 := t.Field(i)
 			s.Properties[getFieldName(f2, t)] = buildProperty(f2, f2.Type, t, s)
 		}
-
 		if req, ok := reflect.New(t).Interface().(validate.Request); ok {
 			for _, rule := range req.ValidationRules() {
 				rule.DescribeSchema(s)
 			}
 		}
 	}
-
 	return &openapi3.SchemaRef{Schema: s}
 }
-
 func newOpenAPIDoc(version string) openapi3.Doc {
 	doc := openapi3.Doc{}
 	doc.OpenAPI = "3.0.0"
@@ -231,17 +205,14 @@ func newOpenAPIDoc(version string) openapi3.Doc {
 	}
 	return doc
 }
-
 func writeOpenAPIDoc(spec openapi3.Doc, out io.Writer) error {
 	encoder := json.NewEncoder(out)
 	encoder.SetIndent("", "  ")
-
 	if err := encoder.Encode(spec); err != nil {
 		return fmt.Errorf("failed to write schema: %w", err)
 	}
 	return nil
 }
-
 func WriteOpenAPIDocToFile(openAPIDoc openapi3.Doc, filename string) error {
 	fh, err := os.Create(filename)
 	if err != nil {
@@ -250,12 +221,10 @@ func WriteOpenAPIDocToFile(openAPIDoc openapi3.Doc, filename string) error {
 	defer fh.Close()
 	return writeOpenAPIDoc(openAPIDoc, fh)
 }
-
 func updateSchemaFromStructTags(field reflect.StructField, schema *openapi3.Schema) {
 	if example, ok := field.Tag.Lookup("example"); ok {
 		schema.Example = example
 	}
-
 	if note, ok := field.Tag.Lookup("note"); ok {
 		schema.Description = note
 	}
@@ -274,18 +243,15 @@ func setTypeInfo(t reflect.Type, schema *openapi3.Schema) {
 		ds.DescribeSchema(schema)
 		return
 	}
-
 	switch value.(type) {
 	case time.Time:
 		panic("field must use api.Time")
 	case time.Duration:
 		panic("field must use api.Duration")
 	}
-
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
-
 	//nolint:exhaustive
 	switch t.Kind() {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -314,22 +280,18 @@ func setTypeInfo(t reflect.Type, schema *openapi3.Schema) {
 		panic("unexpected type " + t.Kind().String())
 	}
 }
-
 func buildResponse(schemas map[string]*openapi3.SchemaRef, rst reflect.Type) map[string]openapi3.Response {
 	schema := &openapi3.SchemaRef{
 		Schema: &openapi3.Schema{Type: "object"},
 	}
-
 	if rst != nil {
 		schema = createComponent(schemas, rst)
 	}
-
 	content := map[string]*openapi3.MediaType{
 		"application/json": {
 			Schema: createComponent(schemas, reflect.TypeOf(api.Error{})),
 		},
 	}
-
 	resp := map[string]openapi3.Response{
 		"default": {
 			Description: "Success",
@@ -369,13 +331,10 @@ func buildRequest(r reflect.Type, op *openapi3.Operation, method string, require
 	if r.Kind() == reflect.Pointer {
 		r = r.Elem()
 	}
-
 	if r.Kind() != reflect.Struct {
 		panic(fmt.Sprintf("openapi: unexpected kind %v (%v) for %v request struct", r.Kind(), r, op.OperationID))
 	}
-
 	op.Parameters = []*openapi3.Parameter{}
-
 	op.AddParameter(&openapi3.Parameter{
 		Name:     "Infra-Version",
 		In:       "header",
@@ -389,7 +348,6 @@ func buildRequest(r reflect.Type, op *openapi3.Operation, method string, require
 			},
 		},
 	})
-
 	if requiresAuthentication {
 		op.AddParameter(&openapi3.Parameter{
 			Name:     "Authorization",
@@ -405,24 +363,20 @@ func buildRequest(r reflect.Type, op *openapi3.Operation, method string, require
 			},
 		})
 	}
-
 	schema := &openapi3.Schema{
 		Type:       "object",
 		Properties: map[string]*openapi3.SchemaRef{},
 	}
-
 	for i := 0; i < r.NumField(); i++ {
 		f := r.Field(i)
 		if f.Type.Kind() == reflect.Struct && f.Anonymous {
 			tmpOp := &openapi3.Operation{}
-
 			buildRequest(f.Type, tmpOp, method, false)
 			for _, param := range tmpOp.Parameters {
 				if param.Name != "Infra-Version" && param.Name != "Authorization" {
 					op.AddParameter(param)
 				}
 			}
-
 			if req, ok := reflect.New(f.Type).Interface().(validate.Request); ok {
 				for _, rule := range req.ValidationRules() {
 					rule.DescribeSchema(schema)
@@ -430,7 +384,6 @@ func buildRequest(r reflect.Type, op *openapi3.Operation, method string, require
 			}
 			continue
 		}
-
 		propName := getFieldName(f, r)
 		if propName == "" { // ignored field
 			continue
@@ -441,9 +394,7 @@ func buildRequest(r reflect.Type, op *openapi3.Operation, method string, require
 		if name, ok := f.Tag.Lookup("json"); ok && !strings.HasPrefix(name, "-") {
 			continue
 		}
-
 		p := &openapi3.Parameter{Name: propName, Schema: propSchema}
-
 		if _, ok := f.Tag.Lookup("form"); ok {
 			p.In = "query"
 		}
@@ -451,12 +402,10 @@ func buildRequest(r reflect.Type, op *openapi3.Operation, method string, require
 			p.In = "path"
 			p.Required = true
 		}
-
 		if p.In == "" {
 			// field isn't properly labelled
 			panic(fmt.Sprintf("field %q of struct %q must have a tag (json, form, or uri) with a name or '-'", f.Name, r.Name()))
 		}
-
 		// TODO: share this with updateSchemaFromStructTags
 		if example, ok := f.Tag.Lookup("example"); ok {
 			p.Example = example
@@ -464,20 +413,16 @@ func buildRequest(r reflect.Type, op *openapi3.Operation, method string, require
 		if note, ok := f.Tag.Lookup("note"); ok {
 			p.Description = note
 		}
-
 		op.AddParameter(p)
 	}
-
 	if req, ok := reflect.New(r).Interface().(validate.Request); ok {
 		for _, rule := range req.ValidationRules() {
 			rule.DescribeSchema(schema)
 		}
 	}
-
 	if len(schema.Properties) == 0 {
 		return
 	}
-
 	// Remove any non-body parameter from the parent schema now that the validation
 	// rules have had a chance to update them.
 	for _, param := range op.Parameters {
@@ -486,7 +431,6 @@ func buildRequest(r reflect.Type, op *openapi3.Operation, method string, require
 			schema.Required = removeString(schema.Required, param.Name)
 		}
 	}
-
 	switch method {
 	// These methods accept arguments from a request body
 	case http.MethodPut, http.MethodPost, http.MethodPatch:
@@ -497,12 +441,10 @@ func buildRequest(r reflect.Type, op *openapi3.Operation, method string, require
 				},
 			},
 		}
-
 	// Other methods accept arguments from the query and path
 	default:
 	}
 }
-
 func removeString(seq []string, name string) []string {
 	for i, v := range seq {
 		if v == name {
@@ -511,18 +453,15 @@ func removeString(seq []string, name string) []string {
 	}
 	return seq
 }
-
 func getFieldName(f reflect.StructField, parent reflect.Type) string {
 	if name, ok := f.Tag.Lookup("form"); ok {
 		validateFieldName(name)
 		return name
 	}
-
 	if name, ok := f.Tag.Lookup("uri"); ok {
 		validateFieldName(name)
 		return name
 	}
-
 	// lookup json tag last, as a field may have a uri or form name, but a
 	// json name of "-".
 	if name, ok := f.Tag.Lookup("json"); ok {
@@ -533,17 +472,16 @@ func getFieldName(f reflect.StructField, parent reflect.Type) string {
 		validateFieldName(name)
 		return name
 	}
-
 	panic(fmt.Sprintf("field %q of struct %q must have a tag (json, form, or uri) with a name or '-'", f.Name, parent.Name()))
 }
-
 func validateFieldName(name string) {
 	// temporary allow list
 	switch name {
-	case "unique_id":
+	// Allow field names from the mapping_rule model and DB columns that don't follow standard Go naming conventions.
+	case "unique_id", "rule_name", "source_group_regex", "destination_type",
+		"name_template", "namespace_template", "role_template", "last_run_at":
 		return
 	}
-
 	if strings.Contains(name, "_") || strings.Contains(name, "-") {
 		panic(fmt.Sprintf("Use camelCase for field name %v", name))
 	}

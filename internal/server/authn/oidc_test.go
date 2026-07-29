@@ -54,6 +54,17 @@ func TestOIDCAuthenticate(t *testing.T) {
 	err := data.CreateProvider(tx, mocktaProvider)
 	assert.NilError(t, err)
 
+	// Add a catch-all mapping rule so IDP groups pass through filterIDPGroups.
+	mappingRule := &models.MappingRule{
+		Model:              models.Model{},
+		OrganizationMember: models.OrganizationMember{OrganizationID: tx.OrganizationID()},
+		RuleName:           "catch-all",
+		SourceGroupRegex:   ".*",
+		DestinationType:    models.DestinationTypeSSH,
+		NameTemplate:       "ssh-$1",
+	}
+	assert.NilError(t, data.CreateMappingRule(tx, mappingRule))
+
 	oidc := &mockOIDCImplementation{
 		UserEmailResp:  "bruce@example.com",
 		UserGroupsResp: []string{"Everyone", "developers"},
@@ -252,6 +263,17 @@ func TestExchangeAuthCodeForProviderTokens(t *testing.T) {
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			tx := setupDB(t)
+
+			// Add a catch-all mapping rule so IDP groups pass through filterIDPGroups.
+			mappingRule := &models.MappingRule{
+				Model:              models.Model{},
+				OrganizationMember: models.OrganizationMember{OrganizationID: tx.OrganizationID()},
+				RuleName:           "catch-all",
+				SourceGroupRegex:   ".*",
+				DestinationType:    models.DestinationTypeSSH,
+				NameTemplate:       "ssh-$1",
+			}
+			assert.NilError(t, data.CreateMappingRule(tx, mappingRule))
 
 			// setup fake identity provider
 			provider := &models.Provider{Name: "mockoidc", URL: "mockOIDC.example.com", Kind: models.ProviderKindOIDC}

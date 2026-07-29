@@ -53,6 +53,10 @@
       },
       "CreateGrantResponse": {
         "properties": {
+          "autoGrant": {
+            "description": "true if this grant was created automatically by a mapping rule",
+            "type": "boolean"
+          },
           "created": {
             "description": "formatted as an RFC3339 date-time",
             "example": "2022-03-14T09:48:00Z",
@@ -335,8 +339,27 @@
           }
         }
       },
+      "GetUsersInGroupResponse": {
+        "properties": {
+          "users": {
+            "description": "List of user IDs that are members of this group",
+            "items": {
+              "description": "List of user IDs that are members of this group",
+              "example": "4yJ3n3D8E2",
+              "format": "uid",
+              "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        }
+      },
       "Grant": {
         "properties": {
+          "autoGrant": {
+            "description": "true if this grant was created automatically by a mapping rule",
+            "type": "boolean"
+          },
           "created": {
             "description": "formatted as an RFC3339 date-time",
             "example": "2022-03-14T09:48:00Z",
@@ -672,6 +695,10 @@
           "items": {
             "items": {
               "properties": {
+                "autoGrant": {
+                  "description": "true if this grant was created automatically by a mapping rule",
+                  "type": "boolean"
+                },
                 "created": {
                   "description": "formatted as an RFC3339 date-time",
                   "example": "2022-03-14T09:48:00Z",
@@ -790,6 +817,119 @@
                 },
                 "updated": {
                   "description": "Date the group was updated",
+                  "example": "2022-03-14T09:48:00Z",
+                  "format": "date-time",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "Number of objects per page",
+            "example": "100",
+            "format": "int",
+            "type": "integer"
+          },
+          "page": {
+            "description": "Page number retrieved",
+            "example": "1",
+            "format": "int",
+            "type": "integer"
+          },
+          "totalCount": {
+            "description": "Total number of objects",
+            "example": "485",
+            "format": "int",
+            "type": "integer"
+          },
+          "totalPages": {
+            "description": "Total number of pages",
+            "example": "5",
+            "format": "int",
+            "type": "integer"
+          }
+        }
+      },
+      "ListResponse_MappingRule": {
+        "properties": {
+          "count": {
+            "description": "Total number of items on the current page",
+            "example": "100",
+            "format": "int",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "properties": {
+                "created": {
+                  "description": "formatted as an RFC3339 date-time",
+                  "example": "2022-03-14T09:48:00Z",
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "destination_type": {
+                  "type": "string"
+                },
+                "id": {
+                  "example": "4yJ3n3D8E2",
+                  "format": "uid",
+                  "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                  "type": "string"
+                },
+                "matchedGrants": {
+                  "items": {
+                    "properties": {
+                      "destinationID": {
+                        "example": "4yJ3n3D8E2",
+                        "format": "uid",
+                        "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                        "type": "string"
+                      },
+                      "groupID": {
+                        "example": "4yJ3n3D8E2",
+                        "format": "uid",
+                        "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                        "type": "string"
+                      },
+                      "groupName": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "example": "4yJ3n3D8E2",
+                        "format": "uid",
+                        "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                        "type": "string"
+                      },
+                      "privilege": {
+                        "type": "string"
+                      },
+                      "resource": {
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "name_template": {
+                  "type": "string"
+                },
+                "namespace_template": {
+                  "type": "string"
+                },
+                "role_template": {
+                  "type": "string"
+                },
+                "rule_name": {
+                  "type": "string"
+                },
+                "source_group_regex": {
+                  "type": "string"
+                },
+                "updated": {
+                  "description": "formatted as an RFC3339 date-time",
                   "example": "2022-03-14T09:48:00Z",
                   "format": "date-time",
                   "type": "string"
@@ -1150,6 +1290,97 @@
             "format": "uid",
             "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
             "type": "string"
+          }
+        }
+      },
+      "MappingRule": {
+        "properties": {
+          "created": {
+            "description": "formatted as an RFC3339 date-time",
+            "example": "2022-03-14T09:48:00Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "destination_type": {
+            "type": "string"
+          },
+          "id": {
+            "example": "4yJ3n3D8E2",
+            "format": "uid",
+            "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+            "type": "string"
+          },
+          "matchedGrants": {
+            "items": {
+              "properties": {
+                "destinationID": {
+                  "example": "4yJ3n3D8E2",
+                  "format": "uid",
+                  "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                  "type": "string"
+                },
+                "groupID": {
+                  "example": "4yJ3n3D8E2",
+                  "format": "uid",
+                  "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                  "type": "string"
+                },
+                "groupName": {
+                  "type": "string"
+                },
+                "id": {
+                  "example": "4yJ3n3D8E2",
+                  "format": "uid",
+                  "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+                  "type": "string"
+                },
+                "privilege": {
+                  "type": "string"
+                },
+                "resource": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "name_template": {
+            "type": "string"
+          },
+          "namespace_template": {
+            "type": "string"
+          },
+          "role_template": {
+            "type": "string"
+          },
+          "rule_name": {
+            "type": "string"
+          },
+          "source_group_regex": {
+            "type": "string"
+          },
+          "updated": {
+            "description": "formatted as an RFC3339 date-time",
+            "example": "2022-03-14T09:48:00Z",
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "MappingRuleEvalStatus": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "last_run_at": {
+            "description": "formatted as an RFC3339 date-time",
+            "example": "2022-03-14T09:48:00Z",
+            "format": "date-time",
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
           }
         }
       },
@@ -4491,6 +4722,112 @@
       }
     },
     "/api/groups/{id}/users": {
+      "get": {
+        "description": "GetUsersInGroup",
+        "operationId": "GetUsersInGroup",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Infra-Version",
+            "required": true,
+            "schema": {
+              "description": "Version of the API being requested",
+              "example": "0.0.0",
+              "format": "\\d+\\.\\d+\\(.\\d+)?(-.\\w(+\\w)?)?",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": true,
+            "schema": {
+              "description": "Bearer followed by your access key",
+              "example": "Bearer ACCESSKEY",
+              "format": "Bearer [\\da-zA-Z]{10}\\.[\\da-zA-Z]{24}",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "example": "4yJ3n3D8E2",
+              "format": "uid",
+              "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized: Requestor is not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: Requestor does not have the right permissions"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Duplicate Record"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetUsersInGroupResponse"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        },
+        "summary": "GetUsersInGroup",
+        "tags": [
+          "Groups",
+          "Users"
+        ]
+      },
       "patch": {
         "description": "UpdateUsersInGroup",
         "operationId": "UpdateUsersInGroup",
@@ -4878,6 +5215,721 @@
         "summary": "Logout",
         "tags": [
           "Authentication"
+        ]
+      }
+    },
+    "/api/mapping-rules": {
+      "get": {
+        "description": "ListMappingRules",
+        "operationId": "ListMappingRules",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Infra-Version",
+            "required": true,
+            "schema": {
+              "description": "Version of the API being requested",
+              "example": "0.0.0",
+              "format": "\\d+\\.\\d+\\(.\\d+)?(-.\\w(+\\w)?)?",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": true,
+            "schema": {
+              "description": "Bearer followed by your access key",
+              "example": "Bearer ACCESSKEY",
+              "format": "Bearer [\\da-zA-Z]{10}\\.[\\da-zA-Z]{24}",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Page number to retrieve",
+            "example": "1",
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "description": "Page number to retrieve",
+              "example": "1",
+              "format": "int",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Number of objects to retrieve per page (up to 1000)",
+            "example": "100",
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "description": "Number of objects to retrieve per page (up to 1000)",
+              "example": "100",
+              "format": "int",
+              "maximum": 1000,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized: Requestor is not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: Requestor does not have the right permissions"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Duplicate Record"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponse_MappingRule"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        },
+        "summary": "ListMappingRules",
+        "tags": [
+          "Misc"
+        ]
+      },
+      "post": {
+        "description": "CreateMappingRule",
+        "operationId": "CreateMappingRule",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Infra-Version",
+            "required": true,
+            "schema": {
+              "description": "Version of the API being requested",
+              "example": "0.0.0",
+              "format": "\\d+\\.\\d+\\(.\\d+)?(-.\\w(+\\w)?)?",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": true,
+            "schema": {
+              "description": "Bearer followed by your access key",
+              "example": "Bearer ACCESSKEY",
+              "format": "Bearer [\\da-zA-Z]{10}\\.[\\da-zA-Z]{24}",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "destination_type": {
+                    "enum": [
+                      "kubernetes",
+                      "ssh"
+                    ],
+                    "type": "string"
+                  },
+                  "name_template": {
+                    "type": "string"
+                  },
+                  "namespace_template": {
+                    "type": "string"
+                  },
+                  "role_template": {
+                    "type": "string"
+                  },
+                  "rule_name": {
+                    "type": "string"
+                  },
+                  "source_group_regex": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rule_name",
+                  "source_group_regex",
+                  "destination_type",
+                  "name_template"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized: Requestor is not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: Requestor does not have the right permissions"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Duplicate Record"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MappingRule"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        },
+        "summary": "CreateMappingRule",
+        "tags": [
+          "Misc"
+        ]
+      }
+    },
+    "/api/mapping-rules/eval-status": {
+      "get": {
+        "description": "GetMappingRuleEvalStatus",
+        "operationId": "GetMappingRuleEvalStatus",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Infra-Version",
+            "required": true,
+            "schema": {
+              "description": "Version of the API being requested",
+              "example": "0.0.0",
+              "format": "\\d+\\.\\d+\\(.\\d+)?(-.\\w(+\\w)?)?",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": true,
+            "schema": {
+              "description": "Bearer followed by your access key",
+              "example": "Bearer ACCESSKEY",
+              "format": "Bearer [\\da-zA-Z]{10}\\.[\\da-zA-Z]{24}",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized: Requestor is not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: Requestor does not have the right permissions"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Duplicate Record"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MappingRuleEvalStatus"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        },
+        "summary": "GetMappingRuleEvalStatus",
+        "tags": [
+          "Misc"
+        ]
+      }
+    },
+    "/api/mapping-rules/{id}": {
+      "delete": {
+        "description": "DeleteMappingRule",
+        "operationId": "DeleteMappingRule",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Infra-Version",
+            "required": true,
+            "schema": {
+              "description": "Version of the API being requested",
+              "example": "0.0.0",
+              "format": "\\d+\\.\\d+\\(.\\d+)?(-.\\w(+\\w)?)?",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": true,
+            "schema": {
+              "description": "Bearer followed by your access key",
+              "example": "Bearer ACCESSKEY",
+              "format": "Bearer [\\da-zA-Z]{10}\\.[\\da-zA-Z]{24}",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "example": "4yJ3n3D8E2",
+              "format": "uid",
+              "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized: Requestor is not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: Requestor does not have the right permissions"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Duplicate Record"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmptyResponse"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        },
+        "summary": "DeleteMappingRule",
+        "tags": [
+          "Misc"
+        ]
+      },
+      "get": {
+        "description": "GetMappingRule",
+        "operationId": "GetMappingRule",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Infra-Version",
+            "required": true,
+            "schema": {
+              "description": "Version of the API being requested",
+              "example": "0.0.0",
+              "format": "\\d+\\.\\d+\\(.\\d+)?(-.\\w(+\\w)?)?",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": true,
+            "schema": {
+              "description": "Bearer followed by your access key",
+              "example": "Bearer ACCESSKEY",
+              "format": "Bearer [\\da-zA-Z]{10}\\.[\\da-zA-Z]{24}",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "example": "4yJ3n3D8E2",
+              "format": "uid",
+              "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized: Requestor is not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: Requestor does not have the right permissions"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Duplicate Record"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MappingRule"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        },
+        "summary": "GetMappingRule",
+        "tags": [
+          "Misc"
+        ]
+      },
+      "put": {
+        "description": "UpdateMappingRule",
+        "operationId": "UpdateMappingRule",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Infra-Version",
+            "required": true,
+            "schema": {
+              "description": "Version of the API being requested",
+              "example": "0.0.0",
+              "format": "\\d+\\.\\d+\\(.\\d+)?(-.\\w(+\\w)?)?",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": true,
+            "schema": {
+              "description": "Bearer followed by your access key",
+              "example": "Bearer ACCESSKEY",
+              "format": "Bearer [\\da-zA-Z]{10}\\.[\\da-zA-Z]{24}",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "example": "4yJ3n3D8E2",
+              "format": "uid",
+              "pattern": "[1-9a-km-zA-HJ-NP-Z]{1,11}",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "destination_type": {
+                    "enum": [
+                      "kubernetes",
+                      "ssh"
+                    ],
+                    "type": "string"
+                  },
+                  "name_template": {
+                    "type": "string"
+                  },
+                  "namespace_template": {
+                    "type": "string"
+                  },
+                  "role_template": {
+                    "type": "string"
+                  },
+                  "rule_name": {
+                    "type": "string"
+                  },
+                  "source_group_regex": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rule_name",
+                  "source_group_regex",
+                  "destination_type",
+                  "name_template"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Unauthorized: Requestor is not authenticated"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Forbidden: Requestor does not have the right permissions"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Duplicate Record"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MappingRule"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        },
+        "summary": "UpdateMappingRule",
+        "tags": [
+          "Misc"
         ]
       }
     },

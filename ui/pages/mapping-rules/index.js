@@ -1,0 +1,828 @@
+import Head from 'next/head'
+import Link from 'next/link'
+import useSWR, { mutate } from 'swr'
+import { useRouter } from 'next/router'
+import { useState, useMemo, useEffect, useRef } from 'react'
+
+import {
+  PlusIcon,
+  LinkIcon,
+  TrashIcon,
+  QuestionMarkCircleIcon,
+} from '@heroicons/react/24/outline'
+import { Dialog } from '@headlessui/react'
+
+import Table from '../../components/table'
+import Dashboard from '../../components/layouts/dashboard'
+import DeleteModal from '../../components/delete-modal'
+import SearchInput from '../../components/search-input'
+import Notification from '../../components/notification'
+import { useUser } from '../../lib/hooks'
+import { useSearch } from '../../lib/useSearch'
+import { previewTemplate } from '../../lib/mappingRules'
+
+// AddMappingRuleDialog renders an inline dialog form for creating or editing a mapping rule.
+// It shares state with the parent list page via props and triggers onMutate() on success,
+// which causes SWR to refetch the rules list. Supports both add (empty editingRule) and edit modes.
+function AddMappingRuleDialog({
+  open,
+  setOpen,
+  editingRule,
+  onMutate,
+}) {
+  const [ruleName, setRuleName] = useState('')
+  const [sourceGroupRegex, setSourceGroupRegex] = useState('')
+  const [destinationType, setDestinationType] = useState('kubernetes')
+  const [nameTemplate, setNameTemplate] = useState('')
+  const [namespaceTemplate, setNamespaceTemplate] = useState('')
+  const [roleTemplate, setRoleTemplate] = useState('')
+  // Manual test name for users to verify their regex against custom input.
+  const [testGroupName, setTestGroupName] = useState('')
+  const [errors, setErrors] = useState({})
+  const [submitting, setSubmitting] = useState(false)
+
+  // Populate or reset form fields when editing rule changes.
+  useEffect(() => {
+    if (editingRule) {
+      setRuleName(editingRule.rule_name || '')
+      setSourceGroupRegex(editingRule.source_group_regex || '')
+      setNameTemplate(editingRule.name_template || '')
+      if (editingRule.destination_type)
+        setDestinationType(editingRule.destination_type)
+      setNamespaceTemplate(editingRule.namespace_template ?? '')
+      setRoleTemplate(editingRule.role_template ?? '')
+    } else {
+      // Reset to fresh-add defaults when no editing rule is provided.
+      setRuleName('')
+      setSourceGroupRegex('')
+      setNameTemplate('')
+      setNamespaceTemplate('')
+      setRoleTemplate('')
+      setDestinationType('kubernetes')
+    }
+  }, [editingRule])
+
+  // Warn user if they try to navigate away with unsaved changes.
+  const hasUnsavedChanges = ruleName || sourceGroupRegex || nameTemplate
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+
+    const handleBeforeUnload = e => {
+      e.preventDefault()
+      e.returnValue = '' // Required for Chrome to show the dialog.
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges])
+
+  // Check whether the user's manual test name matches their regex.
+  const testGroupMatched = useMemo(() => {
+    if (!testGroupName.trim() || !sourceGroupRegex) return null
+    try {
+      let anchored = sourceGroupRegex.trim()
+      if (anchored && !anchored.startsWith('^')) anchored = '^' + anchored
+      if (anchored && !anchored.endsWith('$')) anchored = anchored + '$'
+      const re = new RegExp(anchored)
+      return re.test(testGroupName.trim())
+    } catch {
+      return null
+    }
+  }, [testGroupName, sourceGroupRegex])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    const newErrors = {}
+    if (!ruleName.trim()) newErrors.rule_name = 'Rule name is required'
+    if (!sourceGroupRegex.trim())
+      newErrors.source_group_regex = 'Group matching regex is required'
+    else {
+      try {
+        new RegExp(sourceGroupRegex)
+      } catch {
+        newErrors.source_group_regex = 'Invalid regular expression'
+      }
+    }
+    if (!nameTemplate.trim())
+      newErrors.name_template = 'Destination name template is required'
+    if (destinationType === 'kubernetes' && !roleTemplate.trim())
+      newErrors.role_template = 'Role template is required for Kubernetes'
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const body = {
+        rule_name: ruleName.trim(),
+        source_group_regex: sourceGroupRegex,
+        destination_type: destinationType,
+        name_template: nameTemplate,
+      }
+      if (destinationType === 'kubernetes') body.role_template = roleTemplate
+      if (namespaceTemplate && destinationType === 'kubernetes')
+        body.namespace_template = namespaceTemplate
+
+      const url = editingRule
+        ? `/api/mapping-rules/${editingRule.id}`
+        : '/api/mapping-rules'
+      const res = await fetch(url, {
+        method: editingRule ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null)
+        setErrors({
+          submit: Array.isArray(errBody?.message)
+            ? errBody.message.join(', ')
+            : errBody?.message || 'Failed to save',
+        })
+        return
+      }
+      await res.json()
+      if (onMutate) onMutate()
+      setOpen(false)
+      setRuleName('')
+      setSourceGroupRegex('')
+      setNameTemplate('')
+      setRoleTemplate('')
+      setNamespaceTemplate('')
+      setErrors({})
+    } catch (e) {
+      setErrors({ submit: e.message })
+    }
+    setSubmitting(false)
+  }
+
+  return (
+    <>
+      {open && (
+        <Dialog
+          as='div'
+          className='relative z-50'
+          open={open}
+          onClose={() => setOpen(false)}
+        >
+          <div className='fixed inset-0 flex items-center justify-center p-4 bg-black/30'>
+            <Dialog.Panel className='w-full max-w-lg transform overflow-hidden rounded-xl bg-white p-6 shadow-xl'>
+              <div className='flex items-center justify-between mb-4'>
+                <h2 className='text-base font-semibold text-gray-900'>
+                  Add Mapping Rule
+                </h2>
+                <button
+                  type='button'
+                  onClick={() => setOpen(false)}
+                  className='text-gray-400 hover:text-gray-600 cursor-pointer'
+                >
+                  &#x2715;
+                </button>
+              </div>
+              <form onSubmit={handleSubmit} className='space-y-4'>
+                {errors.submit && (
+                  <div className='rounded-md bg-red-50 p-3 text-sm text-red-700'>
+                    {typeof errors.submit === 'string'
+                      ? errors.submit
+                      : JSON.stringify(errors.submit)}
+                  </div>
+                )}
+                <div>
+                  <label
+                    htmlFor='mr-name'
+                    className='text-xs font-medium text-gray-600'
+                  >
+                    Rule Name
+                  </label>
+                  <input
+                    id='mr-name'
+                    value={ruleName}
+                    onChange={e => setRuleName(e.target.value)}
+                    placeholder='e.g., team-platform-access'
+                    className={`mt-1 block w-full rounded-md border ${errors.rule_name ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 sm:text-sm`}
+                  />
+                  {errors.rule_name && (
+                    <p className='mt-1 text-xs text-red-500'>
+                      {errors.rule_name}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label
+                    htmlFor='mr-type'
+                    className='text-xs font-medium text-gray-600'
+                  >
+                    Destination Type
+                  </label>
+                  <select
+                    id='mr-type'
+                    value={destinationType}
+                    onChange={e => setDestinationType(e.target.value)}
+                    className='mt-1 block w-full rounded-md border border-gray-300 shadow-sm sm:text-sm'
+                  >
+                    <option value='kubernetes'>Kubernetes</option>
+                    <option value='ssh'>SSH</option>
+                  </select>
+                </div>
+                <div>
+                  <label
+                    htmlFor='mr-regex'
+                    className='text-xs font-medium text-gray-600'
+                  >
+                    Group Matching Regex
+                  </label>
+                  <input
+                    id='mr-regex'
+                    type='search'
+                    value={sourceGroupRegex}
+                    onChange={e => setSourceGroupRegex(e.target.value)}
+                    placeholder='e.g., ^team-(.*)$'
+                    className={`mt-1 block w-full rounded-md border ${errors.source_group_regex ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 sm:text-sm`}
+                  />
+                  {errors.source_group_regex && (
+                    <p className='mt-1 text-xs text-red-500'>
+                      {errors.source_group_regex}
+                    </p>
+                  )}
+                </div>
+
+                {/* Try-it-yourself test */}
+                <div className='mt-3 rounded-md border-2 border-dashed border-blue-300 bg-blue-50 p-3'>
+                  <label
+                    htmlFor='mr-test-name'
+                    className='text-xs font-semibold text-blue-800'
+                  >
+                    Try it — type a group name to test your regex:
+                  </label>
+                  <div className='mt-1 flex items-center gap-2'>
+                    <input
+                      id='mr-test-name'
+                      type='text'
+                      value={testGroupName}
+                      onChange={e => setTestGroupName(e.target.value)}
+                      placeholder="e.g., team-platform, ops-general"
+                      className='block w-full rounded-md border border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-2 py-1'
+                    />
+                    {testGroupMatched === true && (
+                      <div className='flex flex-col items-center gap-0.5 text-green-700'>
+                        <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor' className='w-6 h-6'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15l-4-4 1.41-1.41L11 14.17l6.59-6.59L19 9l-8 8z'/></svg>
+                        <span className='whitespace-nowrap text-xs font-bold'>matches</span>
+                      </div>
+                    )}
+                    {testGroupMatched === false && (
+                      <div className='flex flex-col items-center gap-0.5 text-red-700'>
+                        <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor' className='w-6 h-6'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z'/></svg>
+                        <span className='whitespace-nowrap text-xs font-bold'>no match</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label
+                    htmlFor='mr-template'
+                    className='text-xs font-medium text-gray-600'
+                  >
+                    Destination Name Template ($N for capture groups)
+                  </label>
+                  <input
+                    id='mr-template'
+                    value={nameTemplate}
+                    onChange={e => setNameTemplate(e.target.value)}
+                    placeholder='e.g., cluster-$1-prod'
+                    className={`mt-1 block w-full rounded-md border ${errors.name_template ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 sm:text-sm`}
+                  />
+                  {errors.name_template && (
+                    <p className='mt-1 text-xs text-red-500'>
+                      {errors.name_template}
+                    </p>
+                  )}
+                </div>
+                {destinationType === 'kubernetes' && (
+                  <>
+                    <div>
+                      <label
+                        htmlFor='mr-role'
+                        className='text-xs font-medium text-gray-600'
+                      >
+                        Role Template
+                      </label>
+                      <input
+                        id='mr-role'
+                        value={roleTemplate}
+                        onChange={e => setRoleTemplate(e.target.value)}
+                        placeholder='e.g., $1-admin'
+                        className={`mt-1 block w-full rounded-md border ${errors.role_template ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 sm:text-sm`}
+                      />
+                      {errors.role_template && (
+                        <p className='mt-1 text-xs text-red-500'>
+                          {errors.role_template}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label
+                        htmlFor='mr-ns'
+                        className='text-xs font-medium text-gray-600'
+                      >
+                        Namespace Template Regex (optional)
+                      </label>
+                      <input
+                        id='mr-ns'
+                        value={namespaceTemplate}
+                        onChange={e => setNamespaceTemplate(e.target.value)}
+                        placeholder='Optional: e.g., $1-ns'
+                        className='mt-1 block w-full rounded-md border border-gray-300 shadow-sm sm:text-sm'
+                      />
+                    </div>
+                  </>
+                )}
+                {destinationType === 'ssh' && (
+                  <div className='rounded-md bg-yellow-50 p-2 text-xs'>
+                    For SSH destinations, the privilege is always "connect" and
+                    role template is not used.
+                  </div>
+                )}
+                <div className='flex justify-end space-x-3 pt-4'>
+                  <button
+                    type='button'
+                    onClick={() => setOpen(false)}
+                    className='rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 cursor-pointer'
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type='submit'
+                    disabled={submitting}
+                    className={`rounded-md border border-transparent bg-black px-4 py-2 text-sm font-medium text-white ${submitting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800 cursor-pointer'}`}
+                  >
+                    {submitting
+                      ? editingRule
+                        ? 'Saving...'
+                        : 'Creating...'
+                      : editingRule
+                        ? 'Save Rule'
+                        : 'Create Rule'}
+                  </button>
+                </div>
+              </form>
+            </Dialog.Panel>
+          </div>
+        </Dialog>
+      )}
+    </>
+  )
+}
+
+// GroupsMapping renders the mapping rules list page with:
+// - paginated table of all active mapping rules
+// - inline add/edit dialog (AddMappingRuleDialog component)
+// - delete confirmation modal
+// - live evaluation status banner
+// - search/filter by rule name
+export { AddMappingRuleDialog }
+
+export default function GroupsMapping() {
+  const router = useRouter()
+  const page = Math.max(parseInt(router.query.p) || 1, 1)
+  const limit = 50
+
+  const { user, isAdmin } = useUser()
+
+  // Hide from non-admins — mapping rules control group access policies.
+  if (user && !isAdmin) {
+    router.replace('/')
+    return null
+  }
+
+  // Search functionality
+  const { searchQuery, setSearchQuery, executeSearch, getEmptyMessage } =
+    useSearch()
+
+  // Memoized: builds the API URL string with pagination params and optional name search query.
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+    })
+    if (searchQuery) {
+      params.set('name', searchQuery)
+    }
+    return `/api/mapping-rules?${params.toString()}`
+  }, [page, limit, searchQuery])
+
+  // SWR hook fetches mapping rules from the API. Mutate is used to invalidate cache after CRUD operations.
+  const { data: mappingsData } = useSWR(apiUrl) || {}
+  const items = mappingsData?.items || []
+  const totalPages = mappingsData?.totalPages || 0
+  const totalCount = mappingsData?.totalCount || 0
+
+
+
+  const { data: evalStatus } = useSWR('/api/mapping-rules/eval-status')
+  const lastEvalTime = evalStatus?.last_run_at
+    ? new Date(evalStatus.last_run_at).toLocaleString()
+    : null
+
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [selectedMappingId, setSelectedMappingId] = useState(null)
+  const [selectedMappingName, setSelectedMappingName] = useState('')
+  const [showNotification, setShowNotification] = useState(false)
+  const [notificationMessage, setNotificationMessage] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [editingRuleId, setEditingRuleId] = useState(null)
+
+  // Determine empty-state and result-count messages for the UI.
+  const emptyMessage = getEmptyMessage('No mapping rules')
+
+  async function handleDelete(id) {
+    try {
+      const res = await fetch(`/api/mapping-rules/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete mapping')
+      setShowNotification(true)
+      setNotificationMessage('Group mapping deleted successfully')
+      mutate(apiUrl)
+    } catch (e) {
+      setShowNotification(true)
+      setNotificationMessage(e.message || 'Failed to delete mapping rule')
+    }
+    closeModal()
+  }
+
+  async function handleRowDeleteClick(row) {
+    const original = row.original
+    setSelectedMappingId(original.id)
+    setSelectedMappingName(original.ruleName || '')
+    setDeleteModalOpen(true)
+  }
+
+  function closeModal() {
+    setDeleteModalOpen(false)
+    setSelectedMappingId(null)
+    setSelectedMappingName('')
+  }
+
+  // Clear notification after 5 seconds
+  useState(() => {
+    if (showNotification) {
+      const timer = setTimeout(() => setShowNotification(false), 5000)
+      return () => clearTimeout(timer)
+    }
+  })
+
+  return (
+    <div className='mb-10'>
+      <Head>
+        <title>Mapping Rules - Infra</title>
+      </Head>
+
+      {/* Notification */}
+      <Notification
+        show={showNotification}
+        text={notificationMessage}
+        setShow={setShowNotification}
+        setClearNotification={() => {}}
+      />
+
+      <header className='my-6'>
+        <div className='flex items-center justify-between'>
+          <div className='flex flex-1 items-center space-x-4'>
+            <h1 className='py-1 font-display text-xl font-medium'>
+              Mapping Rules
+            </h1>
+            <SearchInput
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onSearch={executeSearch}
+              placeholder='Search rules... (press Enter)'
+              ariaLabel='Search mapping rules by rule name'
+            />
+          </div>
+          <button
+            type='button'
+            onClick={() => {
+              setEditingRuleId(null)
+              setAddOpen(true)
+            }}
+            className='ml-4 inline-flex items-center self-end rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
+          >
+            <PlusIcon className='mr-1 h-3 w-3' /> Add Rule
+          </button>
+        </div>
+      </header>
+
+      {/* Evaluation status banner */}
+      {evalStatus && (
+        <div
+          className={`mb-4 rounded-md border px-4 py-3 text-sm ${evalStatus.success ? 'border-green-200 bg-green-50 text-green-700' : 'border-red-200 bg-red-50 text-red-700'}`}
+        >
+          <span className='font-medium'>
+            {evalStatus.success ? 'Evaluation OK' : 'Evaluation Failed'}
+          </span>
+          {lastEvalTime && (
+            <span className='ml-2 opacity-75'>{lastEvalTime}</span>
+          )}
+          {evalStatus.error && (
+            <p className='mt-1 text-xs opacity-80'>{evalStatus.error}</p>
+          )}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {totalCount === 0 && !searchQuery && (
+        <div className='mt-8 text-center'>
+          <p className='text-gray-500'>{emptyMessage}</p>
+        </div>
+      )}
+
+      {/* Table — maps API response fields to display-friendly column data with live template previews */}
+      {totalCount > 0 && (
+        <Table
+          // Each row is a mapping rule with computed preview columns:
+          // - templatePreview: name_template applied to 'team-platform' as sample input
+          // - roleTemplate: role_template preview (k8s only)
+          // - namespaceTemplate: namespace_template regex preview (k8s only)
+          data={items.map(m => ({
+            id: m.id,
+            ruleName: m.rule_name,
+            sourceGroupRegex: m.source_group_regex,
+            destinationType:
+              m.destination_type === 'kubernetes' ? 'Kubernetes' : 'SSH',
+            matchedGrants: m.matchedGrants || [],
+            templatePreview: previewTemplate(
+              m.name_template,
+              'team-platform',
+              m.source_group_regex
+            ),
+            roleTemplate: m.role_template
+              ? previewTemplate(
+                  m.role_template,
+                  'team-platform',
+                  m.source_group_regex
+                )
+              : '-',
+            namespaceTemplate: m.namespace_template
+              ? previewTemplate(
+                  m.namespace_template,
+                  'team-platform',
+                  m.source_group_regex
+                )
+              : null,
+          }))}
+          // Table column definitions:
+          // - ruleName: displays the rule name with its regex pattern
+          // - destinationType: shows 'Kubernetes' or 'SSH'
+          // - template: shows preview of destination name, role (k8s), and namespace templates
+          // - matchedGrants: hoverable count that reveals a tooltip table of matching grants
+          columns={[
+            {
+              id: 'ruleName',
+              cell: info => (
+                <div className='flex flex-col gap-1'>
+                  <span className='text-sm font-medium text-gray-900'>
+                    {info.row.original.ruleName}
+                  </span>
+                  <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-2xs font-mono text-gray-600'>
+                    {info.row.original.sourceGroupRegex}
+                  </code>
+                </div>
+              ),
+              header: () => <span>Rule Name</span>,
+            },
+            {
+              id: 'destinationType',
+              cell: info => (
+                <span className='hidden lg:inline'>{info.getValue()}</span>
+              ),
+              header: () => <span>Type</span>,
+              accessorKey: 'destinationType',
+            },
+            {
+              id: 'template',
+              cell: info => {
+                const m = info.row.original
+                return (
+                  <div className='flex flex-col gap-1'>
+                    <span className='text-xs text-gray-900 font-medium'>
+                      Destination
+                    </span>
+                    <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
+                      {m.templatePreview}
+                    </code>
+                    {m.roleTemplate && m.roleTemplate !== '-' && (
+                      <>
+                        <span className='text-xs text-gray-900 font-medium'>
+                          Role
+                        </span>
+                        <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
+                          {m.roleTemplate}
+                        </code>
+                      </>
+                    )}
+                    {m.namespaceTemplate && (
+                      <>
+                        <span className='text-xs text-gray-900 font-medium'>
+                          Namespace
+                        </span>
+                        <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
+                          {m.namespaceTemplate}
+                        </code>
+                      </>
+                    )}
+                  </div>
+                )
+              },
+              header: () => <span>Target</span>,
+            },
+            // matchedGrants column shows a count of grants produced by this rule.
+            // Hovering reveals a tooltip table with group name, privilege, and destination link
+            // for each grant. Uses fixed-position overlay (not popover) to avoid viewport clipping.
+            {
+              id: 'matchedGrants',
+              cell: info => {
+                const matchedGrants = info.row.original.matchedGrants || []
+                const hoverRef = useRef({ top: 0, left: 0 })
+                const containerRef = useRef(null)
+                const buttonRef = useRef(null)
+                const [isHovered, setIsHovered] = useState(false)
+
+                useEffect(() => {
+                  if (!buttonRef.current) return
+                  const rect = buttonRef.current.getBoundingClientRect()
+                  hoverRef.current = {
+                    top: rect.bottom + window.scrollY - 8,
+                    left: rect.left + rect.width / 2,
+                  }
+                }, [matchedGrants])
+
+                return (
+                  <div className='relative flex justify-center items-center gap-1'>
+                    <span
+                      ref={buttonRef}
+                      onMouseEnter={() => setIsHovered(true)}
+                      onMouseLeave={() => setIsHovered(false)}
+                      className='inline-flex items-center gap-0.5 text-xs font-medium text-gray-600 hover:text-blue-800 transition-colors cursor-help decoration-dashed underline-offset-2 hover:decoration-blue-400'
+                    >
+                      {matchedGrants.length}
+                      <QuestionMarkCircleIcon className='h-3.5 w-3.5 text-gray-400 transition-colors' />
+                    </span>
+                    {isHovered && matchedGrants.length > 0 && (
+                      <div
+                        ref={containerRef}
+                        onMouseEnter={() => setIsHovered(true)}
+                        onMouseLeave={() => setIsHovered(false)}
+                        className='fixed z-[100] mt-2 w-max min-h-fit rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-xl'
+                        style={{
+                          left: hoverRef.current.left,
+                          top: hoverRef.current.top,
+                          transform: 'translateX(-50%)',
+                        }}
+                      >
+                        <table className='w-max text-xs'>
+                          <thead>
+                            <tr className='border-b border-gray-200'>
+                              <th className='px-3 py-1.5 text-left font-medium text-gray-500'>
+                                Group
+                              </th>
+                              <th className='px-3 py-1.5 w-[80px] text-left font-medium text-gray-500'>
+                                Permission
+                              </th>
+                              <th className='px-3 py-1.5 text-left font-medium text-gray-500'>
+                                Destination
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {matchedGrants.map((g, i) => (
+                              <tr
+                                key={i}
+                                className='border-b border-gray-100 last:border-b-0'
+                              >
+                                <td className='px-3 py-1.5'>
+                                  <Link
+                                    href={`/groups/${g.groupID}`}
+                                    passHref
+                                    className='text-blue-700 hover:text-blue-900 underline decoration-dashed underline-offset-2'
+                                  >
+                                    {g.groupName}
+                                  </Link>
+                                </td>
+                                <td className='w-[80px] px-3 py-1.5 font-mono text-center text-gray-700'>
+                                  {g.privilege}
+                                </td>
+                                <td className='px-3 py-1.5'>
+                                  <Link
+                                    href={`/destinations/${g.destinationID}`}
+                                    passHref
+                                    className='text-blue-700 hover:text-blue-900 underline decoration-dashed underline-offset-2'
+                                  >
+                                    {g.resource}
+                                  </Link>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              },
+
+              header: () => (
+                <span className='flex justify-center w-full'>Grants</span>
+              ),
+            },
+            {
+              id: 'actions',
+              cell: function Cell(info) {
+                return (
+                  <div className='group invisible rounded-md bg-transparent group-hover:visible flex flex-col gap-1'>
+                    <span
+                      onClick={() => {
+                        fetch(`/api/mapping-rules/${info.row.original.id}`)
+                          .then(res => (res.ok ? res.json() : Promise.reject()))
+                          .then(rule =>
+                            setEditingRuleId({ id: rule.id, ...rule })
+                          )
+                          .catch(() => null)
+                        setAddOpen(true)
+                      }}
+                      className='flex cursor-pointer items-center text-xs font-medium text-blue-500 hover:text-blue-400'
+                    >
+                      <LinkIcon className='mr-2 h-3.5 w-3.5' />
+                      <span className='hidden sm:block'>Edit</span>
+                    </span>
+                    <button
+                      type='button'
+                      onClick={() => handleRowDeleteClick(info.row)}
+                      className='flex items-center text-xs font-medium text-red-500 hover:text-red-400'
+                    >
+                      <TrashIcon className='mr-2 h-3.5 w-3.5' />
+                      <span className='hidden sm:block'>Remove</span>
+                    </button>
+                  </div>
+                )
+              },
+            },
+          ]}
+        />
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className='mt-4 flex items-center justify-between'>
+          <p className='text-sm text-gray-500'>
+            Page {page} of {totalPages}
+          </p>
+          <div className='flex space-x-2'>
+            {Array.from({ length: totalPages }, (_, i) => (
+              <Link
+                key={i + 1}
+                href={{
+                  pathname: router.pathname,
+                  query: { ...router.query, p: i + 1 },
+                }}
+                passHref
+              >
+                <span
+                  className={`inline-block rounded px-3 py-1 text-sm ${page === i + 1 ? 'bg-gray-200 font-medium' : 'hover:bg-gray-100 cursor-pointer'}`}
+                >
+                  {i + 1}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      <DeleteModal
+        open={deleteModalOpen}
+        setOpen={setDeleteModalOpen}
+        onSubmit={() => handleDelete(selectedMappingId)}
+        title='Delete Mapping Rule'
+        message={
+          <>{`Are you sure you want to delete the mapping "${selectedMappingName}"? This will remove any auto-granted access created by this rule.`}</>
+        }
+      />
+
+      {/* Add Rule Modal */}
+      <AddMappingRuleDialog
+        open={addOpen}
+        setOpen={val => {
+          setAddOpen(val)
+          if (!val) setEditingRuleId(null)
+        }}
+        editingRule={editingRuleId}
+        onMutate={() => {
+          mutate(apiUrl)
+          setEditingRuleId(null)
+        }}
+      />
+    </div>
+  )
+}
+
+GroupsMapping.layout = function (page) {
+  return <Dashboard>{page}</Dashboard>
+}

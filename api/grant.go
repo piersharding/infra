@@ -16,10 +16,16 @@ type Grant struct {
 	CreatedBy uid.ID `json:"createdBy" note:"id of the user that created the grant"`
 	Updated   Time   `json:"updated"`
 
-	User      uid.ID `json:"user,omitempty" note:"UserID for a user being granted access" example:"6hNnjfjVcc"`
-	Group     uid.ID `json:"group,omitempty" note:"GroupID for a group being granted access" example:"3zMaadcd2U"`
+	User  uid.ID `json:"user,omitempty" note:"UserID for a user being granted access" example:"6hNnjfjVcc"`
+	Group uid.ID `json:"group,omitempty" note:"GroupID for a group being granted access" example:"3zMaadcd2U"`
+
 	Privilege string `json:"privilege" note:"a role or permission" example:"admin"`
 	Resource  string `json:"resource" note:"a resource name in Infra's Universal Resource Notation" example:"production.namespace"`
+
+	// AutoGrant is true when this grant was created automatically by the mapping
+	// engine (not by an admin or bootstrap process). Only auto-grants are cleaned up
+	// by cleanupStaleGrants, protecting manual and bootstrap grants from accidental removal.
+	AutoGrant bool `json:"autoGrant,omitempty" note:"true if this grant was created automatically by a mapping rule"`
 }
 
 type CreateGrantResponse struct {

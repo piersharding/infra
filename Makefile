@@ -4,7 +4,7 @@ REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.12
+TAG ?= 0.21.13
 # BUILDVERSION is for client side compatibility - fixed to 0.21.0
 BUILDVERSION ?= 0.21.0
 
@@ -21,7 +21,7 @@ INFRA_PASSWORD ?= Passw0rd1!Thing
 
 VM_NAME ?= ssh01
 VM_MEM ?= 8192mb
-VM_IMAGE ?= gcr.io/k8s-minikube/kicbase:v0.0.46
+VM_IMAGE ?= gcr.io/k8s-minikube/kicbase:v0.0.50
 INFRA_SERVER_IP_SUFFIX ?= 240
 INFRA_UI_IP_SUFFIX ?= 241
 POSTGRES_IP_SUFFIX ?= 243
@@ -48,15 +48,19 @@ LINT_ARGS ?= --fix
 
 clean: clean-oci clean-secrets
 
+deploy-local: test-all build docker-build dev-oci dev-connector
+
+deploy-local-no-test: build docker-build dev-oci dev-connector
+
 docker-login:
 	docker login $(DOCKER_HOST) -u$(REPOSITORY_USER) -p $(GITLAB_TOKEN)
 
 test: check-psql-env
-	go test -short ./...
+	POSTGRESQL_CONNECTION=$(POSTGRESQL_CONNECTION) go test -short ./...
 
 test-all: check-psql-env test-npm
 	internal/server/testdata/pki/generate-localhost-cert.sh || true
-	go test ./...
+	POSTGRESQL_CONNECTION=$(POSTGRESQL_CONNECTION) go test ./...
 
 test-npm: ## run npm tests
 	cd ui && npm test
@@ -78,10 +82,11 @@ GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(BUILDVER
 					-X github.com/infrahq/infra/internal.TelemetryWriteKey="none" \
 					-linkmode external -extldflags "-static"
 build: ## build infra
-	mkdir -p bin && rm -rf bin/infra
+	mkdir -p bin && rm -rf bin/infra && rm -f dist/infra_linux_amd64_v1/infra
 	CGO_ENABLED=1 GOOS=linux go build -o bin/infra -ldflags '$(GO_BUILD_LDFLAGS)' .
 	ls -latr bin/
 	./bin/infra --help
+	cp ./bin/infra ./dist/infra_linux_amd64_v1/infra
 
 .PHONY: bin/infra
 bin/infra: build ## build local bin/infra
@@ -413,6 +418,25 @@ users:
   - infraRole: view
     name: test01@local.net
     password: "${INFRA_PASSWORD}"
+mappingRulesConfig:
+  roleReplacements:
+    - from: admin
+      to: [cluster-admin]
+    - from: aivadmin
+      to: [aivadmin, admin]
+  mappingRules:
+    # Kubernetes example — role_template is required for kubernetes destinations.
+    - name: Bootstrap Example K8s Rule
+      sourceGroupRegex: Example
+      destinationType: kubernetes
+      nameTemplate: minikube-k8s
+      namespaceTemplate: default
+      roleTemplate: view
+    # SSH example — role_template is optional (not used for SSH).
+    - name: Bootstrap Example SSH Rule
+      sourceGroupRegex: Example
+      destinationType: ssh
+      nameTemplate: ssh01
 endef
 export INFRA_SERVER_CONF
 
@@ -461,6 +485,11 @@ create-users: get-access-key ## Create test users in current dev deployment
 	  -H 'Infra-Version: 0.18.1' \
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
 	  -d '{ "name": "dev@example.com" }' | jq -r '.id'
+	@curl -X POST http://$(INFRA_URL)/api/users \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "name": "test02@local.net" }' | jq -r '.id'
 
 .PHONY: get-users
 get-users: get-access-key ## Get users from current dev deployment
@@ -470,6 +499,7 @@ get-users: get-access-key ## Get users from current dev deployment
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' | jq -r '.items[]'
 
 USER_NAME ?= dev@example.com
+GROUP_NAME ?= Example
 .PHONY: get-user
 get-user: get-access-key
 	$(eval USER_ID:=$(shell curl -s -X GET "http://$(INFRA_URL)/api/users" \
@@ -485,6 +515,31 @@ create-groups: get-access-key ## Create test groups in current dev deployment
 	  -H 'Infra-Version: 0.18.1' \
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
 	  -d '{ "name": "Example" }' | jq -r '.id'
+	@curl -X POST http://$(INFRA_URL)/api/groups \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "name": "ExampleOther" }' | jq -r '.id'
+	@curl -X POST http://$(INFRA_URL)/api/groups \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "name": "ssh-connect-ssh01" }' | jq -r '.id'
+	@curl -X POST http://$(INFRA_URL)/api/groups \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "name": "k8s-minikube-admin" }' | jq -r '.id'
+	@curl -X POST http://$(INFRA_URL)/api/groups \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "name": "k8s-minikube-aivadmin" }' | jq -r '.id'
+	@curl -X POST http://$(INFRA_URL)/api/groups \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "name": "k8s-minikube-view-kube*" }' | jq -r '.id'
 
 .PHONY: get-groups
 get-groups: get-access-key ## Get groups from current dev deployment
@@ -498,7 +553,7 @@ get-group: get-access-key
 	$(eval GROUP_ID:=$(shell curl -s -X GET http://$(INFRA_URL)/api/groups \
 	  -H 'Content-Type: application/json' \
 	  -H 'Infra-Version: 0.18.1' \
-	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)'  | jq -r '.items[] | select( .name | contains("Example") ) | .id'))
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' | jq -r '.items[] | select( .name == "$(GROUP_NAME)" ) | .id'))
 	@echo "GROUP_ID=$(GROUP_ID)"
 
 .PHONY: add-user-group
@@ -527,6 +582,24 @@ add-grants: get-access-key ## Add grants to group in current dev deployment
 	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
 	  -d '{ "grantsToAdd": [{ "userName": "test01@local.net", "privilege": "connect", "resource": "ssh01" }] }'
 
+.PHONY: create-mapping-rules
+create-mapping-rules: get-access-key ## Create mapping rule for Rules Mapping test data
+	curl -v -X POST http://$(INFRA_URL)/api/mapping-rules \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "rule_name": "SSH Mapping Rule", "source_group_regex": "^ssh-connect-([a-z0-9]+)$$", "destination_type": "ssh", "name_template": "$$1" }'
+	curl -v -X POST http://$(INFRA_URL)/api/mapping-rules \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "rule_name": "K8s Mapping Rule - Minikube Admin", "source_group_regex": "k8s-minikube-([a-z0-9]+)", "destination_type": "kubernetes", "name_template": "minikube-k8s", "role_template": "$$1" }'
+	curl -v -X POST http://$(INFRA_URL)/api/mapping-rules \
+	  -H 'Content-Type: application/json' \
+	  -H 'Infra-Version: 0.18.1' \
+	  -H 'Authorization: Bearer $(INFRA_ACCESS_KEY)' \
+	  -d '{ "rule_name": "K8s Mapping Rule - Minikube KubeNS", "source_group_regex": "k8s-minikube-([a-z0-9]+)-([a-z0-9-*]+)", "destination_type": "kubernetes", "name_template": "minikube-k8s", "role_template": "$$1", "namespace_template": "$$2" }'
+
 
 .PHONY: create-destination
 create-destination: get-access-key ## Create test destination in current dev deployment
@@ -537,8 +610,12 @@ create-destination: get-access-key ## Create test destination in current dev dep
 	  -d '{ "connection": { "ca": "-----BEGIN CERTIFICATE-----\nMIIDNTCCAh2gAwIBAgIRALRetnpcTo9O3V2fAK3ix+c\n-----END CERTIFICATE-----\n", "url": "aa60eexample.us-west-2.elb.amazonaws.com"}, "kind": "kubernetes", "name": "production" }'
 
 .PHONY: test-data
-test-data: create-users create-groups add-user-group create-destination add-grants
+test-data: create-users create-groups add-user-group create-destination add-grants create-mapping-rules
 	make add-user-group USER_NAME=test01@local.net
+	make add-user-group USER_NAME=test02@local.net GROUP_NAME=ssh-connect-ssh01
+	make add-user-group USER_NAME=admin@local GROUP_NAME=k8s-minikube-admin
+	make add-user-group USER_NAME=test01@local.net GROUP_NAME=k8s-minikube-aivadmin
+	make add-user-group USER_NAME=test02@local.net GROUP_NAME=k8s-minikube-view-kube*
 
 define INFRA_SSHD_CONFIG
 Match group infra-users
@@ -617,7 +694,6 @@ vm-create: ## Create a kicbase container to emulate a VM
 	ssh-add -L | $(DOCKER_ENGINE) exec -i $(VM_NAME) bash -c "cat - >>/root/.ssh/authorized_keys"
 	# get rid of bad repos
 	$(DOCKER_ENGINE) exec -ti $(VM_NAME) bash -c "rm -f /etc/apt/sources.list.d/devel* /etc/apt/sources.list.d/dock*  /etc/apt/sources.list.d/nvidia*"
-	$(DOCKER_ENGINE) exec -ti $(VM_NAME) bash -c "sed -i 's/archive/uk.archive/' /etc/apt/sources.list "
 	make vm-hosts VM_NAME=$(VM_NAME)
 
 clean-infra-network: # delete infra network

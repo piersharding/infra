@@ -15,11 +15,13 @@ export function saveToVisitedOrgs(domain, orgName) {
     const cookieOptions = {
       path: '/',
     }
-    
-    // Only set domain attribute if not using an IP address
-    // IP addresses cannot have a domain attribute with a leading dot
-    if (!isIPAddress(window.location.host)) {
-      cookieOptions.domain = `.${baseDomain}`
+
+    // Only set domain attribute for valid FQDNs (not IPs, not localhost).
+    // Cookie domains cannot contain ports (RFC 6265), and single-label hostnames
+    // like "localhost" must not have a leading dot.
+    const cleanHost = stripPort(window.location.host)
+    if (!isIPAddress(cleanHost) && cleanHost.includes('.')) {
+      cookieOptions.domain = `.${stripPort(baseDomain)}`
     }
 
     cookies.set('orgs', visitedOrgs, cookieOptions)
@@ -35,18 +37,26 @@ export function currentBaseDomain() {
   return parts.join('.') // return the domain without the org
 }
 
+// Strip port from a hostname (e.g. "localhost:9443" → "localhost")
+// Cookie domains must not contain ports — RFC 6265 prohibits colons in domain attributes.
+export function stripPort(host) {
+  return host.split(':')[0]
+}
+
 // Helper function to check if a host is an IP address
 export function isIPAddress(host) {
   // Remove port if present
   const hostWithoutPort = host.split(':')[0]
-  
+
   // IPv4 pattern: validates each octet is 0-255
-  const ipv4Pattern = /^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.){3}(25[0-5]|(2[0-4]|1\d|[1-9]|)\d)$/
-  
+  const ipv4Pattern =
+    /^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.){3}(25[0-5]|(2[0-4]|1\d|[1-9]|)\d)$/
+
   // IPv6 pattern: comprehensive pattern supporting various formats
   // Matches full notation, compressed notation (::), and mixed IPv4/IPv6
-  const ipv6Pattern = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/
-  
+  const ipv6Pattern =
+    /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/
+
   return ipv4Pattern.test(hostWithoutPort) || ipv6Pattern.test(hostWithoutPort)
 }
 

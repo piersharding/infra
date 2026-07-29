@@ -196,6 +196,14 @@ export default function Users() {
   const page = Math.max(parseInt(router.query.p) || 1, 1)
   const limit = 50
 
+  const { user, isAdmin } = useUser()
+
+  // Hide from non-admins — users list shows identity data.
+  if (user && !isAdmin) {
+    router.replace('/')
+    return null
+  }
+
   // Search functionality
   const {
     searchQuery,
@@ -221,7 +229,6 @@ export default function Users() {
   const [open, setOpen] = useState(false)
 
   const { data: { items: providers } = {} } = useSWR(`/api/providers?limit=999`)
-  const { user } = useUser()
 
   const sortedUsers = users?.sort(sortByName)?.sort((a, b) => {
     if (a?.id === user?.id) return -1

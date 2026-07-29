@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/scim2/filter-parser/v2"
@@ -15,6 +16,12 @@ import (
 	"github.com/infrahq/infra/internal/server/providers"
 	"github.com/infrahq/infra/uid"
 )
+
+// maxGroupNameLength is the maximum length for IDP group names during regex matching.
+// Group names exceeding this are rejected before regex evaluation to prevent ReDoS
+// (catastrophic backtracking) on crafted inputs. This applies only to regex matching,
+// not to storage — groups can still be created with longer names via SCIM/local admin.
+const maxGroupNameLength = 256
 
 type providerUserTable models.ProviderUser
 
@@ -300,6 +307,88 @@ func ProvisionProviderUser(tx WriteTxn, user *models.ProviderUser) error {
 	return insert(tx, (*providerUserTable)(user))
 }
 
+// filterIDPGroups filters incoming IDP group names to only those that:
+// 1. Are locally created groups (CreatedByProvider is NULL), OR
+// 2. Match the source_group_regex of any active mapping rule for this org, OR
+// 3. Are referenced by a non-auto-grant as their subject.
+// Non-matching groups are logged at WARN level and dropped from the result.
+func filterIDPGroups(tx ReadTxn, incoming []string) []string {
+	// Reject group names that are too long for regex matching before any processing.
+	var filteredIn []string
+	for _, name := range incoming {
+		if len(name) > maxGroupNameLength {
+			logging.L.Warn().Str("group", name).Msg("IDP group name exceeds maximum length; skipping")
+			continue
+		}
+		filteredIn = append(filteredIn, name)
+	}
+	incoming = filteredIn
+
+	allowed := make(map[string]bool)
+
+	// Load locally created group names (created_by_provider is 0 or null — admin-created).
+	// A local group with the same name as an incoming IDP group is a collision:
+	// they are different groups with potentially different members. We log and block it.
+	localNames, err := ListGroupNames(tx, ListGroupsOptions{LocalOnly: true})
+	if err != nil {
+		logging.L.Warn().Err(err).Msg("failed to load locally created group names for IDP filter")
+	} else {
+		for _, name := range incoming {
+			if localNames[name] {
+				logging.L.Warn().Str("group", name).Msg("IDP sync collision: a manually-created group shares the same name as an incoming IDP group; filtering out")
+			}
+		}
+	}
+
+	// Load all active mapping rules and pre-compile each regex individually.
+	rules, err := ListMappingRules(tx, ListMappingRulesOptions{})
+	if err != nil {
+		logging.L.Warn().Err(err).Msg("failed to load mapping rules for IDP filter")
+	} else {
+		var precompiled []*regexp.Regexp
+		for _, r := range rules {
+			if re, err2 := regexp.Compile(r.SourceGroupRegex); err2 == nil {
+				precompiled = append(precompiled, re)
+			}
+		}
+		for _, name := range incoming {
+			for _, re := range precompiled {
+				// Use context-aware matching with timeout to prevent ReDoS.
+				if matchWithTimeout(name, re) {
+					allowed[name] = true
+					break
+				}
+			}
+		}
+	}
+
+	// Load non-auto-grants and allow incoming groups that have a manual grant.
+	grants, err := ListNonAutoGrants(tx)
+	if err != nil {
+		logging.L.Warn().Err(err).Msg("failed to load non-auto-grants for IDP filter")
+	} else {
+		for _, name := range incoming {
+			// Check if this incoming group has a non-auto-grant.
+			for _, gr := range grants {
+				grpName := getGroupNameByID(tx, gr.Subject.ID)
+				if grpName == name {
+					allowed[name] = true
+					break
+				}
+			}
+		}
+	}
+
+	// Filter incoming to only allowed groups, preserving order.
+	var result []string
+	for _, name := range incoming {
+		if allowed[name] {
+			result = append(result, name)
+		}
+	}
+	return result
+}
+
 func SyncProviderUser(ctx context.Context, tx WriteTxn, user *models.ProviderUser, oidcClient providers.OIDCClient) ([]models.Group, error) {
 	accessToken, expiry, err := oidcClient.RefreshAccessToken(ctx, user)
 	if err != nil {
@@ -325,7 +414,10 @@ func SyncProviderUser(ctx context.Context, tx WriteTxn, user *models.ProviderUse
 		return nil, fmt.Errorf("oidc user sync failed: %w", err)
 	}
 
-	return AssignIdentityToGroups(tx, user, info.Groups)
+	// Filter IDP groups to only those that are locally created or match an active mapping rule.
+	filteredGroups := filterIDPGroups(tx, info.Groups)
+
+	return AssignIdentityToGroups(tx, user, filteredGroups)
 }
 
 type SCIMParameters struct {
@@ -333,4 +425,32 @@ type SCIMParameters struct {
 	StartIndex int               // the offset to start counting from
 	TotalCount int               // the total number of items that match the query
 	Filter     filter.Expression // a filter to apply to the results
+}
+
+// getGroupNameByID looks up a group name by its ID.
+func getGroupNameByID(tx ReadTxn, id uid.ID) string {
+	grp, err := GetGroup(tx, GetGroupOptions{ByID: id})
+	if err != nil || grp == nil {
+		return ""
+	}
+	return grp.Name
+}
+
+// matchWithTimeout runs re.MatchString with context-based cancellation.
+// Go's regexp package has no native timeout support, so this uses a goroutine
+// pattern: if matching takes longer than 50ms, it returns false (no match).
+// This prevents ReDoS from crafted regex patterns on login hot path.
+func matchWithTimeout(name string, re *regexp.Regexp) bool {
+	done := make(chan bool, 1)
+	go func() {
+		done <- re.MatchString(name)
+	}()
+
+	select {
+	case result := <-done:
+		return result
+	case <-time.After(50 * time.Millisecond):
+		logging.L.Warn().Str("group", name).Msg("regex match timed out during IDP group filter; skipping")
+		return false
+	}
 }

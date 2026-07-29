@@ -535,8 +535,9 @@ func TestAPI_ListDestinations(t *testing.T) {
 				err := json.Unmarshal(resp.Body.Bytes(), &result)
 				assert.NilError(t, err)
 
-				assert.Equal(t, result.Count, 2)
 				assert.Equal(t, len(result.Items), 1)
+				assert.Equal(t, result.Count, 1)
+				assert.Equal(t, result.PaginationResponse.TotalCount, 2)
 				assert.Equal(t, result.Items[0].Name, "kubernetes-prod")
 			},
 		},

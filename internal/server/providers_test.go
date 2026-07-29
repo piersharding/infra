@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"golang.org/x/oauth2"
 	"gotest.tools/v3/assert"
 
 	"github.com/infrahq/infra/api"
@@ -791,7 +792,11 @@ func (m *fakeOIDCImplementation) RefreshAccessToken(_ context.Context, providerU
 
 func (m *fakeOIDCImplementation) GetUserInfo(_ context.Context, _ *models.ProviderUser) (*providers.UserInfoClaims, error) {
 	if m.UserInfoRevoked {
-		return nil, fmt.Errorf("user revoked")
+		return nil, &oauth2.RetrieveError{
+			Response:         &http.Response{StatusCode: http.StatusUnauthorized},
+			ErrorCode:        "invalid_grant",
+			ErrorDescription: "user revoked",
+		}
 	}
 	return &providers.UserInfoClaims{}, nil
 }

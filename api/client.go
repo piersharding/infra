@@ -315,6 +315,18 @@ func (c Client) UpdateUsersInGroup(ctx context.Context, req *UpdateUsersInGroupR
 	return err
 }
 
+// GetUsersInGroup returns all user IDs that are members of the group with ID id.
+func (c Client) GetUsersInGroup(ctx context.Context, id uid.ID) ([]uid.ID, error) {
+	resp, err := get[GetUsersInGroupResponse](ctx, c, fmt.Sprintf("/api/groups/%s/users", id), Query{})
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil {
+		return []uid.ID{}, nil // empty group membership on successful response
+	}
+	return resp.Users, nil
+}
+
 func (c Client) ListProviders(ctx context.Context, req ListProvidersRequest) (*ListResponse[Provider], error) {
 	return get[ListResponse[Provider]](ctx, c, "/api/providers", Query{
 		"name": {req.Name},

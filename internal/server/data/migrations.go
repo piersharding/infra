@@ -90,6 +90,19 @@ func migrations() []*migrator.Migration {
 		moveSettingsJWKOrganizations(),
 		addAccessKeyIssuedForKind(),
 		storeProviderUserGroupsArray(),
+		// Migration: creates the mapping_rules table for rule-based access grants.
+		// Each row defines a regex pattern to match IDP groups and templates for
+		// producing resource/role names in auto-granted access.
+		addMappingRulesTable(),
+		// Migration: adds auto_grant column to grants table so the mapping engine can
+		// distinguish auto-grants (from previous rules) from bootstrap/manual grants.
+		// Only auto-grants are cleaned up by cleanupStaleGrants — protects initial admin
+		// access created during bootstrap from being deleted when no groups match.
+		addAutoGrantToGrants(),
+		// Migration: adds a partial index on grants(auto_grant) to optimize
+		// cleanupStaleGrants queries. Since auto_grant=true always implies CreatedBy=system,
+		// filtering on created_by is redundant.
+		addIndexOnGrantsAutoGrant(),
 		// next one here, then run `go test -run TestMigrations ./internal/server/data -update`
 	}
 }
@@ -1379,6 +1392,63 @@ func storeProviderUserGroupsArray() *migrator.Migration {
 				}
 			}
 			return nil
+		},
+	}
+}
+
+// addMappingRulesTable creates the mapping_rules table and a unique index on
+// (rule_name, organization_id) to prevent duplicate rules within an org.
+func addMappingRulesTable() *migrator.Migration {
+	return &migrator.Migration{
+		ID: "2024-05-19T12:00",
+		Migrate: func(tx migrator.DB) error {
+			_, err := tx.Exec(`
+			CREATE TABLE IF NOT EXISTS mapping_rules (
+				id             bigint PRIMARY KEY,
+				organization_id bigint NOT NULL,
+				created_at     timestamptz DEFAULT now(),
+				updated_at     timestamptz DEFAULT now(),
+				deleted_at     timestamptz,
+				created_by     bigint NOT NULL,
+				rule_name      text NOT NULL,
+				source_group_regex text NOT NULL,
+				destination_type text NOT NULL CHECK (destination_type IN ('kubernetes', 'ssh')),
+				name_template  text NOT NULL,
+				namespace_template text,
+				role_template  text
+			);
+			CREATE UNIQUE INDEX IF NOT EXISTS idx_mapping_rules_rule_name_org_id ON mapping_rules (rule_name, organization_id) WHERE deleted_at IS NULL;
+		`)
+			return err
+		},
+	}
+}
+
+// addAutoGrantToGrants adds an auto_grant column to the grants table.
+// This lets the mapping engine distinguish between:
+// - Auto-grants created by previous mapping rules (auto_grant=true) — safe to clean up
+// - Bootstrap/manual grants (auto_grant=false) — must be preserved
+func addAutoGrantToGrants() *migrator.Migration {
+	return &migrator.Migration{
+		ID: "2026-05-22T17:00",
+		Migrate: func(tx migrator.DB) error {
+			_, err := tx.Exec(`ALTER TABLE grants ADD COLUMN IF NOT EXISTS auto_grant boolean DEFAULT false`)
+			return err
+		},
+	}
+}
+
+// addIndexOnGrantsAutoGrant adds a partial index to speed up cleanupStaleGrants.
+// The index covers only auto-granted rows, making the mapping engine's cleanup query
+// use an index scan instead of a sequential scan on large grants tables.
+func addIndexOnGrantsAutoGrant() *migrator.Migration {
+	return &migrator.Migration{
+		ID: "2026-05-25T12:00",
+		Migrate: func(tx migrator.DB) error {
+			_, err := tx.Exec(`
+				CREATE INDEX IF NOT EXISTS idx_grants_auto_grant ON grants (auto_grant) WHERE auto_grant = true;
+			`)
+			return err
 		},
 	}
 }

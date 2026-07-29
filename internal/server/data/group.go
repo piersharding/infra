@@ -36,6 +36,10 @@ type GetGroupOptions struct {
 	ByID uid.ID
 	// ByName instructs GetGroup to return the group matching this name.
 	ByName string
+	// IncludeDeleted, if true, returns groups regardless of deleted_at status.
+	// Used internally by cleanupOrphanedGroups and mapping rule evaluation where
+	// we need to see all groups including soft-deleted ones for consistency checks.
+	IncludeDeleted bool
 }
 
 func GetGroup(tx ReadTxn, opts GetGroupOptions) (*models.Group, error) {
@@ -43,7 +47,11 @@ func GetGroup(tx ReadTxn, opts GetGroupOptions) (*models.Group, error) {
 	query := querybuilder.New("SELECT")
 	query.B(columnsForSelect(group))
 	query.B("FROM groups")
-	query.B("WHERE deleted_at is null")
+	if !opts.IncludeDeleted {
+		query.B("WHERE deleted_at is null")
+	} else {
+		query.B("WHERE 1=1")
+	}
 	query.B("AND organization_id = ?", tx.OrganizationID())
 
 	switch {
@@ -68,6 +76,9 @@ func GetGroup(tx ReadTxn, opts GetGroupOptions) (*models.Group, error) {
 	return (*models.Group)(group), nil
 }
 
+// LocalOnly filters ListGroups to only locally created groups
+// (created_by_provider IS NULL OR = 0). Used by filterIDPGroups and other
+// internal paths that need to distinguish admin-created from IDP-synced groups.
 type ListGroupsOptions struct {
 	ByName string
 	ByIDs  []uid.ID
@@ -75,6 +86,9 @@ type ListGroupsOptions struct {
 	// ByGroupMember instructs ListGroups to return groups where this user ID
 	// is a member of the group.
 	ByGroupMember uid.ID
+
+	// LocalOnly, if true, returns only locally created groups (created_by_provider IS NULL OR = 0).
+	LocalOnly bool
 
 	Pagination *Pagination
 }
@@ -93,6 +107,10 @@ func ListGroups(tx ReadTxn, opts ListGroupsOptions) ([]models.Group, error) {
 	}
 	query.B("WHERE deleted_at is null")
 	query.B("AND organization_id = ?", tx.OrganizationID())
+
+	if opts.LocalOnly {
+		query.B("AND (created_by_provider IS NULL OR created_by_provider = 0)")
+	}
 
 	if opts.ByName != "" {
 		query.B("AND name ILIKE ?", "%"+opts.ByName+"%")
@@ -207,6 +225,64 @@ func countUsersInGroup(tx ReadTxn, groupID uid.ID) (int64, error) {
 	return count, handleError(err)
 }
 
+// CountAllGroups counts all non-deleted groups for an organization.
 func CountAllGroups(tx ReadTxn) (int64, error) {
 	return countRows(tx, groupsTable{})
+}
+
+// ListGroupNames returns a set of non-deleted group names for the current org,
+// optionally filtered to only locally created groups.
+func ListGroupNames(tx ReadTxn, opts ListGroupsOptions) (map[string]bool, error) {
+	query := querybuilder.New("SELECT name FROM groups")
+	if opts.ByGroupMember != 0 {
+		query.B("JOIN identities_groups ON groups.id = identities_groups.group_id")
+	}
+	query.B("WHERE deleted_at is null AND organization_id = ?", tx.OrganizationID())
+
+	if opts.LocalOnly {
+		query.B("AND (created_by_provider IS NULL OR created_by_provider = 0)")
+	}
+
+	rows, err := tx.Query(query.String(), query.Args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	names := make(map[string]bool)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan group name: %w", err)
+		}
+		names[name] = true
+	}
+	return names, rows.Err()
+}
+
+// GetUsersInGroup returns all distinct user (identity) IDs that are members of the
+// group identified by groupID. Queries the identities_groups join table directly.
+// Returns an empty slice (not nil) when the group has no members.
+func GetUsersInGroup(tx ReadTxn, groupID uid.ID) ([]uid.ID, error) {
+	query := querybuilder.New(`SELECT DISTINCT identity_id FROM identities_groups WHERE group_id = ?`)
+	rows, err := tx.Query(query.String(), groupID)
+	if err != nil {
+		return nil, handleError(err)
+	}
+	defer rows.Close()
+
+	var userIDs []uid.ID
+	for rows.Next() {
+		var id uid.ID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan identity_id: %w", err)
+		}
+		userIDs = append(userIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, handleError(err)
+	}
+
+	return userIDs, nil
 }

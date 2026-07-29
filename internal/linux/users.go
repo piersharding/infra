@@ -140,7 +140,7 @@ func validateUsernameStrict(username string) error {
 	return nil
 }
 
-func sanitizeUsernameForLogging(username string) string {
+func SanitizeUsernameForLogging(username string) string {
 	if len(username) <= 2 {
 		return "***"
 	}
@@ -188,6 +188,11 @@ func isRuneComma(r rune) bool {
 	return r == ','
 }
 
+// MaxPasswordAgeDays is the maximum number of days before an infra-managed user's
+// password must be changed. Set to ~10 years so that infra users never hit
+// system-enforced password expiration during normal use.
+const MaxPasswordAgeDays = 3650
+
 func AddUser(apiUser *api.User, group string) error {
 	if err := validateUsername(apiUser.SSHLoginName); err != nil {
 		return fmt.Errorf("invalid username: %w", err)
@@ -209,7 +214,7 @@ func AddUser(apiUser *api.User, group string) error {
 
 	logging.L.Info().
 		Str("operation", "add_user").
-		Str("username", sanitizeUsernameForLogging(apiUser.SSHLoginName)).
+		Str("username", SanitizeUsernameForLogging(apiUser.SSHLoginName)).
 		Str("group", group).
 		Time("timestamp", time.Now()).
 		Msg("user_add_attempt")
@@ -218,7 +223,7 @@ func AddUser(apiUser *api.User, group string) error {
 	if err != nil {
 		logging.L.Error().
 			Str("operation", "add_user").
-			Str("username", sanitizeUsernameForLogging(apiUser.SSHLoginName)).
+			Str("username", SanitizeUsernameForLogging(apiUser.SSHLoginName)).
 			Str("group", group).
 			Err(err).
 			Msg("user_add_failed")
@@ -227,10 +232,52 @@ func AddUser(apiUser *api.User, group string) error {
 
 	logging.L.Info().
 		Str("operation", "add_user").
-		Str("username", sanitizeUsernameForLogging(apiUser.SSHLoginName)).
+		Str("username", SanitizeUsernameForLogging(apiUser.SSHLoginName)).
 		Str("group", group).
 		Time("timestamp", time.Now()).
 		Msg("user_added_successfully")
+
+	// Set password expiration to prevent infra users from hitting system password expiry.
+	if err := SetPasswordExpiration(apiUser.SSHLoginName, MaxPasswordAgeDays); err != nil {
+		logging.L.Warn().
+			Str("operation", "set_password_expiration").
+			Str("username", SanitizeUsernameForLogging(apiUser.SSHLoginName)).
+			Err(err).
+			Msg("failed to set password expiration")
+	}
+
+	return nil
+}
+
+// SetPasswordExpiration runs `chage -M <days> <username>` to set the maximum password age.
+// This prevents infra-managed users from hitting system-enforced password expiration,
+// which would cause SSH login failures for otherwise valid infra users.
+func SetPasswordExpiration(username string, days int) error {
+	if err := validateUsername(username); err != nil {
+		return fmt.Errorf("invalid username: %w", err)
+	}
+
+	nonNilDays := days
+	//nolint:gosec // username is validated above; exec.Command does not invoke a shell.
+	cmd := exec.Command("chage", "-M", fmt.Sprintf("%d", nonNilDays), username)
+	cmd.Stdout = logging.L
+	cmd.Stderr = logging.L
+
+	logging.L.Debug().
+		Str("operation", "set_password_expiration").
+		Str("username", SanitizeUsernameForLogging(username)).
+		Int("days", days).
+		Msg("setting_max_password_age")
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to set password expiration for %s: %w", username, err)
+	}
+
+	logging.L.Debug().
+		Str("operation", "set_password_expiration").
+		Str("username", SanitizeUsernameForLogging(username)).
+		Int("days", days).
+		Msg("password_max_age_set_successfully")
 
 	return nil
 }
@@ -252,7 +299,7 @@ func KillUserProcesses(localUser LocalUser) error {
 
 	logging.L.Info().
 		Str("operation", "kill_user_processes").
-		Str("username", sanitizeUsernameForLogging(localUser.Username)).
+		Str("username", SanitizeUsernameForLogging(localUser.Username)).
 		Time("timestamp", time.Now()).
 		Msg("process_kill_attempt")
 
@@ -264,13 +311,13 @@ func KillUserProcesses(localUser LocalUser) error {
 	case errors.As(err, &exitError) && exitError.ExitCode() == 1:
 		logging.L.Info().
 			Str("operation", "kill_user_processes").
-			Str("username", sanitizeUsernameForLogging(localUser.Username)).
+			Str("username", SanitizeUsernameForLogging(localUser.Username)).
 			Msg("no_processes_running")
 		return nil
 	case err != nil:
 		logging.L.Error().
 			Str("operation", "kill_user_processes").
-			Str("username", sanitizeUsernameForLogging(localUser.Username)).
+			Str("username", SanitizeUsernameForLogging(localUser.Username)).
 			Err(err).
 			Msg("process_kill_failed")
 		return fmt.Errorf("kill processes: %w", err)
@@ -278,7 +325,7 @@ func KillUserProcesses(localUser LocalUser) error {
 
 	logging.L.Info().
 		Str("operation", "kill_user_processes").
-		Str("username", sanitizeUsernameForLogging(localUser.Username)).
+		Str("username", SanitizeUsernameForLogging(localUser.Username)).
 		Time("timestamp", time.Now()).
 		Msg("processes_killed_successfully")
 
@@ -296,7 +343,7 @@ func RemoveUser(localUser LocalUser) error {
 		if errors.As(err, &unknownUserErr) {
 			logging.L.Info().
 				Str("operation", "remove_user").
-				Str("username", sanitizeUsernameForLogging(localUser.Username)).
+				Str("username", SanitizeUsernameForLogging(localUser.Username)).
 				Msg("user_not_found")
 			return nil // User doesn't exist, nothing to do
 		}
@@ -311,14 +358,14 @@ func RemoveUser(localUser LocalUser) error {
 
 	logging.L.Info().
 		Str("operation", "remove_user").
-		Str("username", sanitizeUsernameForLogging(localUser.Username)).
+		Str("username", SanitizeUsernameForLogging(localUser.Username)).
 		Time("timestamp", time.Now()).
 		Msg("user_remove_attempt")
 
 	if err := cmd.Run(); err != nil {
 		logging.L.Error().
 			Str("operation", "remove_user").
-			Str("username", sanitizeUsernameForLogging(localUser.Username)).
+			Str("username", SanitizeUsernameForLogging(localUser.Username)).
 			Err(err).
 			Msg("user_remove_failed")
 		return fmt.Errorf("userdel: %w", err)
@@ -326,7 +373,7 @@ func RemoveUser(localUser LocalUser) error {
 
 	logging.L.Info().
 		Str("operation", "remove_user").
-		Str("username", sanitizeUsernameForLogging(localUser.Username)).
+		Str("username", SanitizeUsernameForLogging(localUser.Username)).
 		Time("timestamp", time.Now()).
 		Msg("user_removed_successfully")
 

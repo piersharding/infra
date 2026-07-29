@@ -8,6 +8,7 @@ import {
   UserGroupIcon,
   UserIcon,
   Cog8ToothIcon,
+  Squares2X2Icon,
   XMarkIcon,
   Bars3Icon,
   UserCircleIcon,
@@ -113,6 +114,13 @@ export default function Dashboard({ children }) {
       icon: UserGroupIcon,
     },
     {
+      // Mapping Rules — admin-only nav link to rule-based access management.
+      name: 'Mapping Rules',
+      href: '/mapping-rules',
+      admin: true,  // only visible to admins since rules control who gets access
+      icon: Squares2X2Icon,
+    },
+    {
       name: 'Users',
       href: '/users',
       admin: true,
@@ -151,7 +159,7 @@ export default function Dashboard({ children }) {
                   onClick={() => setSidebarOpen(false)}
                   className={`
                       ${
-                        router.asPath.startsWith(item.href)
+                        (router.asPath === item.href || router.asPath.startsWith(item.href + '/'))
                           ? 'bg-gray-100/50 text-gray-800'
                           : 'bg-transparent text-gray-500/75 hover:text-gray-500'
                       }
@@ -159,7 +167,7 @@ export default function Dashboard({ children }) {
                 >
                   <item.icon
                     className={`${
-                      router.asPath.startsWith(item.href)
+                      (router.asPath === item.href || router.asPath.startsWith(item.href + '/'))
                         ? 'fill-blue-100 text-blue-500'
                         : 'fill-gray-50 text-gray-500/75 group-hover:text-gray-500'
                     }

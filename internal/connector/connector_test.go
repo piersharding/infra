@@ -370,7 +370,8 @@ type fakeAPIClient struct {
 	listGrantsError   error
 	listGrantsIndexes []int64
 
-	users map[uid.ID]api.User
+	users      map[uid.ID]api.User
+	groupUsers map[uid.ID][]uid.ID // group ID -> user IDs
 }
 
 func (f *fakeAPIClient) ListGrants(ctx context.Context, req api.ListGrantsRequest) (*api.ListResponse[api.Grant], error) {
@@ -387,6 +388,14 @@ func (f *fakeAPIClient) GetUser(ctx context.Context, id uid.ID) (*api.User, erro
 		return &user, nil
 	}
 	return &api.User{Name: "theuser@example.com"}, nil
+}
+
+// GetUsersInGroup returns the users in a group.
+func (f *fakeAPIClient) GetUsersInGroup(ctx context.Context, id uid.ID) ([]uid.ID, error) {
+	if users, ok := f.groupUsers[id]; ok {
+		return users, nil
+	}
+	return []uid.ID{}, nil
 }
 
 type fakeKubeClient struct {

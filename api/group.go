@@ -49,6 +49,14 @@ func (r UpdateUsersInGroupRequest) ValidationRules() []validate.ValidationRule {
 	}
 }
 
+// GetUsersInGroupResponse is the response body for GET /api/groups/{id}/users.
+// Returns all distinct identity (user) IDs that are members of the specified group.
+// Used by SSH connectors to resolve group-based access grants into per-user grants.
+type GetUsersInGroupResponse struct {
+	// Users contains the distinct user IDs assigned to this group.
+	Users []uid.ID `json:"users" note:"List of user IDs that are members of this group"`
+}
+
 func (req ListGroupsRequest) SetPage(page int) Paginatable {
 
 	req.PaginationRequest.Page = page
