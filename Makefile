@@ -4,7 +4,7 @@ REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.12
+TAG ?= 0.21.13
 # BUILDVERSION is for client side compatibility - fixed to 0.21.0
 BUILDVERSION ?= 0.21.0
 
