@@ -255,10 +255,12 @@ func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, gr
 	}
 
 	// Update password expiration for all existing managed users (not just newly created ones).
-	// This ensures existing users are fixed without manual intervention.
+	// This ensures existing users are fixed without manual intervention. It's best-effort
+	// housekeeping, not access control, so failures here (e.g. a stale managed user with a
+	// now-reserved username) must not fail the whole sync and trigger fail-closed grant removal.
 	var errs []error
 	if err := updateManagedUsersPasswordExpiration(ctx, localUsers); err != nil {
-		errs = append(errs, fmt.Errorf("update password expiration: %w", err))
+		logging.L.Warn().Err(err).Msg("update password expiration")
 	}
 	// attempt to kill any active sessions first, so that processes have time to
 	// exit before we try to remove the user.

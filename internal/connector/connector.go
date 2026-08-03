@@ -578,6 +578,7 @@ func syncGrantsToDestination(
 					con.lastSuccessfulSync = time.Now()
 				}
 				elapsed := time.Since(con.lastSuccessfulSync)
+				remaining := grace - elapsed
 				switch {
 				case elapsed > grace:
 					logging.L.Error().
@@ -588,11 +589,15 @@ func syncGrantsToDestination(
 					}
 					return fmt.Errorf("grant sync grace period of %s exceeded", grace)
 				case elapsed > grace/2:
-					remaining := grace - elapsed
 					logging.L.Warn().
 						Str("elapsed", elapsed.Round(time.Second).String()).
 						Str("remaining", remaining.Round(time.Second).String()).
 						Msg("grant sync has been failing; access will be removed if not recovered")
+				default:
+					logging.L.Info().
+						Str("elapsed", elapsed.Round(time.Second).String()).
+						Str("remaining", remaining.Round(time.Second).String()).
+						Msg("grant sync failing; time remaining before access is removed")
 				}
 			}
 		} else {
