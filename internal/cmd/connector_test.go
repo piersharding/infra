@@ -491,6 +491,7 @@ addr:
 ssh:
   group: the-group
   sshdConfigPath: /opt/sshd
+  lockInsteadOfRemove: true
 `,
 			expected: func() connector.Options {
 				return connector.Options{
@@ -511,8 +512,9 @@ ssh:
 					CACert:               "/path/to/cert",
 					CAKey:                "/path/to/key",
 					SSH: connector.SSHOptions{
-						Group:          "the-group",
-						SSHDConfigPath: "/opt/sshd",
+						Group:               "the-group",
+						SSHDConfigPath:      "/opt/sshd",
+						LockInsteadOfRemove: true,
 					},
 				}
 			},

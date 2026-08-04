@@ -32,6 +32,12 @@ type SSHOptions struct {
 	// ssh server that will call infra to authenticate users. Defaults to
 	// /etc/ssh/sshd_config.
 	SSHDConfigPath string `config:"sshdConfigPath"`
+
+	// LockInsteadOfRemove, when true, locks a user's local account instead of
+	// deleting it when their grant is revoked. The account and home directory
+	// are preserved, and login is restored automatically if the grant is
+	// reinstated. When false (default), the account is deleted as before.
+	LockInsteadOfRemove bool `config:"lockInsteadOfRemove"`
 }
 
 func runSSHConnector(ctx context.Context, opts Options) error {
@@ -242,6 +248,7 @@ func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, gr
 
 	// Compare that list to the grants to get a list to remove and a list to add
 	var toDelete []linux.LocalUser
+	var toUnlock []linux.LocalUser
 	for _, user := range localUsers {
 		if !user.IsManagedByInfra() {
 			continue
@@ -252,6 +259,9 @@ func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, gr
 			continue
 		}
 		delete(byUserID, infraUID)
+		// Re-grant may follow a prior LockInsteadOfRemove revoke; clearing the
+		// expiration unconditionally is a no-op for users that were never locked.
+		toUnlock = append(toUnlock, user)
 	}
 
 	// Update password expiration for all existing managed users (not just newly created ones).
@@ -263,20 +273,34 @@ func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, gr
 		logging.L.Warn().Err(err).Msg("update password expiration")
 	}
 	// attempt to kill any active sessions first, so that processes have time to
-	// exit before we try to remove the user.
+	// exit before we try to remove or lock the user.
 	for _, user := range toDelete {
 		if err := linux.KillUserProcesses(user); err != nil {
 			errs = append(errs, fmt.Errorf("kill user session %v: %w", user.Username, err))
 			continue
 		}
 	}
-	// now attempt to remove the user. If this fails it will be attempted again
+	// now attempt to remove or lock the user. If this fails it will be attempted again
 	for _, user := range toDelete {
+		if opts.LockInsteadOfRemove {
+			if err := linux.LockUser(user.Username); err != nil {
+				errs = append(errs, fmt.Errorf("lock user %v: %w", user.Username, err))
+				continue
+			}
+			logging.L.Info().Str("username", user.Username).Msg("locked user")
+			continue
+		}
 		if err := linux.RemoveUser(user); err != nil {
 			errs = append(errs, fmt.Errorf("remove user %v: %w", user.Username, err))
 			continue
 		}
 		logging.L.Info().Str("username", user.Username).Msg("removed user")
+	}
+	// clear any expiration set by a prior lock for users whose grant is still active
+	for _, user := range toUnlock {
+		if err := linux.UnlockUser(user.Username); err != nil {
+			errs = append(errs, fmt.Errorf("unlock user %v: %w", user.Username, err))
+		}
 	}
 
 	for _, grant := range byUserID {
