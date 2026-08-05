@@ -43,10 +43,6 @@ func (a *API) CreateGroup(rCtx access.RequestContext, r *api.CreateGroupRequest)
 		return nil, err
 	}
 
-	// A newly-created group can now match existing group mapping rules,
-	// so we re-evaluate the engine immediately to create access grants for it.
-	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
-
 	return group.ToAPI(), nil
 }
 
@@ -54,10 +50,6 @@ func (a *API) DeleteGroup(rCtx access.RequestContext, r *api.Resource) (*api.Emp
 	if err := access.DeleteGroup(rCtx, r.ID); err != nil {
 		return nil, err
 	}
-
-	// When a group is deleted, auto-grants with that group as the subject become orphaned.
-	// Trigger evaluation so cleanupStaleGrants removes them.
-	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
 
 	return &api.EmptyResponse{}, nil
 }

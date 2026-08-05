@@ -77,9 +77,15 @@ func (s *Server) GenerateRoutes() Routes {
 
 	// Group management endpoints — admin-only for create/delete; connector role allowed on get-users.
 	get(a, authn, "/api/groups", a.ListGroups)
-	post(a, authn, "/api/groups", a.CreateGroup)
+	add(a, authn, http.MethodPost, "/api/groups", route[api.CreateGroupRequest, *api.Group]{
+		routeSettings: routeSettings{evaluateMappingRules: true},
+		handler:       a.CreateGroup,
+	})
 	get(a, authn, "/api/groups/:id", a.GetGroup)
-	del(a, authn, "/api/groups/:id", a.DeleteGroup)
+	add(a, authn, http.MethodDelete, "/api/groups/:id", route[api.Resource, *api.EmptyResponse]{
+		routeSettings: routeSettings{evaluateMappingRules: true},
+		handler:       a.DeleteGroup,
+	})
 	patch(a, authn, "/api/groups/:id/users", a.UpdateUsersInGroup)
 	// GetUsersInGroup — returns member user IDs for group-based grant resolution by SSH connectors.
 	get(a, authn, "/api/groups/:id/users", a.GetUsersInGroup)
@@ -105,16 +111,34 @@ func (s *Server) GenerateRoutes() Routes {
 	get(a, authn, "/api/mapping-rules", a.ListMappingRules)
 	get(a, authn, "/api/mapping-rules/eval-status", a.GetMappingRuleEvalStatus)
 	get(a, authn, "/api/mapping-rules/:id", a.GetMappingRule)
-	post(a, authn, "/api/mapping-rules", a.CreateMappingRule)
-	put(a, authn, "/api/mapping-rules/:id", a.UpdateMappingRule)
-	del(a, authn, "/api/mapping-rules/:id", a.DeleteMappingRule)
+	add(a, authn, http.MethodPost, "/api/mapping-rules", route[api.CreateMappingRuleRequest, *api.MappingRule]{
+		routeSettings: routeSettings{evaluateMappingRules: true},
+		handler:       a.CreateMappingRule,
+	})
+	add(a, authn, http.MethodPut, "/api/mapping-rules/:id", route[api.UpdateMappingRuleRequest, *api.MappingRule]{
+		routeSettings: routeSettings{evaluateMappingRules: true},
+		handler:       a.UpdateMappingRule,
+	})
+	add(a, authn, http.MethodDelete, "/api/mapping-rules/:id", route[api.Resource, *api.EmptyResponse]{
+		routeSettings: routeSettings{evaluateMappingRules: true},
+		handler:       a.DeleteMappingRule,
+	})
 
 	// End of mapping rule routes — next route is destinations
 	get(a, authn, "/api/destinations", a.ListDestinations)
 	get(a, authn, "/api/destinations/:id", a.GetDestination)
-	post(a, authn, "/api/destinations", a.CreateDestination)
-	put(a, authn, "/api/destinations/:id", a.UpdateDestination)
-	del(a, authn, "/api/destinations/:id", a.DeleteDestination)
+	add(a, authn, http.MethodPost, "/api/destinations", route[api.CreateDestinationRequest, *api.Destination]{
+		routeSettings: routeSettings{evaluateMappingRules: true},
+		handler:       a.CreateDestination,
+	})
+	add(a, authn, http.MethodPut, "/api/destinations/:id", route[api.UpdateDestinationRequest, *api.Destination]{
+		routeSettings: routeSettings{evaluateMappingRules: true},
+		handler:       a.UpdateDestination,
+	})
+	add(a, authn, http.MethodDelete, "/api/destinations/:id", route[api.Resource, *api.EmptyResponse]{
+		routeSettings: routeSettings{evaluateMappingRules: true},
+		handler:       a.DeleteDestination,
+	})
 
 	add(a, authn, http.MethodPost, "/api/tokens", createTokenRoute)
 	post(a, authn, "/api/logout", a.Logout)
@@ -144,7 +168,10 @@ func (s *Server) GenerateRoutes() Routes {
 	// no auth required, org required
 	noAuthnWithOrg := &routeGroup{RouterGroup: apiGroup.Group("/"), authenticationOptional: true}
 
-	post(a, noAuthnWithOrg, "/api/login", a.Login)
+	add(a, noAuthnWithOrg, http.MethodPost, "/api/login", route[api.LoginRequest, *api.LoginResponse]{
+		routeSettings: routeSettings{evaluateMappingRules: true},
+		handler:       a.Login,
+	})
 	post(a, noAuthnWithOrg, "/api/password-reset-request", a.RequestPasswordReset)
 	post(a, noAuthnWithOrg, "/api/password-reset", a.VerifiedPasswordReset)
 
@@ -187,6 +214,7 @@ type routeSettings struct {
 	authenticationOptional     bool
 	organizationOptional       bool
 	idpSync                    bool // when true the user session will be syncronized with the identity provider on a timed interval
+	evaluateMappingRules       bool // when true, EvaluateMappingRulesAsync is called after the transaction commits
 	txnOptions                 *sql.TxOptions
 }
 
@@ -298,6 +326,12 @@ func wrapRoute[Req, Res any](a *API, routeID routeIdentifier, route route[Req, R
 		}
 		if err := completeTx(); err != nil {
 			return err
+		}
+
+		if route.evaluateMappingRules {
+			if org := authned.Organization; org != nil {
+				EvaluateMappingRulesAsync(a.server.db, org.ID)
+			}
 		}
 
 		if !route.omitFromTelemetry {

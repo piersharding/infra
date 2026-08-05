@@ -96,10 +96,6 @@ func (a *API) CreateMappingRule(rCtx access.RequestContext, r *api.CreateMapping
 		return nil, fmt.Errorf("create mapping rule: %w", err)
 	}
 
-	// A new mapping rule can match already-existing groups, so we re-evaluate to
-	// immediately create the corresponding access grants.
-	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
-
 	return mapping.ToAPI(), nil
 }
 
@@ -119,10 +115,6 @@ func (a *API) UpdateMappingRule(rCtx access.RequestContext, r *api.UpdateMapping
 	if err := access.UpdateMappingRule(rCtx, r.ID, mapping); err != nil {
 		return nil, fmt.Errorf("update mapping rule: %w", err)
 	}
-
-	// The updated mapping may now match different groups or produce different resource names,
-	// so we re-evaluate to update the grant set accordingly.
-	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
 
 	return mapping.ToAPI(), nil
 }
@@ -151,10 +143,6 @@ func (a *API) DeleteMappingRule(rCtx access.RequestContext, r *api.Resource) (*a
 	if err := access.DeleteMappingRule(rCtx, r.ID); err != nil {
 		return nil, err
 	}
-
-	// Deleting a mapping can revoke access for previously-matched groups, so we
-	// immediately re-run the engine which will detect and remove stale auto-grants.
-	EvaluateMappingRulesAsync(rCtx.DataDB, rCtx.DBTxn.OrganizationID())
 
 	return &api.EmptyResponse{}, nil
 }
