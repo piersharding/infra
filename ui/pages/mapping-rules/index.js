@@ -2,7 +2,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import useSWR, { mutate } from 'swr'
 import { useRouter } from 'next/router'
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 
 import {
   PlusIcon,
@@ -635,29 +635,16 @@ export default function GroupsMapping() {
             },
             // matchedGrants column shows a count of grants produced by this rule.
             // Hovering reveals a tooltip table with group name, privilege, and destination link
-            // for each grant. Uses fixed-position overlay (not popover) to avoid viewport clipping.
+            // for each grant. Uses absolute-position overlay relative to the cell.
             {
               id: 'matchedGrants',
               cell: info => {
                 const matchedGrants = info.row.original.matchedGrants || []
-                const hoverRef = useRef({ top: 0, left: 0 })
-                const containerRef = useRef(null)
-                const buttonRef = useRef(null)
                 const [isHovered, setIsHovered] = useState(false)
-
-                useEffect(() => {
-                  if (!buttonRef.current) return
-                  const rect = buttonRef.current.getBoundingClientRect()
-                  hoverRef.current = {
-                    top: rect.bottom - 8,
-                    left: rect.left + rect.width / 2,
-                  }
-                }, [matchedGrants])
 
                 return (
                   <div className='relative flex justify-center items-center gap-1'>
                     <span
-                      ref={buttonRef}
                       onMouseEnter={() => setIsHovered(true)}
                       onMouseLeave={() => setIsHovered(false)}
                       className='inline-flex items-center gap-0.5 text-xs font-medium text-gray-600 hover:text-blue-800 transition-colors cursor-help decoration-dashed underline-offset-2 hover:decoration-blue-400'
@@ -667,13 +654,11 @@ export default function GroupsMapping() {
                     </span>
                     {isHovered && matchedGrants.length > 0 && (
                       <div
-                        ref={containerRef}
                         onMouseEnter={() => setIsHovered(true)}
                         onMouseLeave={() => setIsHovered(false)}
-                        className='fixed z-[100] mt-2 w-max min-h-fit rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-xl'
+                        className='absolute z-[100] mt-2 w-max min-h-fit rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-xl'
                         style={{
-                          left: hoverRef.current.left,
-                          top: hoverRef.current.top,
+                          left: '50%',
                           transform: 'translateX(-50%)',
                         }}
                       >
