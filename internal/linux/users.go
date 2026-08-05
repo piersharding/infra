@@ -332,6 +332,55 @@ func KillUserProcesses(localUser LocalUser) error {
 	return nil
 }
 
+// LockUser expires a user's account immediately, blocking further login
+// (including public-key SSH auth via PAM account expiration checks, which a
+// password lock alone does not affect) while preserving the account and its
+// home directory so access can be restored later with UnlockUser.
+func LockUser(username string) error {
+	if err := validateUsername(username); err != nil {
+		return fmt.Errorf("invalid username: %w", err)
+	}
+
+	//nolint:gosec // username is validated above; exec.Command does not invoke a shell.
+	cmd := exec.Command("usermod", "--expiredate", "1970-01-01", username)
+	cmd.Stdout = logging.L
+	cmd.Stderr = logging.L
+
+	logging.L.Info().
+		Str("operation", "lock_user").
+		Str("username", SanitizeUsernameForLogging(username)).
+		Msg("locking_user_account")
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to lock user %s: %w", username, err)
+	}
+	return nil
+}
+
+// UnlockUser clears any account expiration set by LockUser, restoring login
+// access for a user whose grant has been reinstated. Safe to call on an
+// account that isn't locked.
+func UnlockUser(username string) error {
+	if err := validateUsername(username); err != nil {
+		return fmt.Errorf("invalid username: %w", err)
+	}
+
+	//nolint:gosec // username is validated above; exec.Command does not invoke a shell.
+	cmd := exec.Command("usermod", "--expiredate", "", username)
+	cmd.Stdout = logging.L
+	cmd.Stderr = logging.L
+
+	logging.L.Debug().
+		Str("operation", "unlock_user").
+		Str("username", SanitizeUsernameForLogging(username)).
+		Msg("unlocking_user_account")
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to unlock user %s: %w", username, err)
+	}
+	return nil
+}
+
 func RemoveUser(localUser LocalUser) error {
 	if err := validateUsername(localUser.Username); err != nil {
 		return fmt.Errorf("invalid username: %w", err)

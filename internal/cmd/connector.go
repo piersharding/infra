@@ -85,8 +85,9 @@ func defaultConnectorOptions() connector.Options {
 		},
 		Kind: "kubernetes",
 		SSH: connector.SSHOptions{
-			Group:          "infra-users",
-			SSHDConfigPath: "/etc/ssh/sshd_config",
+			Group:               "infra-users",
+			SSHDConfigPath:      "/etc/ssh/sshd_config",
+			LockInsteadOfRemove: false,
 		},
 		Server: connector.ServerOptions{
 			URL: types.URL{Scheme: "https", Host: "api.infrahq.com"},

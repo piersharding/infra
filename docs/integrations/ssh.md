@@ -101,6 +101,7 @@ The following dependencies must be installed:
 openssh-server
 useradd
 userdel
+usermod
 pkill
 ```
 
@@ -238,6 +239,21 @@ other settings for `useradd` can be customzied with `/etc/defaults/useradd`. See
 
 When a user's access is removed the user and their home directory will be removed from the system
 with `userdel`.
+
+#### Locking instead of removing
+
+Set `ssh.lockInsteadOfRemove: true` in `connector.yaml` to lock a user's account instead of
+deleting it when their access is revoked, preserving the account and home directory:
+
+```yaml
+ssh:
+  lockInsteadOfRemove: true
+```
+
+Locking expires the account immediately with `usermod --expiredate 1970-01-01`, which blocks
+login (including public-key authentication). If the user's access is later reinstated, the
+connector automatically clears the expiration on the next sync, restoring login without
+recreating the account.
 
 #### Password expiration
 

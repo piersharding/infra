@@ -59,6 +59,7 @@ func TestUpdateLocalUsers(t *testing.T) {
 pkill --signal KILL --uid four444
 userdel --remove three333
 userdel --remove four444
+usermod --expiredate  one111
 useradd --comment 'Ej,managed by infra' -m -p '*' -g infra-users two222
 `
 	assert.Equal(t, expected, string(actual))
@@ -107,6 +108,56 @@ func TestUpdateLocalUsers_RemoveFailed(t *testing.T) {
 pkill --signal KILL --uid three333
 userdel --remove failremove
 userdel --remove three333
+usermod --expiredate  one111
+useradd --comment 'Ej,managed by infra' -m -p '*' -g infra-users two222
+`
+	assert.Equal(t, expected, string(actual))
+}
+
+func TestUpdateLocalUsers_LockInsteadOfRemove(t *testing.T) {
+	logDir := t.TempDir()
+	logFile := filepath.Join(logDir, "users.log")
+	cwd, _ := os.Getwd()
+	t.Setenv("PATH", filepath.Join(cwd, "testdata/bin")+":"+os.Getenv("PATH"))
+	t.Setenv("TEST_CONNECTOR_USER_LOG_FILE", logFile)
+
+	etcPasswdFilename = "testdata/localusers-etcpasswd"
+	t.Cleanup(func() {
+		etcPasswdFilename = "/etc/passwd"
+	})
+
+	originalLookup := data.UserLookup
+	data.UserLookup = func(username string) (*user.User, error) {
+		return &user.User{Username: username}, nil
+	}
+	t.Cleanup(func() { data.UserLookup = originalLookup })
+
+	ctx := context.Background()
+	fakeClient := &fakeAPIClient{
+		users: map[uid.ID]api.User{
+			1111: {ID: 1111, Name: "one@example.com", SSHLoginName: "one111"},
+			2222: {ID: 2222, Name: "two@example.com", SSHLoginName: "two222"},
+		},
+	}
+	grants := []api.Grant{
+		{ID: 123, User: 1111, Privilege: "connect"},
+		{ID: 124, User: 2222, Privilege: "connect"},
+	}
+
+	opts := SSHOptions{Group: "infra-users", LockInsteadOfRemove: true}
+	err := updateLocalUsers(ctx, fakeClient, opts, grants)
+	assert.NilError(t, err)
+
+	actual, err := os.ReadFile(logFile)
+	assert.NilError(t, err)
+
+	// revoked users (three333, four444) are locked instead of removed; the
+	// still-granted managed user (one111) is unlocked (a no-op here).
+	expected := `pkill --signal KILL --uid three333
+pkill --signal KILL --uid four444
+usermod --expiredate 1970-01-01 three333
+usermod --expiredate 1970-01-01 four444
+usermod --expiredate  one111
 useradd --comment 'Ej,managed by infra' -m -p '*' -g infra-users two222
 `
 	assert.Equal(t, expected, string(actual))
