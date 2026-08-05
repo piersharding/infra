@@ -656,7 +656,7 @@ export default function GroupsMapping() {
                       <div
                         onMouseEnter={() => setIsHovered(true)}
                         onMouseLeave={() => setIsHovered(false)}
-                        className='absolute z-[100] mt-2 w-max min-h-fit rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-xl'
+                        className='absolute z-[100] mt-2 w-max max-w-[90vw] max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-xl'
                         style={{
                           left: '50%',
                           transform: 'translateX(-50%)',

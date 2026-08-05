@@ -1288,6 +1288,31 @@ INSERT INTO providers(id, name) VALUES (12345, 'okta');
 				assert.Equal(t, true, idxExists)
 			},
 		},
+		{
+			label: testCaseLine(addIdentitiesGroupsNotify().ID),
+			setup: func(t *testing.T, tx WriteTxn) {
+				// Create a test group to verify the trigger works
+				_, err := tx.Exec(`INSERT INTO groups (id, name, organization_id) VALUES (99999, 'test-group', 1)`)
+				assert.NilError(t, err)
+			},
+			cleanup: func(t *testing.T, tx WriteTxn) {
+				_, err := tx.Exec(`DELETE FROM groups WHERE id = 99999`)
+				assert.NilError(t, err)
+			},
+			expected: func(t *testing.T, tx WriteTxn) {
+				// Verify the trigger function exists
+				var funcExists bool
+				err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_proc WHERE proname = 'identities_groups_notify')`).Scan(&funcExists)
+				assert.NilError(t, err)
+				assert.Equal(t, true, funcExists)
+
+				// Verify the trigger exists
+				var triggerExists bool
+				err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname = 'identities_groups_notify_trigger')`).Scan(&triggerExists)
+				assert.NilError(t, err)
+				assert.Equal(t, true, triggerExists)
+			},
+		},
 	}
 
 	ids := make(map[string]struct{}, len(testCases))
