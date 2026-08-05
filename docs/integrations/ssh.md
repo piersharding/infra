@@ -101,6 +101,7 @@ The following dependencies must be installed:
 openssh-server
 useradd
 userdel
+usermod
 pkill
 ```
 
@@ -148,6 +149,8 @@ name: $DESTINATION_NAME
 endpointAddr: $DESTINATION_HOST
 server:
   accessKey: $INFRA_ACCESS_KEY
+ssh:
+  lockInsteadOfRemove: true  
 EOF
 sudo chmod 600 /etc/infra/connector.yaml
 sudo chown infra:infra /etc/infra/connector.yaml
@@ -238,6 +241,25 @@ other settings for `useradd` can be customzied with `/etc/defaults/useradd`. See
 
 When a user's access is removed the user and their home directory will be removed from the system
 with `userdel`.
+
+#### Locking instead of removing
+
+Set `ssh.lockInsteadOfRemove: true` in `connector.yaml` to lock a user's account instead of
+deleting it when their access is revoked, preserving the account and home directory:
+
+```yaml
+ssh:
+  lockInsteadOfRemove: true
+```
+
+Locking expires the account immediately with `usermod --expiredate 1970-01-01` and marks it
+locked in the account's GECOS comment field. `infra sshd auth-keys` (the `AuthorizedKeysCommand`)
+checks that marker directly and refuses to return the user's public key while it's set — this is
+what actually blocks SSH login, since `AuthorizedKeysCommand` runs as the unprivileged
+`AuthorizedKeysCommandUser` and can't read `/etc/shadow` to see the expiration date itself. The
+expiration date is set as defense in depth for non-SSH login paths. If the user's access is
+later reinstated, the connector automatically clears the lock on the next sync, restoring login
+without recreating the account.
 
 #### Password expiration
 
