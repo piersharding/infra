@@ -146,9 +146,18 @@ func verifyUserIsManagedByInfra(username string) error {
 	}
 
 	for _, lu := range localUsers {
-		if lu.Username == username && lu.IsManagedByInfra() {
-			return nil
+		if lu.Username != username || !lu.IsManagedByInfra() {
+			continue
 		}
+		// AuthorizedKeysCommand normally runs as an unprivileged user (see
+		// AuthorizedKeysCommandUser in sshd_config) that can't read /etc/shadow
+		// to see the account expiration set by linux.LockUser, or rely on sshd's
+		// PAM configuration to enforce it. The lock marker in the GECOS comment
+		// (/etc/passwd) is world-readable, so check it directly here instead.
+		if lu.IsLocked() {
+			return fmt.Errorf("user account is locked")
+		}
+		return nil
 	}
 	return fmt.Errorf("user is not managed by infra")
 }

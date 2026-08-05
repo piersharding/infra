@@ -28,6 +28,7 @@ type LocalUser struct {
 }
 
 const sentinelManagedByInfra = "managed by infra"
+const sentinelLocked = "locked"
 
 var ValidUsernameRegex = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,32}$`)
 
@@ -149,6 +150,14 @@ func SanitizeUsernameForLogging(username string) string {
 
 func (u LocalUser) IsManagedByInfra() bool {
 	return len(u.Info) > 1 && u.Info[1] == sentinelManagedByInfra
+}
+
+// IsLocked reports whether LockUser has marked this account locked. The
+// marker lives in the GECOS comment field (/etc/passwd), which is
+// world-readable, so callers that can't read /etc/shadow (e.g. an
+// AuthorizedKeysCommand run as an unprivileged user) can still check it.
+func (u LocalUser) IsLocked() bool {
+	return len(u.Info) > 2 && u.Info[2] == sentinelLocked
 }
 
 // ReadLocalUsers reads a file in /etc/passwd format and returns the list of
@@ -332,51 +341,56 @@ func KillUserProcesses(localUser LocalUser) error {
 	return nil
 }
 
-// LockUser expires a user's account immediately, blocking further login
-// (including public-key SSH auth via PAM account expiration checks, which a
-// password lock alone does not affect) while preserving the account and its
-// home directory so access can be restored later with UnlockUser.
-func LockUser(username string) error {
-	if err := validateUsername(username); err != nil {
+// LockUser expires a user's account and marks it locked in the GECOS
+// comment field, blocking further login. The comment marker lets
+// AuthorizedKeysCommand (internal/cmd/sshauthkeys.go) refuse the login
+// itself, since that command runs unprivileged and can't rely on
+// /etc/shadow or sshd's PAM configuration to enforce the expiration date.
+// The account and its home directory are preserved so access can be
+// restored later with UnlockUser. u must be IsManagedByInfra.
+func LockUser(u LocalUser) error {
+	if err := validateUsername(u.Username); err != nil {
 		return fmt.Errorf("invalid username: %w", err)
 	}
 
-	//nolint:gosec // username is validated above; exec.Command does not invoke a shell.
-	cmd := exec.Command("usermod", "--expiredate", "1970-01-01", username)
+	comment := fmt.Sprintf("%s,%s,%s", u.Info[0], sentinelManagedByInfra, sentinelLocked)
+	//nolint:gosec // username and comment are derived from validated/trusted local data; exec.Command does not invoke a shell.
+	cmd := exec.Command("usermod", "--expiredate", "1970-01-01", "--comment", comment, u.Username)
 	cmd.Stdout = logging.L
 	cmd.Stderr = logging.L
 
 	logging.L.Info().
 		Str("operation", "lock_user").
-		Str("username", SanitizeUsernameForLogging(username)).
+		Str("username", SanitizeUsernameForLogging(u.Username)).
 		Msg("locking_user_account")
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to lock user %s: %w", username, err)
+		return fmt.Errorf("failed to lock user %s: %w", u.Username, err)
 	}
 	return nil
 }
 
-// UnlockUser clears any account expiration set by LockUser, restoring login
-// access for a user whose grant has been reinstated. Safe to call on an
-// account that isn't locked.
-func UnlockUser(username string) error {
-	if err := validateUsername(username); err != nil {
+// UnlockUser clears the lock set by LockUser, restoring login access for a
+// user whose grant has been reinstated. Safe to call on an account that
+// isn't locked. u must be IsManagedByInfra.
+func UnlockUser(u LocalUser) error {
+	if err := validateUsername(u.Username); err != nil {
 		return fmt.Errorf("invalid username: %w", err)
 	}
 
-	//nolint:gosec // username is validated above; exec.Command does not invoke a shell.
-	cmd := exec.Command("usermod", "--expiredate", "", username)
+	comment := fmt.Sprintf("%s,%s", u.Info[0], sentinelManagedByInfra)
+	//nolint:gosec // username and comment are derived from validated/trusted local data; exec.Command does not invoke a shell.
+	cmd := exec.Command("usermod", "--expiredate", "", "--comment", comment, u.Username)
 	cmd.Stdout = logging.L
 	cmd.Stderr = logging.L
 
 	logging.L.Debug().
 		Str("operation", "unlock_user").
-		Str("username", SanitizeUsernameForLogging(username)).
+		Str("username", SanitizeUsernameForLogging(u.Username)).
 		Msg("unlocking_user_account")
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to unlock user %s: %w", username, err)
+		return fmt.Errorf("failed to unlock user %s: %w", u.Username, err)
 	}
 	return nil
 }

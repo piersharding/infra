@@ -59,7 +59,7 @@ func TestUpdateLocalUsers(t *testing.T) {
 pkill --signal KILL --uid four444
 userdel --remove three333
 userdel --remove four444
-usermod --expiredate  one111
+usermod --expiredate  --comment 'ka,managed by infra' one111
 useradd --comment 'Ej,managed by infra' -m -p '*' -g infra-users two222
 `
 	assert.Equal(t, expected, string(actual))
@@ -108,7 +108,7 @@ func TestUpdateLocalUsers_RemoveFailed(t *testing.T) {
 pkill --signal KILL --uid three333
 userdel --remove failremove
 userdel --remove three333
-usermod --expiredate  one111
+usermod --expiredate  --comment 'ka,managed by infra' one111
 useradd --comment 'Ej,managed by infra' -m -p '*' -g infra-users two222
 `
 	assert.Equal(t, expected, string(actual))
@@ -155,9 +155,9 @@ func TestUpdateLocalUsers_LockInsteadOfRemove(t *testing.T) {
 	// still-granted managed user (one111) is unlocked (a no-op here).
 	expected := `pkill --signal KILL --uid three333
 pkill --signal KILL --uid four444
-usermod --expiredate 1970-01-01 three333
-usermod --expiredate 1970-01-01 four444
-usermod --expiredate  one111
+usermod --expiredate 1970-01-01 --comment 'Zt,managed by infra,locked' three333
+usermod --expiredate 1970-01-01 --comment 'Zs,managed by infra,locked' four444
+usermod --expiredate  --comment 'ka,managed by infra' one111
 useradd --comment 'Ej,managed by infra' -m -p '*' -g infra-users two222
 `
 	assert.Equal(t, expected, string(actual))

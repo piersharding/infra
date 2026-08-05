@@ -654,6 +654,8 @@ endpointAddr: ${SSH_IP_ADDR}
 server:
   url: https://$(INFRA_IP_ADDR):9443
   accessKey: XXCONNECTOR_KEYXX
+ssh:
+  lockInsteadOfRemove: true
 endef
 export INFRA_SSH_CLIENT_CONFIG
 

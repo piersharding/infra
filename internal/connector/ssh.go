@@ -283,7 +283,7 @@ func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, gr
 	// now attempt to remove or lock the user. If this fails it will be attempted again
 	for _, user := range toDelete {
 		if opts.LockInsteadOfRemove {
-			if err := linux.LockUser(user.Username); err != nil {
+			if err := linux.LockUser(user); err != nil {
 				errs = append(errs, fmt.Errorf("lock user %v: %w", user.Username, err))
 				continue
 			}
@@ -298,7 +298,7 @@ func updateLocalUsers(ctx context.Context, client apiClient, opts SSHOptions, gr
 	}
 	// clear any expiration set by a prior lock for users whose grant is still active
 	for _, user := range toUnlock {
-		if err := linux.UnlockUser(user.Username); err != nil {
+		if err := linux.UnlockUser(user); err != nil {
 			errs = append(errs, fmt.Errorf("unlock user %v: %w", user.Username, err))
 		}
 	}

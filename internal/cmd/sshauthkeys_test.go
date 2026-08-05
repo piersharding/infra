@@ -41,6 +41,7 @@ func TestSSHDAuthKeysCmd(t *testing.T) {
 			{Name: "anyuser@example.com", AccessKey: "0000000002.notadminsecretnotadmin02"},
 			{Name: "otheruser@example.com"},
 			{Name: "nogrant@example.com"},
+			{Name: "lockeduser@example.com"},
 		},
 	}
 	setupServerOptions(t, &opts)
@@ -54,6 +55,7 @@ func TestSSHDAuthKeysCmd(t *testing.T) {
 		api.GrantRequest{UserName: "anyuser@example.com", Resource: "prodhost", Privilege: "connect"},
 		api.GrantRequest{UserName: "otheruser@example.com", Resource: "prodhost", Privilege: "connect"},
 		api.GrantRequest{UserName: "nogrant@example.com", Resource: "otherhost", Privilege: "connect"},
+		api.GrantRequest{UserName: "lockeduser@example.com", Resource: "prodhost", Privilege: "connect"},
 	)
 
 	pubKey := `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCxB1cFqocoje6xEGj3UOlNMo4b51ff7F7V4FzVsVyGk2iDYy/ZwuFfdAnKVQETCY/jwpKw6UQp7Sg1E5R9YljyCRjSGJXY1Tv07HJsYF8z4vVXpV15Sp4md9ExB0EGkdtagb10pX3lnj5vZSur6NvdsXWYh8ikZZydB3KKCV3ylgb2OOzGpSHD9MEc4b1LUyFAqB7zZeiccDYgIqwZ3spuX7Kt3vrC46H1Fv9yWjnZ4S1xJYHVgDwBTJE3rszVzX5ZHCbdvWMKBbvnzZlh8GBwxgoH4MEPnhTZSCk26BtFjSGyVG3CXsI0o4uJERw+oqSG/A45LN+qa0e+0O54VylIgploM0+inWDL7tInUjkFIFd6qhqxELGVpE8BOrw8ucW8xfmWyCISI9W9Z482HK2/SCuFWCJaPxHEOgLjYwB4aTEMbLSewRRRBUC1J4hmIp23Hu2yYuE7kC8w7zWptw43qLvWy4SAdCZFEpR+hSRD77nnsgabz4HGGnECAFwRXA0=`
@@ -64,6 +66,9 @@ func TestSSHDAuthKeysCmd(t *testing.T) {
 
 	pubKey = `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDPkW3mIACvMmXqbeGF/U2MY8jbQ5NT24tRL0cl+32vRMmIDGcEyLkWh98D9qJlwCIZ8vJahAI3sqYJRoIHkiaRTslWwAZWNnTJ3TzeKUn/g0xutASD4znmQhNk3OuKPyuDKRxvsOuBVzuKiNNeUWVf5v/4gPrmBffS19cPPlHG+TwHNzTvyvbLcZu+xE18x8eCM4uRam0wa4RfHrMtaqPb/kFGz7skXv0/JFCXKrc//dMKHbr/brjj7fKYFYbMG7k15LewfZ/fLqsbJsvuP8OTIE7195fKhL1Gln8AKOM1E0CLX9nxK7qx4MlrDgEJBbqikWb2kVKmpxwcA7UcoUbwKZb4/QrOUDy22aHnIErIl2is9IP8RfBdKgzmgT1QmVPcGHI4gBAPb279zw58nAVp58gzHvK/oTDlAD2zq87i/PeDSzdoVZe0zliKOXAVzLQGI+9vsZ+6URHBe6J+Tj+PxOD5sWduhepOa/UKF96+CeEg/oso4UHR83z5zR38idc=`
 	addUserPublicKeyByEmail(t, srv.DB(), "nogrant@example.com", pubKey)
+
+	pubKey = `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDDkS8PlXnO7N8Qmt+/cy+WJDYrwhFdifCpOtNmInVQBwoTLm+AOKQIRNrybB2t9UKwYmJ/LC/ewqN0+zpBjKGmsAWYTpC+ZdKRU6EFFNkFJcVyvnWz/Z+nYd0FhH5QI0bqlnu1tryRIX85wCJAXlgNlLWhbnDIyxANzKmA5Y8XX0HzZs6Wk4CvX1Px9GymU9pXu1Jkez6B0Jts6MWKTiY+23e7Fnl2F/iblFnF+jzTexizMs2+NyTm2r7ekWi9SZe9Fdm3Zg2vnI+HaktO7cTdblGwMRM2Ttm+oSWDm/ClTWcYYfuKgCD7NhwE7sw4muYcUcz7vdPW572G6hUH2MtD`
+	addUserPublicKeyByEmail(t, srv.DB(), "lockeduser@example.com", pubKey)
 
 	connectorOpts := connector.Options{
 		Name: "prodhost",
@@ -127,6 +132,12 @@ func TestSSHDAuthKeysCmd(t *testing.T) {
 			username:             "nogrant",
 			publicKeyFingerprint: "SHA256:dwF3R8L454kABUAJc+ZdJeaV2xbcXVJfb81tuv/1KLo",
 			expected:             "has not been granted access to this destination",
+		},
+		{
+			name:                 "auth failed user account locked",
+			username:             "lockeduser",
+			publicKeyFingerprint: "SHA256:A9vrZcAPEifpNIfTIU/paNwCHpcRKvn89+KKMDlWjPY",
+			expected:             "user account is locked",
 		},
 	}
 
