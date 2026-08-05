@@ -330,7 +330,7 @@ func wrapRoute[Req, Res any](a *API, routeID routeIdentifier, route route[Req, R
 
 		if route.evaluateMappingRules {
 			if org := authned.Organization; org != nil {
-				EvaluateMappingRulesAsync(a.server.db, org.ID)
+				evaluateMappingRulesAsyncFunc(a.server.db, org.ID)
 			}
 		}
 

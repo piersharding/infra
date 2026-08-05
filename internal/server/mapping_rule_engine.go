@@ -27,6 +27,11 @@ var (
 	evalPending = make(map[uid.ID]bool)
 )
 
+// evaluateMappingRulesAsyncFunc is the function called by wrapRoute after a successful
+// transaction commit when routeSettings.evaluateMappingRules is true. It is a variable
+// so that tests can replace it with a stub to verify the post-commit hook behavior.
+var evaluateMappingRulesAsyncFunc = EvaluateMappingRulesAsync
+
 // globalRoleReplacements holds globally configured role name replacements loaded
 // from BootstrapConfig.MappingRulesConfig.RoleReplacements at server startup.
 var globalRoleReplacements []models.MappingRuleReplacement
