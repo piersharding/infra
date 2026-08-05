@@ -233,6 +233,86 @@ func TestDeleteGrants(t *testing.T) {
 	})
 }
 
+func TestIdentitiesGroupsNotify(t *testing.T) {
+	runDBTests(t, func(t *testing.T, db *DB) {
+		t.Run("insert notifies listener", func(t *testing.T) {
+			ctx := context.Background()
+			listener, err := ListenForNotify(ctx, db, ListenForNotifyOptions{
+				GrantsByDestination: "any",
+				OrgID:               defaultOrganizationID,
+			})
+			assert.NilError(t, err)
+			t.Cleanup(func() {
+				assert.NilError(t, listener.Release(context.Background()))
+			})
+
+			tx := txnForTestCase(t, db, db.DefaultOrg.ID)
+
+			// Create a group
+			group := &models.Group{Name: "test-group-notify"}
+			err = CreateGroup(tx, group)
+			assert.NilError(t, err)
+
+			// Create a user
+			user := &models.Identity{Name: "test-user-notify@example.com"}
+			err = CreateIdentity(tx, user)
+			assert.NilError(t, err)
+
+			// Add user to group - this should trigger the notification
+			err = AddUsersToGroup(tx, group.ID, []uid.ID{user.ID})
+			assert.NilError(t, err)
+			assert.NilError(t, tx.Commit())
+
+			// Wait for notification with timeout
+			ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			defer cancel()
+			err = listener.WaitForNotification(ctx)
+			assert.NilError(t, err)
+		})
+
+		t.Run("delete notifies listener", func(t *testing.T) {
+			ctx := context.Background()
+			listener, err := ListenForNotify(ctx, db, ListenForNotifyOptions{
+				GrantsByDestination: "any",
+				OrgID:               defaultOrganizationID,
+			})
+			assert.NilError(t, err)
+			t.Cleanup(func() {
+				assert.NilError(t, listener.Release(context.Background()))
+			})
+
+			tx := txnForTestCase(t, db, db.DefaultOrg.ID)
+
+			// Create a group
+			group := &models.Group{Name: "test-group-notify-delete"}
+			err = CreateGroup(tx, group)
+			assert.NilError(t, err)
+
+			// Create a user
+			user := &models.Identity{Name: "test-user-notify-delete@example.com"}
+			err = CreateIdentity(tx, user)
+			assert.NilError(t, err)
+
+			// Add user to group first
+			err = AddUsersToGroup(tx, group.ID, []uid.ID{user.ID})
+			assert.NilError(t, err)
+			assert.NilError(t, tx.Commit())
+
+			// Now remove user from group - this should trigger the notification
+			tx2 := txnForTestCase(t, db, db.DefaultOrg.ID)
+			err = RemoveUsersFromGroup(tx2, group.ID, []uid.ID{user.ID})
+			assert.NilError(t, err)
+			assert.NilError(t, tx2.Commit())
+
+			// Wait for notification with timeout
+			ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			defer cancel()
+			err = listener.WaitForNotification(ctx)
+			assert.NilError(t, err)
+		})
+	})
+}
+
 func TestUpdateGrants(t *testing.T) {
 	runDBTests(t, func(t *testing.T, db *DB) {
 		otherOrg := &models.Organization{Name: "other", Domain: "other.example.org"}

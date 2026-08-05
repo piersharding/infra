@@ -116,6 +116,20 @@ func ListenForNotify(ctx context.Context, db *DB, opts ListenForNotifyOptions) (
 	switch {
 	case opts.GrantsByDestination != "":
 		listener.isMatchingNotify = func(payload string) error {
+			// Check if this is a group membership change notification
+			var membershipChange struct {
+				Type    string `json:"type"`
+				GroupID int64  `json:"group_id"`
+			}
+			if err := json.Unmarshal([]byte(payload), &membershipChange); err == nil {
+				if membershipChange.Type == "group_membership" {
+					// Accept all group membership changes — the connector will
+					// re-resolve groups to users on the next sync cycle
+					return nil
+				}
+			}
+
+			// Otherwise, parse as a grant and filter by destination
 			var grant grantJSON
 			err := json.Unmarshal([]byte(payload), &grant)
 			if err != nil {

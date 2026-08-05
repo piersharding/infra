@@ -103,6 +103,10 @@ func migrations() []*migrator.Migration {
 		// cleanupStaleGrants queries. Since auto_grant=true always implies CreatedBy=system,
 		// filtering on created_by is redundant.
 		addIndexOnGrantsAutoGrant(),
+		// Migration: adds trigger on identities_groups to notify connectors when group
+		// membership changes. This ensures SSH connectors (which must resolve groups to
+		// individual users) wake up immediately instead of waiting for the 5-minute timeout.
+		addIdentitiesGroupsNotify(),
 		// next one here, then run `go test -run TestMigrations ./internal/server/data -update`
 	}
 }
@@ -1448,6 +1452,46 @@ func addIndexOnGrantsAutoGrant() *migrator.Migration {
 			_, err := tx.Exec(`
 				CREATE INDEX IF NOT EXISTS idx_grants_auto_grant ON grants (auto_grant) WHERE auto_grant = true;
 			`)
+			return err
+		},
+	}
+}
+
+// addIdentitiesGroupsNotify creates a trigger on the identities_groups table that
+// notifies the grants channel when group membership changes. This ensures connectors
+// (especially SSH, which must resolve groups to individual users) wake up immediately
+// when users are added to or removed from groups, rather than waiting for the
+// 5-minute blocking request timeout.
+func addIdentitiesGroupsNotify() *migrator.Migration {
+	return &migrator.Migration{
+		ID: "2026-08-05T10:00",
+		Migrate: func(tx migrator.DB) error {
+			fn := `
+CREATE OR REPLACE FUNCTION identities_groups_notify() RETURNS trigger
+	LANGUAGE PLPGSQL
+	AS $$
+DECLARE
+	org_id bigint;
+	group_id_val bigint;
+BEGIN
+	group_id_val := COALESCE(NEW.group_id, OLD.group_id);
+	SELECT organization_id INTO org_id FROM groups WHERE id = group_id_val;
+	IF org_id IS NOT NULL THEN
+		PERFORM pg_notify(
+			current_schema() || '.grants_' || org_id,
+			json_build_object('type', 'group_membership', 'group_id', group_id_val)::text
+		);
+	END IF;
+	RETURN NULL;
+END; $$;
+
+DROP TRIGGER IF EXISTS identities_groups_notify_trigger ON identities_groups;
+
+CREATE TRIGGER identities_groups_notify_trigger
+AFTER INSERT OR DELETE ON identities_groups
+FOR EACH ROW EXECUTE FUNCTION identities_groups_notify();
+`
+			_, err := tx.Exec(fn)
 			return err
 		},
 	}

@@ -30,6 +30,24 @@ PERFORM pg_notify(current_schema() || '.grants_' || NEW.organization_id, row_to_
 RETURN NULL;
 END; $$;
 
+CREATE FUNCTION identities_groups_notify() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+	org_id bigint;
+	group_id_val bigint;
+BEGIN
+	group_id_val := COALESCE(NEW.group_id, OLD.group_id);
+	SELECT organization_id INTO org_id FROM groups WHERE id = group_id_val;
+	IF org_id IS NOT NULL THEN
+		PERFORM pg_notify(
+			current_schema() || '.grants_' || org_id,
+			json_build_object('type', 'group_membership', 'group_id', group_id_val)::text
+		);
+	END IF;
+	RETURN NULL;
+END; $$;
+
 CREATE FUNCTION listen_on_chan(chan text) RETURNS void
     LANGUAGE plpgsql
     AS $$
@@ -423,3 +441,5 @@ CREATE TRIGGER credreq_notify_insert_trigger AFTER INSERT ON destination_credent
 CREATE TRIGGER credreq_notify_update_trigger AFTER UPDATE ON destination_credentials FOR EACH ROW EXECUTE FUNCTION destination_credential_update_notify();
 
 CREATE TRIGGER grants_notify_trigger AFTER INSERT OR UPDATE ON grants FOR EACH ROW EXECUTE FUNCTION grants_notify();
+
+CREATE TRIGGER identities_groups_notify_trigger AFTER INSERT OR DELETE ON identities_groups FOR EACH ROW EXECUTE FUNCTION identities_groups_notify();
