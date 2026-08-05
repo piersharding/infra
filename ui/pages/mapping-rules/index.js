@@ -649,7 +649,7 @@ export default function GroupsMapping() {
                   if (!buttonRef.current) return
                   const rect = buttonRef.current.getBoundingClientRect()
                   hoverRef.current = {
-                    top: rect.bottom + window.scrollY - 8,
+                    top: rect.bottom - 8,
                     left: rect.left + rect.width / 2,
                   }
                 }, [matchedGrants])
