@@ -1,23 +1,12 @@
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
 
-# Stages used by the included SKA templates: lint, build, publish (+ the
-# built-in .post used by finaliser). `test` is ours.
 stages:
   - lint
   - build
   - test
   - scan
   - publish
-
-# ---------------------------------------------------------------------------
-# Go jobs
-#
-# artefact.skao.int/ska-cicd-runner:1.0.0 ships helm and docker but no Go
-# toolchain, so these two jobs override the image. golang:1.26 matches the
-# builder stage in images/infra/Dockerfile and provides the cgo that the
-# querylinter golangci-lint plugin needs to build.
-# ---------------------------------------------------------------------------
 
 .go_job_template:
   image: golang:1.26
@@ -40,8 +29,8 @@ go-lint:
   extends: .go_job_template
   stage: lint
   script:
-    # -v instead of the local default of --fix: CI must not rewrite source
-    - make go-lint LINT_ARGS=-v
+    # not the local default of --fix: CI must never rewrite source
+    - make go-lint GO_SWITCHES_FOR_GOLANGCI_LINT=-v
   artifacts:
     when: always
     paths:
@@ -74,19 +63,15 @@ go-test:
         coverage_format: cobertura
         path: build/reports/code-coverage.xml
 
-# ---------------------------------------------------------------------------
-# SKA templates
-#
-# oci-image pulls in oci-image-lint (lint), oci-image-build (build) and
-# oci-image-publish (publish, tag-gated).
-# ---------------------------------------------------------------------------
-
 include:
   - project: 'ska-telescope/templates-repository'
     file: 'gitlab-ci/includes/oci-image.gitlab-ci.yml'
+
   - project: 'ska-telescope/templates-repository'
     file: 'gitlab-ci/includes/helm-chart.gitlab-ci.yml'
+
   - project: 'ska-telescope/templates-repository'
     file: 'gitlab-ci/includes/release.gitlab-ci.yml'
+
   - project: 'ska-telescope/templates-repository'
     file: 'gitlab-ci/includes/finaliser.gitlab-ci.yml'

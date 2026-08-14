@@ -22,6 +22,7 @@ The Makefile uses several configurable variables that can be overridden:
 | `TAG` | from `.release` | Version tag for images and releases. Set by `.make/oci.mk`, so change it in `.release` rather than here |
 | `DOCKER_ENGINE` | `docker` | Container engine to use |
 | `DOCKER_REGISTRY` | `registry.gitlab.com/ska-telescope/external/infra` | Container registry URL |
+| `GITLAB_TOKEN` | (empty) | GitLab token for authentication |
 | `INFRA_ACCESS_KEY` | `06e294c1bb.f636105ae3142c1c896fe1f9` | Default admin access key |
 | `INFRA_PASSWORD` | `Passw0rd1!Thing` | Default admin password |
 
@@ -64,24 +65,22 @@ make docker-build TAG=dev
 
 This target:
 1. Runs `go fmt` and `go vet` on the codebase
-2. Builds the Infra server image from `images/infra/Dockerfile`: `$(DOCKER_REGISTRY)/infra:$(TAG)`
-3. Builds the UI image from `images/ui/Dockerfile`: `$(DOCKER_REGISTRY)/ui:$(TAG)`
-
-Both recipes live under `images/<name>/` and build from the **repository root**
-context, which is what `oci.mk` requires for a multi-image project. This is why
-the UI Dockerfile's `COPY` paths are prefixed with `ui/`.
-
-To build the same way CI does:
-
-```bash
-make oci-build-all      # builds every image under images/
-make oci-lint           # hadolint over both recipes
-```
+2. Builds the Infra server image: `$(DOCKER_REGISTRY)/infra:$(TAG)`
+3. Builds the UI image: `$(DOCKER_REGISTRY)/ui:$(TAG)`
 
 ### Publishing Container Images
 
-Publishing is done by the pipeline, not by hand. `oci-image-publish` runs on a
-git tag and pushes to the SKA registry. There is no `make docker-push` any more.
+1. **Login to the container registry:**
+
+   ```bash
+   make docker-login GITLAB_TOKEN=<your-token>
+   ```
+
+2. **Push the images:**
+
+   ```bash
+   make docker-push TAG=<0.21.n git tag>
+   ```
 
 ### Building Release Artifacts with GoReleaser
 
@@ -98,39 +97,74 @@ This creates a snapshot build in the `dist/` directory for verification. Artifac
 - macOS (amd64, arm64)
 - Windows (amd64)
 
-Several dev targets (`k8s-connector-key`, `infra-ssh-connector-key`,
-`infra-ssh-config`) consume `dist/infra_linux_amd64_v1/infra`, so run this
-first if you are setting up the SSH connector locally.
+#### Publishing Release Artifacts
+
+1. **Tag the release in Git:**
+
+   ```bash
+   make git-tag-and-push TAG=0.21.n
+   ```
+
+   This creates and pushes a `v0.21.n` git tag.
+
+2. **Build and publish to GitLab:**
+
+   ```bash
+   make release-artefacts TAG=<0.21.n git tag> GITLAB_TOKEN=<your-token>
+   ```
+
+   This uploads artifacts to the GitLab Package Registry.
 
 ### Complete Release Workflow
 
-Version state lives in `.release` and is propagated by the SKA release targets.
-
 ```bash
-# 1. Check where you are
-make show-version
+# 1. Build and verify images locally
+make docker-build TAG=<0.21.n git tag>
 
-# 2. Bump the version in .release
-make bump-patch-release        # or bump-minor-release / bump-major-release
+# 2. Test release artifacts locally
+make release-artefacts-local TAG=<0.21.n git tag>
 
-# 3. Propagate the version into the Helm charts
-make set-release
+# 3. Login to registry
+make docker-login GITLAB_TOKEN=$GITLAB_TOKEN
 
-# 4. Commit, push, and merge the bump
-git commit -am "release <version>" && git push
+# 4. Tag the release
+make git-tag-and-push TAG=<0.21.n git tag>
 
-# 5. From main, tag it - this is what triggers publishing
-make git-create-tag
-make git-push-tag
+# 5. Push container images
+make docker-push TAG=<0.21.n git tag>
+
+# 6. Publish release artifacts
+make release-artefacts TAG=<0.21.n git tag> GITLAB_TOKEN=$GITLAB_TOKEN
 ```
 
-Pushing the tag runs `oci-image-publish` and `helm-chart-publish`.
+---
 
-CLI binaries are still published by hand — there is no `raw-publish` stage yet:
 
-```bash
-make release-artefacts-local TAG=<0.21.n git tag>   # then upload dist/ manually
-```
+## Pipeline Machinery (add-on)
+
+The GitLab pipeline (`.gitlab-ci.yml`) is **additive** — it does not replace the
+manual flow above, which remains fully supported. It adds the SKA CI/CD
+makefile targets from the `.make` submodule plus a generic `go.mk`:
+
+| Target | What it does |
+|---|---|
+| `make oci-lint` | hadolint over `images/*/Dockerfile` |
+| `make oci-build-all` | builds every image under `images/` |
+| `make go-lint` | golangci-lint, incl. the querylinter plugin, with a JUnit report |
+| `make go-test` | gotestsum with JUnit + cobertura reports |
+| `make show-version` | current version from `.release` |
+
+Both Dockerfiles now live under `images/<name>/` and build from the
+**repository root** context, which is what `oci.mk` requires for a multi-image
+project — this is why the UI Dockerfile's `COPY` paths are prefixed with `ui/`.
+`make docker-build` is unchanged in behaviour and still produces the same image
+names and tags.
+
+`go.mk` is deliberately generic, written so it could move into
+`ska-cicd-makefile` unchanged. Everything infra-specific (binary name, ldflags,
+pinned tool versions, the querylinter plugin build, the test fixtures) is set in
+the top-level `Makefile` via `GO_*` variables and the `go-pre-lint` /
+`go-pre-test` hooks. Run `make long-help` to list them.
 
 ---
 

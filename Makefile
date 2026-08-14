@@ -43,33 +43,47 @@ INFRA_SERVER_URL ?= $(INFRA_IP_ADDR):9443
 
 DOCKER_ENGINE ?= docker
 DOCKER_CONTEXT ?= .
+GITLAB_TOKEN ?=
 
-LINT_ARGS ?= --fix
+OCI_IMAGE_BUILD_CONTEXT = $(PWD)
 
-# SKA CI/CD makefile machinery. base.mk transitively includes help.mk and
-# release.mk, so those must not be included again here.
+GO_BINARY_NAME ?= infra
+GO_CGO_ENABLED ?= 1
+GO_BUILD_GOOS ?= linux
+GO_GOLANGCI_LINT_VERSION ?= v1.64.8
+GO_GOTESTSUM_VERSION ?= v1.8.2
+GO_SWITCHES_FOR_GOLANGCI_LINT ?= --fix
+GO_TEST_REQUIRED_ENV ?= POSTGRESQL_CONNECTION
+GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(BUILDVERSION)" \
+					-X github.com/infrahq/infra/internal.TelemetryWriteKey="none" \
+					-linkmode external -extldflags "-static"
+
 include .make/base.mk
 include .make/oci.mk
 include .make/helm.mk
 
-# Go targets, namespaced so they can be lifted into ska-cicd-makefile later.
+# go.mk is generic - everything project specific is set below.
 include go.mk
 
-# Both OCI images build from the repository root, so the per-image directory
-# default in oci.mk is not usable here.
-OCI_IMAGE_BUILD_CONTEXT = $(PWD)
+# the querybuilder linter ships as a golangci-lint plugin and must be compiled
+# before the linter can load it - see .golangci.yml linters-settings.custom
+go-pre-lint:
+	@cd internal/tools/querylinter/cmd && $(GO_RUNNER) build -o querylinter.so -buildmode=plugin .
 
-# feed the local settings through to go.mk
-GO_BUILD_VERSION = $(BUILDVERSION)
-GO_SWITCHES_FOR_GOLANGCI_LINT = $(LINT_ARGS)
 # internal/server/testdata/pki/* is gitignored but the server tests need it.
-# gen-secrets creates the CA; the script then signs a localhost cert with it -
-# it fails without the CA, which is why test-all used to hide it behind `|| true`.
-GO_TEST_PRE_COMMAND = $(MAKE) gen-secrets && internal/server/testdata/pki/generate-localhost-cert.sh
+# gen-secrets creates the CA; the script then signs a localhost cert with it.
+go-pre-test:
+	@$(MAKE) gen-secrets
+	@internal/server/testdata/pki/generate-localhost-cert.sh || true
+
+go-pre-build:
+	@rm -f ./dist/infra_linux_amd64_v1/infra
+
+go-post-build:
+	@cp ./bin/infra ./dist/infra_linux_amd64_v1/infra
 
 # define overides for above variables in here
 -include PrivateRules.mak
-
 
 clean: clean-oci clean-secrets
 
@@ -80,65 +94,72 @@ deploy-local-no-test: build docker-build dev-oci dev-connector
 docker-login:
 	docker login $(DOCKER_HOST) -u$(REPOSITORY_USER) -p $(GITLAB_TOKEN)
 
-test: check-psql-env
-	POSTGRESQL_CONNECTION=$(POSTGRESQL_CONNECTION) go test -short ./...
-
-test-all: check-psql-env test-npm
-	internal/server/testdata/pki/generate-localhost-cert.sh || true
-	POSTGRESQL_CONNECTION=$(POSTGRESQL_CONNECTION) go test ./...
-# The Go implementations live in go.mk. These are compatibility aliases so
-# that existing workflows (and `docker-build: fmt vet`) keep working.
 test: GO_TEST_SWITCHES = -short
-test: go-test ## run the short go tests
-
-test-all: test-npm ## run all go and npm tests
-	$(MAKE) go-test
+test: go-test
 
 test-npm: ## run npm tests
 	cd ui && npm test
+
+test-all: go-test test-npm
 
 # update the expected command output file
 test/update:
 	go test ./internal/cmd -test.update-golden
 
-fmt: go-format ## Run go fmt against code.
+fmt: go-format
 
-vet: go-vet ## Run go vet against code.
+vet: go-vet
 
-GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(BUILDVERSION)" \
-					-X github.com/infrahq/infra/internal.TelemetryWriteKey="none" \
-					-linkmode external -extldflags "-static"
-build: ## build infra
-	mkdir -p bin && rm -rf bin/infra && rm -f dist/infra_linux_amd64_v1/infra
-	CGO_ENABLED=1 GOOS=linux go build -o bin/infra -ldflags '$(GO_BUILD_LDFLAGS)' .
-	ls -latr bin/
-	./bin/infra --help
-	cp ./bin/infra ./dist/infra_linux_amd64_v1/infra
 build: go-build ## build infra
+	./bin/infra --help
 
-.PHONY: bin/infra test test-all fmt vet build
-bin/infra: go-build ## build local bin/infra
+.PHONY: bin/infra
+bin/infra: build ## build local bin/infra
 
 #############################################################################
-# Infra Release Process
+# Infra Release Process - steps:
 #############################################################################
-# Releasing is driven by the GitLab pipeline, not by this Makefile:
-#
-#   1. make bump-patch-release   (or bump-minor-release / bump-major-release)
-#   2. git commit && git push && merge
-#   3. make git-create-tag && make git-push-tag
-#
-# Pushing the tag runs oci-image-publish and helm-chart-publish. Use
-# `make show-version` to see the current version from .release.
-#
-# Still done by hand: CLI binaries via goreleaser (release-artefacts-local
-# below, then upload) - there is no raw-publish stage yet.
+#  1. set $TAG
+#  2. make set-charts
+#  3. git commit && git push
+#  4. merge
+#  5. checkout main
+#  6. make git-tag-and-push
+#  7. make docker-build && make docker-push
+#  8. make release-artefacts-local
+#  9. make release-artefacts
 #############################################################################
+
+version: ## current image version
+	@echo "$(TAG)"
+
+# add the git tag based on $TAG, and push.  This is the tag that goreleaser will use
+git-tag-and-push:
+	git tag v$(TAG)
+	git push --tags
+
+# set the Helm Chart release
+set-release-chart:
+	@if [[ -f "charts/$(CHART_NAME)/Chart.yaml" ]]; then \
+	    sed -i.x -e "s/^version:.*/version: $(TAG)/g" charts/$(CHART_NAME)/Chart.yaml; \
+	    sed -i.x -e "s/^appVersion:.*/appVersion: $(TAG)/g" charts/$(CHART_NAME)/Chart.yaml; \
+	fi
+	@rm -f charts/*/Chart.yaml.x
+	@grep "version:" charts/$(CHART_NAME)/Chart.yaml
+	@grep "appVersion:" charts/$(CHART_NAME)/Chart.yaml
+
+set-charts: # set the chart versions
+	make set-release-chart CHART_NAME=infra-server
+	make set-release-chart CHART_NAME=infra
 
 # must install goreleaser first - https://goreleaser.com/install/
 release-artefacts-local: ## build the release artefacts locally to test what will happen
 	rm -rf dist
 	RELEASE_NAME=v$(TAG) BUILDVERSION=$(BUILDVERSION) goreleaser release --snapshot --clean
+
+release-artefacts: ## build the release artefacts and publish ti gitlab
+	rm -rf dist
+	RELEASE_NAME=v$(TAG) BUILDVERSION=$(BUILDVERSION) GITLAB_TOKEN=$(GITLAB_TOKEN) goreleaser release --verbose --clean --skip announce,validate
 
 # Both recipes live under images/<name>/ and build from the repository root
 # context, matching what oci.mk does for oci-build-all.
@@ -160,6 +181,10 @@ npm-update:
 	cd ui && npm update  --legacy-peer-deps
 	cd ui && npm audit fix  --legacy-peer-deps
 	cd ui && npm audit fix --force  --legacy-peer-deps
+
+docker-push:
+	$(DOCKER_ENGINE) push $(DOCKER_REGISTRY)/infra:$(TAG)
+	$(DOCKER_ENGINE) push $(DOCKER_REGISTRY)/ui:$(TAG)
 
 load:
 	minikube image load --daemon --overwrite $(DOCKER_REGISTRY)/infra:$(TAG)

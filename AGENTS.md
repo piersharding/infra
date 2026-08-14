@@ -163,22 +163,29 @@ npm run build   # production build
 
 ### CI/CD — GitLab (`.gitlab-ci.yml`)
 
-This is the authoritative pipeline. It uses the SKAO CI templates from
+**Additive.** The pipeline sits alongside the manual release flow documented in
+`readme-dev.md`; it does not replace it. Every pre-existing Make target
+(`docker-build`, `docker-push`, `docker-login`, `set-charts`,
+`git-tag-and-push`, `release-artefacts`, `release-artefacts-local`, `version`)
+still works exactly as before. Uses the SKAO CI templates from
 `ska-telescope/templates-repository` plus the `.make` submodule
-(`ska-cicd-makefile`). Default job image is
-`artefact.skao.int/ska-cicd-runner:1.0.0`.
+(`ska-cicd-makefile`).
 
 | Job | Stage | Purpose |
 |---|---|---|
-| `go-lint` | lint | `make go-lint` — golangci-lint incl. the querylinter plugin. Overrides image to `golang:1.26` (the runner has no Go) |
+| `go-lint` | lint | `make go-lint` — golangci-lint incl. the querylinter plugin. Image `golang:1.26` (the SKA runner has no Go) |
 | `go-test` | test | `make go-test` — gotestsum with a `postgres:14-alpine` service; JUnit + cobertura reports |
 | `oci-image-lint` | lint | hadolint over `images/*/Dockerfile` |
 | `oci-image-build` | build | `make oci-build-all` — builds the `infra` and `ui` images |
 | `oci-image-publish` | publish | tag-gated push to the SKA registry |
 | `helm-chart-*` | lint/build/publish | `charts/infra`, `charts/infra-server` |
 
-Go targets live in `go.mk` (namespaced `go-*`, written to SKA conventions so it
-can be contributed to `ska-cicd-makefile`). Version state lives in `.release`.
+`go.mk` is **generic** — written so it could move into `ska-cicd-makefile`
+unchanged. It contains no project specifics: the binary name, ldflags, pinned
+tool versions, `GO_TEST_REQUIRED_ENV` and the `go-pre-lint` / `go-pre-test`
+hooks (querylinter plugin build, test fixture generation) are all set in the
+top-level `Makefile`. Extend it by overriding `go-pre-<target>` /
+`go-post-<target>`, not by editing `go.mk`. Version state lives in `.release`.
 
 ### Legacy GitHub workflows (`.github/workflows/`)
 
