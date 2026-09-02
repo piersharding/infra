@@ -7,14 +7,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"testing"
-
 	"strings"
+	"testing"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/infrahq/infra/api"
-
 	"github.com/infrahq/infra/internal/server/data"
 	"github.com/infrahq/infra/internal/server/models"
 )
@@ -134,7 +132,7 @@ func TestAPI_GetMappingRule(t *testing.T) {
 	routes.ServeHTTP(createResp, req)
 
 	var created api.MappingRule
-	json.NewDecoder(createResp.Body).Decode(&created)
+	assert.NilError(t, json.NewDecoder(createResp.Body).Decode(&created))
 
 	tests := []struct {
 		name       string
@@ -185,7 +183,7 @@ func TestAPI_UpdateMappingRule(t *testing.T) {
 	routes.ServeHTTP(createResp, req)
 
 	var created api.MappingRule
-	json.NewDecoder(createResp.Body).Decode(&created)
+	assert.NilError(t, json.NewDecoder(createResp.Body).Decode(&created))
 
 	updateReq := api.UpdateMappingRuleRequest{
 		ID:               created.ID,
@@ -203,7 +201,7 @@ func TestAPI_UpdateMappingRule(t *testing.T) {
 	routes.ServeHTTP(updateResp, req2)
 
 	var updated api.MappingRule
-	json.NewDecoder(updateResp.Body).Decode(&updated)
+	assert.NilError(t, json.NewDecoder(updateResp.Body).Decode(&updated))
 
 	assert.Equal(t, updated.RuleName, "updated-rule")
 	assert.Equal(t, updated.SourceGroupRegex, "^ops-(.*)$")
@@ -230,7 +228,7 @@ func TestAPI_DeleteMappingRule(t *testing.T) {
 	routes.ServeHTTP(createResp, req)
 
 	var created api.MappingRule
-	json.NewDecoder(createResp.Body).Decode(&created)
+	assert.NilError(t, json.NewDecoder(createResp.Body).Decode(&created))
 
 	resp := httptest.NewRecorder()
 	deleteReq := httptest.NewRequest(http.MethodDelete, "/api/mapping-rules/"+created.ID.String(), nil)
@@ -272,7 +270,7 @@ func TestAPI_ListMappingRules(t *testing.T) {
 		routes.ServeHTTP(resp, req)
 
 		var created api.MappingRule
-		json.NewDecoder(resp.Body).Decode(&created)
+		assert.NilError(t, json.NewDecoder(resp.Body).Decode(&created))
 		_ = created
 	}
 
@@ -286,7 +284,7 @@ func TestAPI_ListMappingRules(t *testing.T) {
 		Count int               `json:"count"`
 		Items []api.MappingRule `json:"items"`
 	}
-	json.NewDecoder(resp.Body).Decode(&listResp)
+	assert.NilError(t, json.NewDecoder(resp.Body).Decode(&listResp))
 
 	assert.Assert(t, len(listResp.Items) >= 3, "expected at least 3 mappings, got %d", len(listResp.Items))
 }
@@ -312,7 +310,7 @@ func TestAPI_MappingRuleRequiresAdminAuth(t *testing.T) {
 	routes.ServeHTTP(createResp, req)
 
 	var created api.MappingRule
-	json.NewDecoder(createResp.Body).Decode(&created)
+	assert.NilError(t, json.NewDecoder(createResp.Body).Decode(&created))
 
 	// Try to delete as non-admin — no auth header at all.
 	resp2 := httptest.NewRecorder()
@@ -348,7 +346,7 @@ func TestAPI_CreateMappingRuleDuplicateName(t *testing.T) {
 		"first rule creation status = %d", createResp.Code)
 
 	var firstMapping api.MappingRule
-	json.NewDecoder(createResp.Body).Decode(&firstMapping)
+	assert.NilError(t, json.NewDecoder(createResp.Body).Decode(&firstMapping))
 
 	// Create second mapping with the SAME name.
 	secondReq := api.CreateMappingRuleRequest{
@@ -366,11 +364,12 @@ func TestAPI_CreateMappingRuleDuplicateName(t *testing.T) {
 	routes.ServeHTTP(createResp2, req2)
 
 	// Document the current behavior: either 409 Conflict (duplicate rejected) or 201/200 (allowed).
-	if createResp2.Code == http.StatusConflict || createResp2.Code == http.StatusBadRequest {
+	switch createResp2.Code {
+	case http.StatusConflict, http.StatusBadRequest:
 		t.Logf("duplicate rule_name correctly rejected with status %d", createResp2.Code)
-	} else if createResp2.Code == http.StatusCreated || createResp2.Code == http.StatusOK {
+	case http.StatusCreated, http.StatusOK:
 		var secondMapping api.MappingRule
-		json.NewDecoder(createResp2.Body).Decode(&secondMapping)
+		assert.NilError(t, json.NewDecoder(createResp2.Body).Decode(&secondMapping))
 		t.Logf("duplicate rule_name allowed — created id=%s (same name as %s)", secondMapping.ID.String(), firstMapping.ID.String())
 
 		// Verify both rules exist and are retrievable.
@@ -384,7 +383,7 @@ func TestAPI_CreateMappingRuleDuplicateName(t *testing.T) {
 			Count int               `json:"count"`
 			Items []api.MappingRule `json:"items"`
 		}
-		json.NewDecoder(resp.Body).Decode(&listResp)
+		assert.NilError(t, json.NewDecoder(resp.Body).Decode(&listResp))
 		assert.Assert(t, len(listResp.Items) >= 2, "expected at least 2 rules with same name, got %d", len(listResp.Items))
 
 		var foundFirst, foundSecond bool
@@ -397,7 +396,7 @@ func TestAPI_CreateMappingRuleDuplicateName(t *testing.T) {
 			}
 		}
 		assert.Assert(t, foundFirst && foundSecond, "both rules should be retrievable by ID despite duplicate names")
-	} else {
+	default:
 		t.Errorf("unexpected status for duplicate rule_name: %d — body: %s", createResp2.Code, createResp2.Body.String())
 	}
 }
@@ -439,7 +438,7 @@ func TestAPI_ListMappingRulesByNameFilter(t *testing.T) {
 		Count int               `json:"count"`
 		Items []api.MappingRule `json:"items"`
 	}
-	json.NewDecoder(resp.Body).Decode(&allListResp)
+	assert.NilError(t, json.NewDecoder(resp.Body).Decode(&allListResp))
 	assert.Assert(t, len(allListResp.Items) >= 3, "expected at least 3 rules total, got %d", len(allListResp.Items))
 
 	// Filter by name containing "alpha" — should return only alpha-team-access.
@@ -453,7 +452,7 @@ func TestAPI_ListMappingRulesByNameFilter(t *testing.T) {
 		Count int               `json:"count"`
 		Items []api.MappingRule `json:"items"`
 	}
-	json.NewDecoder(respAlpha.Body).Decode(&alphaListResp)
+	assert.NilError(t, json.NewDecoder(respAlpha.Body).Decode(&alphaListResp))
 	assert.Assert(t, len(alphaListResp.Items) == 1, "expected exactly 1 rule matching 'alpha', got %d; result: %+v", len(alphaListResp.Items), alphaListResp.Items)
 
 	if len(alphaListResp.Items) > 0 {
@@ -471,7 +470,7 @@ func TestAPI_ListMappingRulesByNameFilter(t *testing.T) {
 		Count int               `json:"count"`
 		Items []api.MappingRule `json:"items"`
 	}
-	json.NewDecoder(respOps.Body).Decode(&opsListResp)
+	assert.NilError(t, json.NewDecoder(respOps.Body).Decode(&opsListResp))
 	assert.Assert(t, len(opsListResp.Items) == 1, "expected exactly 1 rule matching 'ops', got %d", len(opsListResp.Items))
 
 	if len(opsListResp.Items) > 0 {
@@ -489,7 +488,7 @@ func TestAPI_ListMappingRulesByNameFilter(t *testing.T) {
 		Count int               `json:"count"`
 		Items []api.MappingRule `json:"items"`
 	}
-	json.NewDecoder(respNone.Body).Decode(&noneListResp)
+	assert.NilError(t, json.NewDecoder(respNone.Body).Decode(&noneListResp))
 	assert.Equal(t, len(noneListResp.Items), 0, "expected 0 rules matching 'nonexistent', got %d", len(noneListResp.Items))
 }
 
@@ -516,7 +515,7 @@ func TestAPI_CreateMappingRuleAutoAnchoring(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, resp.Code, "body: %s", resp.Body.String())
 
 	var created api.MappingRule
-	json.NewDecoder(resp.Body).Decode(&created)
+	assert.NilError(t, json.NewDecoder(resp.Body).Decode(&created))
 
 	// The stored regex must have the ^ anchor added.
 	assert.Assert(t, strings.HasPrefix(created.SourceGroupRegex, "^"),

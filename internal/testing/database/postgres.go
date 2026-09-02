@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -93,11 +94,8 @@ func PostgresDriver(t TestingT, schemaSuffix string) *Driver {
 const pgDeadlockCode = "40P01"
 
 func isDeadlockError(err error) bool {
-	if err == nil {
-		return false
-	}
-	pgErr, ok := err.(*pgconn.PgError)
-	return ok && pgErr.Code == pgDeadlockCode
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgDeadlockCode
 }
 
 type Driver struct {

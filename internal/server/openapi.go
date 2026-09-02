@@ -3,11 +3,6 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/infrahq/infra/api"
-	"github.com/infrahq/infra/internal"
-	"github.com/infrahq/infra/internal/openapi3"
-	"github.com/infrahq/infra/internal/validate"
-	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"net/http"
 	"os"
@@ -16,6 +11,13 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+
+	"github.com/infrahq/infra/api"
+	"github.com/infrahq/infra/internal"
+	"github.com/infrahq/infra/internal/openapi3"
+	"github.com/infrahq/infra/internal/validate"
 )
 
 func GenerateOpenAPIDoc() openapi3.Doc {

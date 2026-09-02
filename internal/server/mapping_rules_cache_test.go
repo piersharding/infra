@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
 	"time"
 
 	"gotest.tools/v3/assert"
@@ -92,7 +91,8 @@ func TestEvaluateMappingRulesPopulatesCacheForAllRules(t *testing.T) {
 			continue
 		}
 
-		grants := val.([]api.MappingRuleGrant)
+		grants, ok := val.([]api.MappingRuleGrant)
+		assert.Assert(t, ok, "cache entry has unexpected type %T", val)
 
 		// The matching rule should have exactly 1 matched grant.
 		if rule.RuleName == "matching-rule" {
@@ -178,7 +178,7 @@ func TestListMappingRulesGrantsCountWithMatchingGroups(t *testing.T) {
 		Count int               `json:"count"`
 		Items []api.MappingRule `json:"items"`
 	}
-	json.NewDecoder(resp.Body).Decode(&listResp)
+	assert.NilError(t, json.NewDecoder(resp.Body).Decode(&listResp))
 
 	// We have 2 rules. Both should show grants > 0 because both matched groups created auto-grants.
 	assert.Equal(t, len(listResp.Items), 2, "expected 2 rules in list response")
@@ -252,7 +252,7 @@ func TestListMappingRulesMatchedGrantsEmptyForNoMatchingGroups(t *testing.T) {
 		Count int               `json:"count"`
 		Items []api.MappingRule `json:"items"`
 	}
-	json.NewDecoder(resp.Body).Decode(&listResp)
+	assert.NilError(t, json.NewDecoder(resp.Body).Decode(&listResp))
 
 	assert.Equal(t, len(listResp.Items), 1)
 	if len(listResp.Items[0].MatchedGrants) != 0 {
@@ -318,7 +318,8 @@ func TestEvaluateMappingRulesAsyncPopulatesCache(t *testing.T) {
 	val, ok := MRGrantsCache.Load(ruleKey)
 	assert.Assert(t, ok, "expected cache entry for async-evaluated rule %q (key=%s); status success=%v err=%s", rule.RuleName, ruleKey, status.Success, status.Error)
 
-	grants := val.([]api.MappingRuleGrant)
+	grants, ok := val.([]api.MappingRuleGrant)
+	assert.Assert(t, ok, "cache entry has unexpected type %T", val)
 	assert.Equal(t, len(grants), 1, "expected 1 matched grant from async eval, got %d: %+v", len(grants), grants)
 	assert.Equal(t, grants[0].GroupName, group.Name)
 }

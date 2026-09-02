@@ -157,12 +157,10 @@ func TestCleanupOrphanedGroups_NoRulesDropsAllIDPGroups(t *testing.T) {
 	// Verify ALL IDP-synced groups were cleaned up (all should be soft-deleted).
 	for _, name := range idpGroups {
 		stored, _ := data.GetGroup(tx, data.GetGroupOptions{ByName: name})
-		if stored != nil && !stored.DeletedAt.Valid {
-			// Group still exists and is NOT deleted → cleanup failed for this group
-			gotassert.Assert(t, false, "expected '%s' to be cleaned up; still exists", name)
-		} else if stored == nil {
+		switch {
+		case stored == nil:
 			continue // not found = properly cleaned up or never existed
-		} else {
+		case !stored.DeletedAt.Valid:
 			gotassert.Assert(t, false, "expected '%s' to be cleaned up; still exists: %+v", name, stored)
 		}
 	}

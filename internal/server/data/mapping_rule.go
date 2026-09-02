@@ -36,8 +36,6 @@ func CreateMappingRule(tx WriteTxn, mapping *models.MappingRule) error {
 	if err := validateMappingRule(mapping); err != nil {
 		return err
 	}
-	mapping.OnInsert()
-	setOrg(tx, mapping)
 	return insert(tx, (*mappingRulesTable)(mapping))
 }
 
@@ -47,7 +45,6 @@ func UpdateMappingRule(tx WriteTxn, mapping *models.MappingRule) error {
 	if err := validateMappingRule(mapping); err != nil {
 		return err
 	}
-	mapping.OnUpdate()
 	return update(tx, (*mappingRulesTable)(mapping))
 }
 
@@ -149,7 +146,7 @@ func ListMappingRules(tx ReadTxn, opts ListMappingRulesOptions) ([]models.Mappin
 		mappings = append(mappings, *mapping)
 	}
 
-	return mappings, nil
+	return mappings, rows.Err()
 }
 
 // validateMappingRule enforces business rules on the model before DB persistence:
