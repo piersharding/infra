@@ -293,13 +293,16 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 
 	bearerToken := k8s.BearerTokenSource()
 
-	// /version is readable by any authenticated identity, so this reports on
-	// the connector's credentials without depending on its permissions.
+	// SelfSubjectReview is available to any authenticated identity through the
+	// system:basic-user role, so this reports on the connector's credentials
+	// without depending on its permissions. Unlike the unversioned /version
+	// endpoint it cannot be disabled and it names the identity the token
+	// resolved to, so the check cannot pass anonymously.
 	readyCheck := &credentialCheck{
 		// kept below the probe timeout so a slow API server fails the check
 		// rather than blocking subsequent probes on the cache lock.
 		client:      &http.Client{Transport: proxyTransport, Timeout: 3 * time.Second},
-		url:         kubeAPIAddr.JoinPath("version").String(),
+		url:         kubeAPIAddr.JoinPath("apis", "authorization.k8s.io", "v1", "selfsubjectreviews").String(),
 		bearerToken: bearerToken,
 		interval:    30 * time.Second,
 	}

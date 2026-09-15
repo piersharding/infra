@@ -290,9 +290,12 @@ func TestProxyMiddleware_BearerTokenUnavailable(t *testing.T) {
 }
 
 func TestCredentialCheck(t *testing.T) {
+	const authenticated = `{"status":{"userInfo":{"username":"system:serviceaccount:infrahq:connector","groups":["system:serviceaccounts","system:authenticated"]}}}`
+
 	type testCase struct {
 		name        string
 		statusCode  int
+		body        string
 		bearerToken bearerTokenSource
 		expectedErr string
 	}
@@ -300,7 +303,8 @@ func TestCredentialCheck(t *testing.T) {
 	testCases := []testCase{
 		{
 			name:       "credentials accepted",
-			statusCode: http.StatusOK,
+			statusCode: http.StatusCreated,
+			body:       authenticated,
 		},
 		{
 			name:        "credentials expired",
@@ -313,8 +317,31 @@ func TestCredentialCheck(t *testing.T) {
 			expectedErr: "rejected the connector credentials",
 		},
 		{
+			name:        "endpoint unavailable",
+			statusCode:  http.StatusNotFound,
+			expectedErr: "credential check failed",
+		},
+		{
+			name:        "api server error",
+			statusCode:  http.StatusInternalServerError,
+			expectedErr: "credential check failed",
+		},
+		{
+			name:        "request sent without credentials",
+			statusCode:  http.StatusCreated,
+			body:        `{"status":{"userInfo":{"username":"system:anonymous","groups":["system:unauthenticated"]}}}`,
+			expectedErr: `did not authenticate the connector credentials: identity is "system:anonymous"`,
+		},
+		{
+			name:        "unreadable response",
+			statusCode:  http.StatusCreated,
+			body:        `{`,
+			expectedErr: "reading kubernetes API identity",
+		},
+		{
 			name:        "token unreadable",
-			statusCode:  http.StatusOK,
+			statusCode:  http.StatusCreated,
+			body:        authenticated,
 			bearerToken: func() (string, error) { return "", errors.New("no such file") },
 			expectedErr: "no such file",
 		},
@@ -325,9 +352,17 @@ func TestCredentialCheck(t *testing.T) {
 			var requests int
 			upstream := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 				requests++
-				assert.Equal(t, req.URL.Path, "/version")
+				assert.Equal(t, req.Method, http.MethodPost)
+				assert.Equal(t, req.URL.Path, "/apis/authorization.k8s.io/v1/selfsubjectreviews")
 				assert.Equal(t, req.Header.Get("Authorization"), "Bearer the-token")
+				assert.Equal(t, req.Header.Get("Content-Type"), "application/json")
+
+				body, err := io.ReadAll(req.Body)
+				assert.NilError(t, err)
+				assert.Equal(t, string(body), `{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectReview","spec":{}}`)
+
 				resp.WriteHeader(tc.statusCode)
+				_, _ = resp.Write([]byte(tc.body))
 			}))
 			t.Cleanup(upstream.Close)
 
@@ -338,7 +373,7 @@ func TestCredentialCheck(t *testing.T) {
 
 			check := &credentialCheck{
 				client:      upstream.Client(),
-				url:         upstream.URL + "/version",
+				url:         upstream.URL + "/apis/authorization.k8s.io/v1/selfsubjectreviews",
 				bearerToken: bearerToken,
 				interval:    time.Hour,
 			}

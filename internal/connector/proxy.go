@@ -4,11 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -110,6 +113,21 @@ type credentialCheck struct {
 	err     error
 }
 
+// selfSubjectReviewRequest is the body of a SelfSubjectReview creation. The
+// API fills in the status; the request carries no input of its own.
+const selfSubjectReviewRequest = `{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectReview","spec":{}}`
+
+// selfSubjectReviewResponse is the part of the SelfSubjectReview status the
+// check reads: the identity the API server resolved the credentials to.
+type selfSubjectReviewResponse struct {
+	Status struct {
+		UserInfo struct {
+			Username string   `json:"username"`
+			Groups   []string `json:"groups"`
+		} `json:"userInfo"`
+	} `json:"status"`
+}
+
 func (c *credentialCheck) Check(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -129,23 +147,46 @@ func (c *credentialCheck) check(ctx context.Context) error {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, strings.NewReader(selfSubjectReviewRequest))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
 
 	res, err := c.client.Do(req)
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
-	_, _ = io.Copy(io.Discard, res.Body)
+	defer func() {
+		_, _ = io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+	}()
 
-	// the endpoint is readable by any authenticated identity, so a rejection
-	// is an authentication failure rather than a missing permission.
+	// SelfSubjectReview is granted to every authenticated identity by the
+	// system:basic-user role, so a rejection is the credentials being refused
+	// rather than a missing permission.
 	if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("kubernetes API rejected the connector credentials: %v", res.Status)
+	}
+
+	// every other non-success is also reported as not ready: a 404 means the
+	// check cannot detect an expired token at all, and an API server serving
+	// 5xx cannot serve proxied requests either, so 503 is the honest state.
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return fmt.Errorf("kubernetes API credential check failed: %v", res.Status)
+	}
+
+	// the response reports the identity the token resolved to, so a request
+	// that reached the API server without credentials is caught here rather
+	// than passing as an anonymous success.
+	var review selfSubjectReviewResponse
+	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&review); err != nil {
+		return fmt.Errorf("reading kubernetes API identity: %w", err)
+	}
+
+	if !slices.Contains(review.Status.UserInfo.Groups, "system:authenticated") {
+		return fmt.Errorf("kubernetes API did not authenticate the connector credentials: identity is %q", review.Status.UserInfo.Username)
 	}
 
 	return nil
