@@ -302,7 +302,7 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 		// kept below the probe timeout so a slow API server fails the check
 		// rather than blocking subsequent probes on the cache lock.
 		client:      &http.Client{Transport: proxyTransport, Timeout: 3 * time.Second},
-		url:         kubeAPIAddr.JoinPath("apis", "authorization.k8s.io", "v1", "selfsubjectreviews").String(),
+		url:         kubeAPIAddr.JoinPath("apis", "authentication.k8s.io", "v1", "selfsubjectreviews").String(),
 		bearerToken: bearerToken,
 		interval:    30 * time.Second,
 	}

@@ -353,13 +353,13 @@ func TestCredentialCheck(t *testing.T) {
 			upstream := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
 				requests++
 				assert.Equal(t, req.Method, http.MethodPost)
-				assert.Equal(t, req.URL.Path, "/apis/authorization.k8s.io/v1/selfsubjectreviews")
+				assert.Equal(t, req.URL.Path, "/apis/authentication.k8s.io/v1/selfsubjectreviews")
 				assert.Equal(t, req.Header.Get("Authorization"), "Bearer the-token")
 				assert.Equal(t, req.Header.Get("Content-Type"), "application/json")
 
 				body, err := io.ReadAll(req.Body)
 				assert.NilError(t, err)
-				assert.Equal(t, string(body), `{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectReview","spec":{}}`)
+				assert.Equal(t, string(body), `{"apiVersion":"authentication.k8s.io/v1","kind":"SelfSubjectReview"}`)
 
 				resp.WriteHeader(tc.statusCode)
 				_, _ = resp.Write([]byte(tc.body))
@@ -373,7 +373,7 @@ func TestCredentialCheck(t *testing.T) {
 
 			check := &credentialCheck{
 				client:      upstream.Client(),
-				url:         upstream.URL + "/apis/authorization.k8s.io/v1/selfsubjectreviews",
+				url:         upstream.URL + "/apis/authentication.k8s.io/v1/selfsubjectreviews",
 				bearerToken: bearerToken,
 				interval:    time.Hour,
 			}

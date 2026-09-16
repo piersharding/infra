@@ -114,8 +114,9 @@ type credentialCheck struct {
 }
 
 // selfSubjectReviewRequest is the body of a SelfSubjectReview creation. The
-// API fills in the status; the request carries no input of its own.
-const selfSubjectReviewRequest = `{"apiVersion":"authorization.k8s.io/v1","kind":"SelfSubjectReview","spec":{}}`
+// type carries no spec, only the status the API server fills in, so the body
+// is just the type identifier.
+const selfSubjectReviewRequest = `{"apiVersion":"authentication.k8s.io/v1","kind":"SelfSubjectReview"}`
 
 // selfSubjectReviewResponse is the part of the SelfSubjectReview status the
 // check reads: the identity the API server resolved the credentials to.
@@ -163,9 +164,10 @@ func (c *credentialCheck) check(ctx context.Context) error {
 		res.Body.Close()
 	}()
 
-	// SelfSubjectReview is granted to every authenticated identity by the
-	// system:basic-user role, so a rejection is the credentials being refused
-	// rather than a missing permission.
+	// create on authentication.k8s.io selfsubjectreviews is granted to every
+	// authenticated identity by the default system:basic-user role, so a
+	// rejection is the credentials being refused rather than a missing
+	// permission.
 	if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("kubernetes API rejected the connector credentials: %v", res.Status)
 	}
