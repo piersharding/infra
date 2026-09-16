@@ -44,7 +44,7 @@ func TestAuthenticator_Authenticate(t *testing.T) {
 	pub, priv := generateJWK(t)
 
 	run := func(t *testing.T, tc testCase) {
-		req := httptest.NewRequest(http.MethodGet, "/apis", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/apis", nil)
 		if tc.setup != nil {
 			tc.setup(t, req)
 		}
@@ -245,7 +245,7 @@ func TestProxyMiddleware_BearerTokenIsReadPerRequest(t *testing.T) {
 	)
 
 	send := func() *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodGet, "/apis", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/apis", nil)
 		req.Header.Set("Authorization", "Bearer "+generateJWT(t, priv, "user@example.com", time.Now().Add(time.Hour)))
 		resp := httptest.NewRecorder()
 		handler(resp, req)
@@ -281,7 +281,7 @@ func TestProxyMiddleware_BearerTokenUnavailable(t *testing.T) {
 		func() (string, error) { return "", errors.New("no such file") },
 	)
 
-	req := httptest.NewRequest(http.MethodGet, "/apis", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/apis", nil)
 	req.Header.Set("Authorization", "Bearer "+generateJWT(t, priv, "user@example.com", time.Now().Add(time.Hour)))
 	resp := httptest.NewRecorder()
 	handler(resp, req)

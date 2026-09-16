@@ -108,7 +108,7 @@ var errAzureReqFailed = fmt.Errorf("request to azure api failed")
 func checkMemberOfGraphGroups(ctx context.Context, accessToken string) ([]string, error) {
 	bearer := "Bearer " + accessToken
 
-	req, err := http.NewRequest(http.MethodGet, graphGroupMemberEndpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, graphGroupMemberEndpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create azure groups request: %w", err)
 	}

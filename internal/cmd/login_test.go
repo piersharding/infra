@@ -61,7 +61,7 @@ func TestLoginCmd_Options(t *testing.T) {
 	opts := defaultServerOptions(dir)
 	setupServerOptions(t, &opts)
 	adminAccessKey := "aaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbb"
-	opts.BootstrapConfig.Users = []server.User{
+	opts.Users = []server.User{
 		{
 			Name:      "admin@example.com",
 			AccessKey: server.Secret(adminAccessKey),

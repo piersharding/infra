@@ -169,15 +169,19 @@ go-post-lint:
 
 # Installed from source so that any custom plugin built in go-pre-lint is
 # compiled with the same toolchain and module versions as the linter itself.
+# The version check is a prefix match (not equality) so it still short-circuits
+# for a go-pre-lint-built custom-gcl binary, whose --short output is the pin
+# plus a "-custom-gcl-<hash>" suffix, not the bare pin.
 go-install-golangci-lint:
-	@command -v golangci-lint >/dev/null 2>&1 || \
-		$(GO_RUNNER) install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GO_GOLANGCI_LINT_VERSION)
+	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint version --short 2>/dev/null | grep -q "^$(GO_GOLANGCI_LINT_VERSION)" || \
+		$(GO_RUNNER) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GO_GOLANGCI_LINT_VERSION)
 
 go-do-lint: go-install-golangci-lint
 	@cd $(GO_PROJECT_DIR); \
 	mkdir -p $(GO_BUILD_REPORTS_DIRECTORY); \
 	golangci-lint run \
-		--out-format junit-xml:$(GO_BUILD_REPORTS_DIRECTORY)/linting.xml,colored-line-number \
+		--output.junit-xml.path=$(GO_BUILD_REPORTS_DIRECTORY)/linting.xml \
+		--output.text.path=stdout \
 		$(GO_SWITCHES_FOR_GOLANGCI_LINT) $(GO_LINT_TARGET)
 
 ## TARGET: go-lint

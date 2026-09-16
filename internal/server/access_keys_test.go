@@ -57,7 +57,7 @@ func TestAPI_CreateAccessKey(t *testing.T) {
 		body, key := tc.setup(t)
 
 		// nolint:noctx
-		req := httptest.NewRequest(http.MethodPost, "/api/access-keys", body)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/access-keys", body)
 		req.Header.Set("Authorization", "Bearer "+key)
 		req.Header.Set("Infra-Version", apiVersionLatest)
 
@@ -383,7 +383,7 @@ func TestAPI_ListAccessKeys_Success(t *testing.T) {
 	routes := srv.GenerateRoutes()
 
 	run := func() api.ListResponse[api.AccessKey] {
-		req := httptest.NewRequest(http.MethodGet, "/api/access-keys", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/access-keys", nil)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", adminAccessKey(srv)))
 		req.Header.Set("Infra-Version", apiVersionLatest)
 
@@ -453,7 +453,7 @@ func TestAPI_ListAccessKeys(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		resp := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/api/access-keys", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/access-keys", nil)
 		req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 		req.Header.Set("Infra-Version", apiVersionLatest)
 
@@ -474,7 +474,7 @@ func TestAPI_ListAccessKeys(t *testing.T) {
 
 	t.Run("show expired", func(t *testing.T) {
 		resp := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/api/access-keys?showExpired=1", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/access-keys?showExpired=1", nil)
 		req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 		req.Header.Set("Infra-Version", apiVersionLatest)
 
@@ -495,7 +495,7 @@ func TestAPI_ListAccessKeys(t *testing.T) {
 
 	t.Run("no version header", func(t *testing.T) {
 		resp := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/api/access-keys", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/access-keys", nil)
 		req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 
 		routes.ServeHTTP(resp, req)
@@ -516,7 +516,7 @@ func TestAPI_ListAccessKeys(t *testing.T) {
 	t.Run("version 0.16.0", func(t *testing.T) {
 		resp := httptest.NewRecorder()
 		// nolint:noctx
-		req := httptest.NewRequest(http.MethodGet, "/api/access-keys?user_id="+user.ID.String(), nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/access-keys?user_id="+user.ID.String(), nil)
 		req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 		req.Header.Set("Infra-Version", "0.16.0")
 
@@ -556,7 +556,7 @@ func TestAPI_ListAccessKeys(t *testing.T) {
 
 	t.Run("version 0.18.0", func(t *testing.T) {
 		resp := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/api/access-keys?name=foo", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/access-keys?name=foo", nil)
 		req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 		req.Header.Set("Infra-Version", "0.18.0")
 
@@ -596,7 +596,7 @@ func TestAPI_ListAccessKeys(t *testing.T) {
 
 	t.Run("version 0.20.0", func(t *testing.T) {
 		resp := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/api/access-keys?name=foo", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/access-keys?name=foo", nil)
 		req.Header.Set("Authorization", "Bearer "+adminAccessKey(srv))
 		req.Header.Set("Infra-Version", "0.20.0")
 
@@ -676,7 +676,7 @@ func TestAPI_DeleteAccessKey(t *testing.T) {
 		assert.NilError(t, err)
 
 		resp := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodDelete, "/api/access-keys?name=deleteme", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/access-keys?name=deleteme", nil)
 		req.Header.Set("Authorization", "Bearer "+ak1.Token())
 		req.Header.Set("Infra-Version", apiVersionLatest)
 
@@ -686,7 +686,7 @@ func TestAPI_DeleteAccessKey(t *testing.T) {
 
 	t.Run("do not allow delete of the key used in the request", func(t *testing.T) {
 		resp := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodDelete, "/api/access-keys/"+ak1.ID.String(), nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/access-keys/"+ak1.ID.String(), nil)
 		req.Header.Set("Authorization", "Bearer "+ak1.Token())
 		req.Header.Set("Infra-Version", apiVersionLatest)
 
@@ -724,7 +724,7 @@ func TestAPI_DeleteAccessKey(t *testing.T) {
 		assert.NilError(t, err)
 
 		resp := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodDelete, "/api/access-keys?name=deletemetoo2", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/access-keys?name=deletemetoo2", nil)
 		req.Header.Set("Authorization", "Bearer "+key1.Token())
 		req.Header.Set("Infra-Version", apiVersionLatest)
 
@@ -734,7 +734,7 @@ func TestAPI_DeleteAccessKey(t *testing.T) {
 
 	t.Run("delete by name missing", func(t *testing.T) {
 		resp := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodDelete, "/api/access-keys?name=deletesomething", nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodDelete, "/api/access-keys?name=deletesomething", nil)
 		req.Header.Set("Authorization", "Bearer "+ak1.Token())
 		req.Header.Set("Infra-Version", apiVersionLatest)
 

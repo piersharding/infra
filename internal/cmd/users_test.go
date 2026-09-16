@@ -143,7 +143,7 @@ func TestUsersCmd(t *testing.T) {
 	t.Run("edit user no password flag", func(t *testing.T) {
 		setup(t)
 		err := Run(context.Background(), "users", "edit", "new-user@example.com")
-		assert.ErrorContains(t, err, "Please specify a field to update. For options, run 'infra users edit --help'")
+		assert.ErrorContains(t, err, "please specify a field to update. For options, run 'infra users edit --help'")
 	})
 
 	t.Run("edit without required argument", func(t *testing.T) {
@@ -212,7 +212,7 @@ func TestUsersCmd_EditPassword(t *testing.T) {
 
 	opts := defaultServerOptions(dir)
 	setupServerOptions(t, &opts)
-	opts.BootstrapConfig.Users = []server.User{
+	opts.Users = []server.User{
 		{
 			Name:     "admin@local",
 			Password: "password",

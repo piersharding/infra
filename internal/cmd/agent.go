@@ -112,7 +112,7 @@ func execAgent() error {
 	}
 
 	// use the current infra executable to start the agent
-	cmd := exec.Command(infraExe, "agent")
+	cmd := exec.CommandContext(context.Background(), infraExe, "agent")
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func writeAgentConfig(pid int) error {
 	}
 	defer agentConfig.Close()
 
-	_, err = agentConfig.WriteString(fmt.Sprintf("%d\n", pid))
+	_, err = fmt.Fprintf(agentConfig, "%d\n", pid)
 	if err != nil {
 		return err
 	}

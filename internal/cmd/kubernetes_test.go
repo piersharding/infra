@@ -23,7 +23,7 @@ func TestUpdateKubeconfig(t *testing.T) {
 	serverOpts := defaultServerOptions(home)
 	setupServerOptions(t, &serverOpts)
 	accessKey := "aaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbb"
-	serverOpts.BootstrapConfig.Users = []server.User{
+	serverOpts.Users = []server.User{
 		{
 			Name:      "admin@local",
 			AccessKey: server.Secret(accessKey),

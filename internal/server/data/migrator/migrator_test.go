@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
-	_ "github.com/jackc/pgx/v4/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"gotest.tools/v3/assert"
 
 	"github.com/infrahq/infra/internal/testing/database"
@@ -367,7 +367,7 @@ func runDBTests(t *testing.T, fn func(t *testing.T, db DB)) {
 			assert.NilError(t, err, "Could not connect to database %s, %v", database.dialect, err)
 
 			for _, table := range []string{"migrations", "people", "pets", "books"} {
-				_, err = db.Exec(`DROP TABLE IF EXISTS ` + table)
+				_, err = db.ExecContext(t.Context(), `DROP TABLE IF EXISTS `+table)
 				assert.NilError(t, err)
 			}
 

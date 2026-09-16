@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.26 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27 AS builder
 
 ARG TARGETARCH
 ARG BUILDVERSION=0.9.99
@@ -31,7 +31,8 @@ RUN --mount=type=cache,id=gomod,target=/go/pkg/mod \
     -ldflags '-s -X github.com/infrahq/infra/internal.Version='"$BUILDVERSION"' -X github.com/infrahq/infra/internal.TelemetryWriteKey='"$TELEMETRY_WRITE_KEY"' -linkmode external -extldflags "-static"' \
     .
 
-FROM alpine
+FROM alpine:3.24
+RUN --mount=type=cache,target=/var/cache/apk apk upgrade
 COPY --from=builder /go/src/github.com/infrahq/infra/infra /bin/infra
 EXPOSE 80
 EXPOSE 443

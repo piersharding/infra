@@ -122,7 +122,7 @@ func (w *flatSourceWalker) matchName(key string, fieldName string) bool {
 }
 
 func isPtrToStruct(value reflect.Value) bool {
-	return value.Kind() == reflect.Ptr && value.Elem().Kind() == reflect.Struct
+	return value.Kind() == reflect.Pointer && value.Elem().Kind() == reflect.Struct
 }
 
 // toMap converts an environment variable slice to a map of key/value pairs.

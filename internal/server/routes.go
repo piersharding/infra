@@ -262,7 +262,7 @@ func add[Req, Res any](a *API, group *routeGroup, method, urlPath string, route 
 			return
 		}
 	}
-	group.RouterGroup.Handle(routeID.method, routeID.path, handler)
+	group.Handle(routeID.method, routeID.path, handler)
 }
 
 // wrapRoute builds a gin.HandlerFunc from a route. The returned function
@@ -412,7 +412,7 @@ func trimWhitespace(req interface{}) {
 
 func bindTextUnmarshalerFields(req any, values map[string][]string, tag string) error {
 	v := reflect.ValueOf(req)
-	if v.Kind() != reflect.Ptr || v.IsNil() {
+	if v.Kind() != reflect.Pointer || v.IsNil() {
 		return nil
 	}
 	return bindTextUnmarshalerStruct(v.Elem(), values, tag)
@@ -449,7 +449,7 @@ func bindTextUnmarshalerStruct(v reflect.Value, values map[string][]string, tag 
 					return err
 				}
 			}
-			if field.Kind() == reflect.Ptr && !field.IsNil() && field.Elem().Kind() == reflect.Struct {
+			if field.Kind() == reflect.Pointer && !field.IsNil() && field.Elem().Kind() == reflect.Struct {
 				if err := bindTextUnmarshalerStruct(field.Elem(), values, tag); err != nil {
 					return err
 				}
@@ -476,7 +476,7 @@ func bindingTagValue(field reflect.StructField, tag string) (string, bool) {
 }
 
 func supportsTextUnmarshaler(t reflect.Type) bool {
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		return supportsTextUnmarshaler(t.Elem())
 	}
 	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
@@ -486,7 +486,7 @@ func supportsTextUnmarshaler(t reflect.Type) bool {
 }
 
 func bindTextUnmarshalerField(field reflect.Value, raw []string) error {
-	if field.Kind() == reflect.Ptr {
+	if field.Kind() == reflect.Pointer {
 		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))
 		}

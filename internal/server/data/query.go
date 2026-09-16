@@ -29,10 +29,10 @@ type Table interface {
 	// Columns returns the names of the table's columns. Columns must return
 	// a slice literal where every item in the slice is a string literal.
 	// The value returned by Columns is used as a trusted string in queries and
-	// will not be escaped. internal/tools/querylinter will vet all
+	// will not be escaped. tools/querylinter will vet all
 	// implementations of this method to ensure that only string literals are
 	// returned.
-	// If the definition of this method changes then internal/tools/querylinter
+	// If the definition of this method changes then tools/querylinter
 	// must be updated accordingly.
 	Columns() []string
 }
@@ -97,7 +97,7 @@ func insert(tx WriteTxn, item Insertable) error {
 //	column1, column2, column3, ...
 //
 // columnsForInsert is a special function that is not checked by
-// internal/tools/querylinter. If the arguments to this function change
+// tools/querylinter. If the arguments to this function change
 // the linter will likely need to be updated.
 // The return value must only include trusted strings from the source code,
 // never untrusted user input.
@@ -110,7 +110,7 @@ func columnsForInsert(table Table) string {
 // the number of columns on table.
 //
 // placeholderForColumns is a special function that is not checked by
-// internal/tools/querylinter. If the arguments to this function change
+// tools/querylinter. If the arguments to this function change
 // the linter will likely need to be updated.
 // The return value must only include trusted strings from the source code,
 // never untrusted user input.
@@ -151,7 +151,7 @@ func update(tx WriteTxn, item Updatable) error {
 //	column1 = ?, column2 = ?, column3 = ?, ...
 //
 // columnsForUpdate is a special function that is not checked by
-// internal/tools/querylinter. If the arguments to this function change
+// tools/querylinter. If the arguments to this function change
 // the linter will likely need to be updated.
 // The return value must only include trusted strings from the source code,
 // never untrusted user input.
@@ -165,7 +165,7 @@ func columnsForUpdate(table Table) string {
 //	table.column1, table.column2, table.column3, ...
 //
 // columnsForSelect is a special function that is not checked by
-// internal/tools/querylinter. If the arguments to this function change
+// tools/querylinter. If the arguments to this function change
 // the linter will likely need to be updated.
 // The return value must only include trusted strings from the source code,
 // never untrusted user input.

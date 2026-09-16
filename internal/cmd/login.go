@@ -469,7 +469,7 @@ func deviceFlowLogin(ctx context.Context, client *api.Client, cli *CLI) (*api.Lo
 	spinner := time.NewTicker(1000 * time.Millisecond)
 	defer spinner.Stop()
 
-	var spinnerCount int = 0
+	var spinnerCount = 0
 
 	for {
 		select {

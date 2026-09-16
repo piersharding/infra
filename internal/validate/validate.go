@@ -465,7 +465,7 @@ func (r PasswordValidationRule) Validate() *Failure {
 	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(r.value)
 	hasSpecial := regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`).MatchString(r.value)
 
-	if !(hasUpper && hasLower && hasNumber && hasSpecial) {
+	if !hasUpper || !hasLower || !hasNumber || !hasSpecial {
 		return Fail(r.name, "must contain at least one uppercase letter, one lowercase letter, one number, and one special character")
 	}
 

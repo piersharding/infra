@@ -173,7 +173,7 @@ still works exactly as before. Uses the SKAO CI templates from
 
 | Job | Stage | Purpose |
 |---|---|---|
-| `go-lint` | lint | `make go-lint` — golangci-lint incl. the querylinter plugin. Image `golang:1.26` (the SKA runner has no Go) |
+| `go-lint` | lint | `make go-lint` — golangci-lint incl. the querylinter plugin. Image `golang:1.27` (the SKA runner has no Go) |
 | `go-test` | test | `make go-test` — gotestsum with a `postgres:14-alpine` service; JUnit + cobertura reports |
 | `oci-image-lint` | lint | hadolint over `images/*/Dockerfile` |
 | `oci-image-build` | build | `make oci-build-all` — builds the `infra` and `ui` images |

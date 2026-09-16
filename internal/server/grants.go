@@ -56,7 +56,7 @@ func (a *API) ListGrants(rCtx access.RequestContext, r *api.ListGrantsRequest) (
 	result := api.NewListResponse(grants.Grants, PaginationToResponse(p), func(grant models.Grant) api.Grant {
 		return *grant.ToAPI()
 	})
-	result.LastUpdateIndex.Index = grants.MaxUpdateIndex
+	result.Index = grants.MaxUpdateIndex
 
 	return result, nil
 }

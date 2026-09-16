@@ -537,7 +537,7 @@ func TestAPI_ListDestinations(t *testing.T) {
 
 				assert.Equal(t, len(result.Items), 1)
 				assert.Equal(t, result.Count, 1)
-				assert.Equal(t, result.PaginationResponse.TotalCount, 2)
+				assert.Equal(t, result.TotalCount, 2)
 				assert.Equal(t, result.Items[0].Name, "kubernetes-prod")
 			},
 		},

@@ -145,8 +145,8 @@ type ListResponse[T any] struct {
 }
 
 func (r ListResponse[T]) SetHeaders(h http.Header) {
-	if r.LastUpdateIndex.Index > 0 {
-		h.Set("Last-Update-Index", strconv.FormatInt(r.LastUpdateIndex.Index, 10))
+	if r.Index > 0 {
+		h.Set("Last-Update-Index", strconv.FormatInt(r.Index, 10))
 	}
 }
 

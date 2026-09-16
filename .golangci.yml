@@ -1,48 +1,15 @@
+version: "2"
 run:
   go: "1.25"
-  timeout: 5m
-
-linters-settings:
-  revive:
-    rules:
-      - name: var-naming
-        arguments: [[ID, API, HTTP], []]
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/infrahq/infra)
-  gocritic:
-    disabled-checks:
-      - singleCaseSwitch
-
-  custom:
-    querylinter:
-      path: ./internal/tools/querylinter/cmd/querylinter.so
-      description: Look for incorrect use of querybuilder.Builder
-
-issues:
-  exclude-dirs:
-    - ui/node_modules
-  exclude-rules:
-    - linters: [errcheck]
-      text: "tx\\.Rollback"
-
 linters:
   enable:
     - asciicheck
     - durationcheck
-    - errcheck
     - errorlint
     - exhaustive
     - forcetypeassert
-    - gci
     - gocritic
-    - gofmt
     - gosec
-    - gosimple
-    - govet
-    - ineffassign
     - makezero
     - misspell
     - nakedret
@@ -52,8 +19,60 @@ linters:
     - revive
     - rowserrcheck
     - sqlclosecheck
-    - staticcheck
-    - typecheck
-    - unused
     - wastedassign
-  disable:
+  settings:
+    gocritic:
+      disabled-checks:
+        - singleCaseSwitch
+    govet:
+      disable:
+        - inline
+    revive:
+      rules:
+        - name: var-naming
+          arguments:
+            - - ID
+              - API
+              - HTTP
+            - []
+    custom:
+      querylinter:
+        type: module
+        description: Look for incorrect use of querybuilder.Builder
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+        text: tx\.Rollback
+      - linters:
+          - gosec
+          - noctx
+        path: _test\.go
+    paths:
+      - ui/node_modules
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/infrahq/infra)
+  exclusions:
+    generated: lax
+    paths:
+      - ui/node_modules
+      - third_party$
+      - builtin$
+      - examples$

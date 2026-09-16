@@ -67,7 +67,7 @@ func TestVersionCmd(t *testing.T) {
 				return
 			}
 			resp.WriteHeader(http.StatusOK)
-			_, _ = resp.Write([]byte(fmt.Sprintf(`{"version": "%s"}`, intVersion)))
+			_, _ = fmt.Fprintf(resp, `{"version": "%s"}`, intVersion)
 		}
 
 		srv := httptest.NewTLSServer(http.HandlerFunc(handler))

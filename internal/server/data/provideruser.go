@@ -58,8 +58,8 @@ func validateProviderUser(u *models.ProviderUser) error {
 }
 
 func validateProviderUserPatch(u *models.ProviderUser) error {
-	switch {
-	case u.IdentityID == 0:
+	switch u.IdentityID {
+	case 0:
 		return fmt.Errorf("identityID is required")
 	default:
 		return nil

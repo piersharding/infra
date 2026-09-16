@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -8,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gotest.tools/v3/assert"
 
 	"github.com/infrahq/infra/internal/generate"
@@ -57,7 +58,7 @@ func PostgresDriver(t TestingT, schemaSuffix string) *Driver {
 	t.Cleanup(func() {
 		// Retry on deadlock since cleanup can race with async test goroutines
 		for i := 0; i < 3; i++ {
-			_, err = db.Exec("DROP SCHEMA IF EXISTS " + name + " CASCADE")
+			_, err = db.ExecContext(context.Background(), "DROP SCHEMA IF EXISTS "+name+" CASCADE")
 			if !isDeadlockError(err) {
 				break
 			}
@@ -69,7 +70,7 @@ func PostgresDriver(t TestingT, schemaSuffix string) *Driver {
 
 	// Drop any leftover schema before creating a new one.
 	for i := 0; i < 3; i++ {
-		_, err = db.Exec("DROP SCHEMA IF EXISTS " + name + " CASCADE")
+		_, err = db.ExecContext(context.Background(), "DROP SCHEMA IF EXISTS "+name+" CASCADE")
 		if !isDeadlockError(err) {
 			break
 		}
@@ -78,7 +79,7 @@ func PostgresDriver(t TestingT, schemaSuffix string) *Driver {
 	assert.NilError(t, err)
 
 	for i := 0; i < 3; i++ {
-		_, err = db.Exec("CREATE SCHEMA " + name)
+		_, err = db.ExecContext(context.Background(), "CREATE SCHEMA "+name)
 		if !isDeadlockError(err) {
 			break
 		}

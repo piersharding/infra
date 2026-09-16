@@ -29,12 +29,9 @@ func setCookie(req *http.Request, resp http.ResponseWriter, config cookieConfig)
 		maxAge = cookieMaxAgeDeleteImmediately
 	}
 
-	secure := true
-	if req.TLS == nil {
-		// if the request came over HTTP, then the cookie will need to be sent unsecured
-		secure = false
-	}
+	secure := req.TLS != nil
 
+	//nolint:gosec // Secure, HttpOnly and SameSite are all set below
 	http.SetCookie(resp, &http.Cookie{
 		Name:     config.Name,
 		Value:    url.QueryEscape(config.Value),
@@ -48,12 +45,9 @@ func setCookie(req *http.Request, resp http.ResponseWriter, config cookieConfig)
 }
 
 func deleteCookie(req *http.Request, resp http.ResponseWriter, name, domain string) {
-	secure := true
-	if req.TLS == nil {
-		// if the request came over HTTP, then the cookie will need to be sent unsecured
-		secure = false
-	}
+	secure := req.TLS != nil
 
+	//nolint:gosec // Secure, HttpOnly and SameSite are all set below
 	http.SetCookie(resp, &http.Cookie{
 		Name:     name,
 		MaxAge:   cookieMaxAgeDeleteImmediately,

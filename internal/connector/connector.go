@@ -358,7 +358,7 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 
 	logging.Infof("starting infra connector (%s) - http:%s https:%s metrics:%s", internal.FullVersion(), plaintextServer.Addr, tlsServer.Addr, metricsServer.Addr)
 
-	l, err := net.Listen("tcp", options.Addr.HTTPS)
+	l, err := (&net.ListenConfig{}).Listen(ctx, "tcp", options.Addr.HTTPS)
 	if err != nil {
 		return err
 	}
@@ -458,7 +458,7 @@ func syncDestination(ctx context.Context, con *connector) error {
 	if endpoint.Host != "" {
 		if ipAddr := net.ParseIP(endpoint.Host); ipAddr == nil {
 			// wait for DNS resolution if endpoint is not an IP address
-			if _, err := net.LookupIP(endpoint.Host); err != nil {
+			if _, err := net.DefaultResolver.LookupIPAddr(ctx, endpoint.Host); err != nil {
 				logging.L.Warn().Err(err).Msg("host could not be resolved")
 				endpoint.Host = ""
 			}
@@ -584,7 +584,7 @@ func syncGrantsToDestination(
 		}
 
 		// Only update latestIndex once the entire operation was a success
-		latestIndex = grantsResp.LastUpdateIndex.Index
+		latestIndex = grantsResp.Index
 		return nil
 	}
 
@@ -775,6 +775,7 @@ func slicesEqual(s1, s2 []string) bool {
 	}
 
 	for i := range s1 {
+		//nolint:gosec // bounds-safe: len(s1) == len(s2) is checked above
 		if s1[i] != s2[i] {
 			return false
 		}

@@ -65,7 +65,7 @@ func TestTLSConfigFromOptions(t *testing.T) {
 		config, err := tlsConfigFromOptions(opts)
 		assert.NilError(t, err)
 
-		l, err := net.Listen("tcp", "127.0.0.1:0")
+		l, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 		assert.NilError(t, err)
 
 		l = tls.NewListener(l, config)

@@ -11,8 +11,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rs/zerolog"
 
 	"github.com/infrahq/infra/internal"
@@ -92,7 +92,7 @@ func (d *DB) Exec(query string, args ...any) (sql.Result, error) {
 	var affected int64
 	start := time.Now()
 	query = rewriteQueryPlaceholders(query, len(args))
-	result, err := d.DB.Exec(query, args...)
+	result, err := d.DB.ExecContext(context.Background(), query, args...)
 	if err == nil {
 		affected, err = result.RowsAffected()
 	}
@@ -103,7 +103,7 @@ func (d *DB) Exec(query string, args ...any) (sql.Result, error) {
 func (d *DB) Query(query string, args ...any) (*sql.Rows, error) {
 	start := time.Now()
 	query = rewriteQueryPlaceholders(query, len(args))
-	rows, err := d.DB.Query(query, args...)
+	rows, err := d.DB.QueryContext(context.Background(), query, args...)
 	logQuery(query, err, start, -1)
 	return rows, err
 
@@ -112,7 +112,7 @@ func (d *DB) Query(query string, args ...any) (*sql.Rows, error) {
 func (d *DB) QueryRow(query string, args ...any) *sql.Row {
 	start := time.Now()
 	query = rewriteQueryPlaceholders(query, len(args))
-	row := d.DB.QueryRow(query, args...)
+	row := d.DB.QueryRowContext(context.Background(), query, args...)
 	logQuery(query, row.Err(), start, -1)
 	return row
 }

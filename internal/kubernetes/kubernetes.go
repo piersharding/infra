@@ -497,7 +497,9 @@ func (k *Kubernetes) Name(chksm string) (string, error) {
 	name := chksm[:12]
 
 	// 169.254.169.254 is an address used by cloud platforms for instance metadata
-	if _, err := net.DialTimeout("tcp", "169.254.169.254:80", 1*time.Second); err == nil {
+	dialer := &net.Dialer{Timeout: 1 * time.Second}
+	if conn, err := dialer.DialContext(context.Background(), "tcp", "169.254.169.254:80"); err == nil {
+		_ = conn.Close()
 		if name, err := k.ec2ClusterName(); err == nil {
 			return name, nil
 		}

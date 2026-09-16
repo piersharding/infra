@@ -64,7 +64,7 @@ func TestGroupsAddCmd(t *testing.T) {
 
 	t.Run("without argument", func(t *testing.T) {
 		err := Run(context.Background(), "groups", "add")
-		assert.ErrorContains(t, err, `"infra groups add" requires exactly 1 argument.`)
+		assert.ErrorContains(t, err, `"infra groups add" requires exactly 1 argument`)
 		assert.ErrorContains(t, err, `Usage:  infra groups add GROUP [flags]`)
 	})
 }
@@ -132,7 +132,7 @@ func TestGroupsRemoveCmd(t *testing.T) {
 
 	t.Run("without argument", func(t *testing.T) {
 		err := Run(context.Background(), "groups", "remove")
-		assert.ErrorContains(t, err, `"infra groups remove" requires exactly 1 argument.`)
+		assert.ErrorContains(t, err, `"infra groups remove" requires exactly 1 argument`)
 		assert.ErrorContains(t, err, `Usage:  infra groups remove GROUP [flags]`)
 	})
 }

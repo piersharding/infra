@@ -15,7 +15,7 @@ func ExactArgs(number int) cobra.PositionalArgs {
 			return nil
 		}
 		return fmt.Errorf(
-			"%q requires exactly %d %s.\nSee \"%s --help\".\n\nUsage:  %s\n",
+			"%q requires exactly %d %s\nSee \"%s --help\"\n\nUsage:  %s",
 			cmd.CommandPath(),
 			number,
 			pluralize("argument", number),
@@ -39,7 +39,7 @@ func MaxArgs(max int) cobra.PositionalArgs {
 			return nil
 		}
 		return fmt.Errorf(
-			"%q accepts at most %d %s.\nSee \"%s --help\".\n\nUsage:  %s\n",
+			"%q accepts at most %d %s\nSee \"%s --help\"\n\nUsage:  %s",
 			cmd.CommandPath(),
 			max,
 			pluralize("argument", max),
@@ -55,7 +55,7 @@ func NoArgs(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	return fmt.Errorf(
-		"%q accepts no arguments.\nSee \"%s --help\".\n\nUsage:  %s\n",
+		"%q accepts no arguments\nSee \"%s --help\"\n\nUsage:  %s",
 		cmd.CommandPath(),
 		cmd.CommandPath(),
 		cmd.UseLine())

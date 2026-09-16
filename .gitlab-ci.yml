@@ -9,7 +9,7 @@ stages:
   - publish
 
 .go_job_template:
-  image: golang:1.26
+  image: golang:1.27
   variables:
     GOPATH: $CI_PROJECT_DIR/.go
   before_script:

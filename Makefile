@@ -50,7 +50,7 @@ OCI_IMAGE_BUILD_CONTEXT = $(PWD)
 GO_BINARY_NAME ?= infra
 GO_CGO_ENABLED ?= 1
 GO_BUILD_GOOS ?= linux
-GO_GOLANGCI_LINT_VERSION ?= v1.64.8
+GO_GOLANGCI_LINT_VERSION ?= v2.13.2
 GO_GOTESTSUM_VERSION ?= v1.8.2
 GO_SWITCHES_FOR_GOLANGCI_LINT ?= --fix
 GO_TEST_REQUIRED_ENV ?= POSTGRESQL_CONNECTION
@@ -65,10 +65,19 @@ include .make/helm.mk
 # go.mk is generic - everything project specific is set below.
 include go.mk
 
-# the querybuilder linter ships as a golangci-lint plugin and must be compiled
-# before the linter can load it - see .golangci.yml linters-settings.custom
-go-pre-lint:
-	@cd internal/tools/querylinter/cmd && $(GO_RUNNER) build -o querylinter.so -buildmode=plugin .
+# golangci-lint v2 dropped runtime-loaded Go-plugin .so files (they required
+# byte-identical dependency versions between plugin and linter, which broke on
+# every Go/linter upgrade) in favor of statically-linked "module" plugins: the
+# querybuilder linter (tools/querylinter, its own Go module so it can be
+# imported by golangci-lint's build without hitting Go's internal-import
+# rule) is compiled into a custom golangci-lint binary per .custom-gcl.yml -
+# see .golangci.yml linters-settings.custom. .bin is prepended to PATH below
+# so go-do-lint's `golangci-lint run` picks up the custom binary.
+export PATH := $(CURDIR)/.bin:$(PATH)
+
+go-pre-lint: go-install-golangci-lint
+	@rm -f .bin/golangci-lint
+	@"$$($(GO_RUNNER) env GOPATH)/bin/golangci-lint" custom
 
 # internal/server/testdata/pki/* is gitignored but the server tests need it.
 # gen-secrets creates the CA; the script then signs a localhost cert with it.
