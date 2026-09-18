@@ -4,7 +4,7 @@ REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.16
+TAG ?= 0.21.17
 # TAG and VERSION are not set here on purpose. .make/release.mk derives both
 # from .release (getTag / getVersion in .make/.make-release-support) with a
 # plain `=`, so anything assigned here is silently discarded. Change the
