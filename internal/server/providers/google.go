@@ -115,6 +115,7 @@ func (g *google) checkGoogleWorkspaceGroups(ctx context.Context, providerUser *m
 		TokenURI    string `json:"token_uri"`
 	}
 
+	//nolint:gosec // this is the documented Google service-account JSON shape, required by JWTConfigFromJSON, not a hardcoded secret
 	credsFile := credentialsFile{
 		Type:        "service_account",
 		PrivateKey:  g.GoogleCredentials.PrivateKey,
@@ -123,6 +124,7 @@ func (g *google) checkGoogleWorkspaceGroups(ctx context.Context, providerUser *m
 		TokenURI:    "https://oauth2.googleapis.com/token",
 	}
 
+	//nolint:gosec // marshaling the credentials above to pass to JWTConfigFromJSON, not logging/persisting a secret
 	credBytes, err := json.Marshal(credsFile)
 	if err != nil {
 		return []string{}, fmt.Errorf("failed to marshal google credentials: %w", err)

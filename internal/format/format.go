@@ -103,9 +103,9 @@ func ExactDuration(d time.Duration) string {
 	if len(h) > 1 {
 		hours := h[0]
 		if hours == "1" {
-			readableDur.WriteString(fmt.Sprintf("%s hour ", hours))
+			fmt.Fprintf(&readableDur, "%s hour ", hours)
 		} else {
-			readableDur.WriteString(fmt.Sprintf("%s hours ", hours))
+			fmt.Fprintf(&readableDur, "%s hours ", hours)
 		}
 		dur = h[1]
 	}
@@ -117,9 +117,9 @@ func ExactDuration(d time.Duration) string {
 		case "0":
 			// skip
 		case "1":
-			readableDur.WriteString(fmt.Sprintf("%s minute ", mins))
+			fmt.Fprintf(&readableDur, "%s minute ", mins)
 		default:
-			readableDur.WriteString(fmt.Sprintf("%s minutes ", mins))
+			fmt.Fprintf(&readableDur, "%s minutes ", mins)
 		}
 		dur = m[1]
 	}
@@ -131,9 +131,9 @@ func ExactDuration(d time.Duration) string {
 		case "0":
 			// skip
 		case "1":
-			readableDur.WriteString(fmt.Sprintf("%s second ", sec))
+			fmt.Fprintf(&readableDur, "%s second ", sec)
 		default:
-			readableDur.WriteString(fmt.Sprintf("%s seconds ", sec))
+			fmt.Fprintf(&readableDur, "%s seconds ", sec)
 		}
 	}
 

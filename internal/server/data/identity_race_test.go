@@ -203,7 +203,7 @@ func TestUpdateIdentityLastSeenAt_DatabaseLockHandling(t *testing.T) {
 		// Start a transaction that holds a lock
 		lockTx, err := db.Begin(context.Background(), nil)
 		require.NoError(t, err)
-		defer lockTx.Rollback()
+		defer func() { _ = lockTx.Rollback() }()
 
 		// Update the user in the transaction to create a lock
 		err = UpdateIdentityLastSeenAt(lockTx.WithOrgID(db.DefaultOrg.ID), user)

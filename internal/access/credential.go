@@ -170,6 +170,7 @@ func checkBadPasswords(password string) error {
 		return nil
 	}
 
+	//nolint:gosec // badPasswordsFile is a server operator config value (env var), not user input
 	file, err := os.Open(badPasswordsFile)
 	if err != nil {
 		return err

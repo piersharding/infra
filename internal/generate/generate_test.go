@@ -37,5 +37,5 @@ func TestCryptoRandomCanGenerateEdgeCharacters(t *testing.T) {
 func TestSeedHasBeenInitialized(t *testing.T) {
 	s := MathRandom(10, CharsetAlphaNumeric)
 	// the default seed of 1 will always generate RFbD56TI2s.
-	assert.Assert(t, "RFbD56TI2s" != s)
+	assert.Assert(t, s != "RFbD56TI2s")
 }

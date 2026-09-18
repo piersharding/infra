@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog"
 	"gotest.tools/v3/assert"
 	is "gotest.tools/v3/assert/cmp"
@@ -1476,7 +1476,7 @@ func dumpSchema(t *testing.T, conn string, args ...string) string {
 	out := new(bytes.Buffer)
 	// https://www.postgresql.org/docs/current/app-pgdump.html
 	args = append(args, "--no-owner", "--no-tablespaces", "--schema=testing")
-	cmd := exec.Command("pg_dump", args...)
+	cmd := exec.CommandContext(t.Context(), "pg_dump", args...)
 	cmd.Env = envs
 	cmd.Stdout = out
 	cmd.Stderr = os.Stderr

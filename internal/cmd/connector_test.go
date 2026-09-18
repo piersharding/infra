@@ -249,8 +249,8 @@ func (f *fakeKubeAPI) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func (f *fakeKubeAPI) handleGET(w http.ResponseWriter, req *http.Request) {
 	headers := w.Header()
-	switch {
-	case req.URL.Path == "/api":
+	switch req.URL.Path {
+	case "/api":
 		headers.Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		result := map[string]interface{}{
@@ -259,7 +259,7 @@ func (f *fakeKubeAPI) handleGET(w http.ResponseWriter, req *http.Request) {
 		}
 		assert.Check(f.t, json.NewEncoder(w).Encode(result))
 
-	case req.URL.Path == "/api/v1":
+	case "/api/v1":
 		headers.Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		result := map[string]interface{}{
@@ -269,7 +269,7 @@ func (f *fakeKubeAPI) handleGET(w http.ResponseWriter, req *http.Request) {
 		}
 		assert.Check(f.t, json.NewEncoder(w).Encode(result))
 
-	case req.URL.Path == "/version":
+	case "/version":
 		headers.Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		result := map[string]interface{}{
@@ -279,7 +279,7 @@ func (f *fakeKubeAPI) handleGET(w http.ResponseWriter, req *http.Request) {
 		}
 		assert.Check(f.t, json.NewEncoder(w).Encode(result))
 
-	case req.URL.Path == "/apis":
+	case "/apis":
 		headers.Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		result := map[string]interface{}{
@@ -300,7 +300,7 @@ func (f *fakeKubeAPI) handleGET(w http.ResponseWriter, req *http.Request) {
 		}
 		assert.Check(f.t, json.NewEncoder(w).Encode(result))
 
-	case req.URL.Path == "/apis/rbac.authorization.k8s.io/v1":
+	case "/apis/rbac.authorization.k8s.io/v1":
 		headers.Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		result := map[string]interface{}{
@@ -316,7 +316,7 @@ func (f *fakeKubeAPI) handleGET(w http.ResponseWriter, req *http.Request) {
 		}
 		assert.Check(f.t, json.NewEncoder(w).Encode(result))
 
-	case req.URL.Path == "/apis/rbac.authorization.k8s.io/v1/clusterroles":
+	case "/apis/rbac.authorization.k8s.io/v1/clusterroles":
 		roleMap := map[string][]string{
 			"kubernetes.io/bootstrapping=rbac-defaults": {"admin", "view", "edit"},
 			"app.infrahq.com/include-role=true":         {"custom", "logs"},
@@ -341,7 +341,7 @@ func (f *fakeKubeAPI) handleGET(w http.ResponseWriter, req *http.Request) {
 		}
 		assert.Check(f.t, json.NewEncoder(w).Encode(result))
 
-	case req.URL.Path == "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings":
+	case "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings":
 		headers.Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
@@ -350,7 +350,7 @@ func (f *fakeKubeAPI) handleGET(w http.ResponseWriter, req *http.Request) {
 		}
 		assert.Check(f.t, json.NewEncoder(w).Encode(result))
 
-	case req.URL.Path == "/apis/rbac.authorization.k8s.io/v1/rolebindings":
+	case "/apis/rbac.authorization.k8s.io/v1/rolebindings":
 		headers.Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
@@ -359,7 +359,7 @@ func (f *fakeKubeAPI) handleGET(w http.ResponseWriter, req *http.Request) {
 		}
 		assert.Check(f.t, json.NewEncoder(w).Encode(result))
 
-	case req.URL.Path == "/api/v1/namespaces":
+	case "/api/v1/namespaces":
 		headers.Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		result := corev1.NamespaceList{

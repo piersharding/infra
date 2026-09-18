@@ -4,7 +4,12 @@ REPOSITORY_USER ?= ska-telescope
 REPOSITORY_NAME ?= external/infra
 DOCKER_HOST ?= registry.gitlab.com
 DOCKER_REGISTRY ?= $(DOCKER_HOST)/$(REPOSITORY_USER)/$(REPOSITORY_NAME)
-TAG ?= 0.21.16
+TAG ?= 0.21.17
+# TAG and VERSION are not set here on purpose. .make/release.mk derives both
+# from .release (getTag / getVersion in .make/.make-release-support) with a
+# plain `=`, so anything assigned here is silently discarded. Change the
+# version in .release, or override per invocation with `make ... TAG=dev`.
+# Use `make show-version` to see the current value.
 # BUILDVERSION is for client side compatibility - fixed to 0.21.0
 BUILDVERSION ?= 0.21.0
 
@@ -40,11 +45,54 @@ DOCKER_ENGINE ?= docker
 DOCKER_CONTEXT ?= .
 GITLAB_TOKEN ?=
 
-LINT_ARGS ?= --fix
+OCI_IMAGE_BUILD_CONTEXT = $(PWD)
+
+GO_BINARY_NAME ?= infra
+GO_CGO_ENABLED ?= 1
+GO_BUILD_GOOS ?= linux
+GO_GOLANGCI_LINT_VERSION ?= v2.13.2
+GO_GOTESTSUM_VERSION ?= v1.8.2
+GO_SWITCHES_FOR_GOLANGCI_LINT ?= --fix
+GO_TEST_REQUIRED_ENV ?= POSTGRESQL_CONNECTION
+GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(BUILDVERSION)" \
+					-X github.com/infrahq/infra/internal.TelemetryWriteKey="none" \
+					-linkmode external -extldflags "-static"
+
+include .make/base.mk
+include .make/oci.mk
+include .make/helm.mk
+
+# go.mk is generic - everything project specific is set below.
+include go.mk
+
+# golangci-lint v2 dropped runtime-loaded Go-plugin .so files (they required
+# byte-identical dependency versions between plugin and linter, which broke on
+# every Go/linter upgrade) in favor of statically-linked "module" plugins: the
+# querybuilder linter (tools/querylinter, its own Go module so it can be
+# imported by golangci-lint's build without hitting Go's internal-import
+# rule) is compiled into a custom golangci-lint binary per .custom-gcl.yml -
+# see .golangci.yml linters-settings.custom. .bin is prepended to PATH below
+# so go-do-lint's `golangci-lint run` picks up the custom binary.
+export PATH := $(CURDIR)/.bin:$(PATH)
+
+go-pre-lint: go-install-golangci-lint
+	@rm -f .bin/golangci-lint
+	@"$$($(GO_RUNNER) env GOPATH)/bin/golangci-lint" custom
+
+# internal/server/testdata/pki/* is gitignored but the server tests need it.
+# gen-secrets creates the CA; the script then signs a localhost cert with it.
+go-pre-test:
+	@$(MAKE) gen-secrets
+	@internal/server/testdata/pki/generate-localhost-cert.sh || true
+
+go-pre-build:
+	@rm -f ./dist/infra_linux_amd64_v1/infra
+
+go-post-build:
+	@cp ./bin/infra ./dist/infra_linux_amd64_v1/infra
 
 # define overides for above variables in here
 -include PrivateRules.mak
-
 
 clean: clean-oci clean-secrets
 
@@ -55,38 +103,24 @@ deploy-local-no-test: build docker-build dev-oci dev-connector
 docker-login:
 	docker login $(DOCKER_HOST) -u$(REPOSITORY_USER) -p $(GITLAB_TOKEN)
 
-test: check-psql-env
-	POSTGRESQL_CONNECTION=$(POSTGRESQL_CONNECTION) go test -short ./...
-
-test-all: check-psql-env test-npm
-	internal/server/testdata/pki/generate-localhost-cert.sh || true
-	POSTGRESQL_CONNECTION=$(POSTGRESQL_CONNECTION) go test ./...
+test: GO_TEST_SWITCHES = -short
+test: go-test
 
 test-npm: ## run npm tests
 	cd ui && npm test
+
+test-all: go-test test-npm
 
 # update the expected command output file
 test/update:
 	go test ./internal/cmd -test.update-golden
 
-fmt: ## Run go fmt against code.
-	go fmt ./...
+fmt: go-format
 
-vet: ## Run go vet against code.
-	pwd
-	env | grep GO || true
-	go mod download
-	go vet ./...
+vet: go-vet
 
-GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(BUILDVERSION)" \
-					-X github.com/infrahq/infra/internal.TelemetryWriteKey="none" \
-					-linkmode external -extldflags "-static"
-build: ## build infra
-	mkdir -p bin && rm -rf bin/infra && rm -f dist/infra_linux_amd64_v1/infra
-	CGO_ENABLED=1 GOOS=linux go build -o bin/infra -ldflags '$(GO_BUILD_LDFLAGS)' .
-	ls -latr bin/
+build: go-build ## build infra
 	./bin/infra --help
-	cp ./bin/infra ./dist/infra_linux_amd64_v1/infra
 
 .PHONY: bin/infra
 bin/infra: build ## build local bin/infra
@@ -136,14 +170,16 @@ release-artefacts: ## build the release artefacts and publish ti gitlab
 	rm -rf dist
 	RELEASE_NAME=v$(TAG) BUILDVERSION=$(BUILDVERSION) GITLAB_TOKEN=$(GITLAB_TOKEN) goreleaser release --verbose --clean --skip announce,validate
 
+# Both recipes live under images/<name>/ and build from the repository root
+# context, matching what oci.mk does for oci-build-all.
 docker/%:
-	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --load -t $(DOCKER_REGISTRY)/infra/$*:$(TAG)
+	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --file images/$*/Dockerfile --load -t $(DOCKER_REGISTRY)/infra/$*:$(TAG)
 
 OCI_BUILD_FLAGS ?=
 OCI_UI_FILE ?= Dockerfile
 docker-build: fmt vet
-	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --build-arg BUILDVERSION=v$(TAG) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
-	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT)/ui $(OCI_BUILD_FLAGS) --file ./ui/$(OCI_UI_FILE) --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
+	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --file images/infra/Dockerfile --build-arg BUILDVERSION=v$(TAG) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
+	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --file images/ui/$(OCI_UI_FILE) --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
 
 # perform update of go dependencies
 go-update:
@@ -162,8 +198,6 @@ docker-push:
 load:
 	minikube image load --daemon --overwrite $(DOCKER_REGISTRY)/infra:$(TAG)
 	minikube image load --daemon --overwrite $(DOCKER_REGISTRY)/ui:$(TAG)
-
-docker/ui: DOCKER_CONTEXT=ui
 
 
 .PHONY: dev-infra-server-vars
@@ -225,26 +259,11 @@ dev/clean: dev/context
 	helm -n infra uninstall infra || true
 	kubectl delete ns infra || true
 
-# install from source, because we need to build our plugin with the exact
-# same version of Go, and the exact same version of all Go modules.
-golangci-lint:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
-lint: golangci-lint internal/tools/querylinter/cmd/querylinter.so
-	golangci-lint run $(LINT_ARGS)
-
-%.so:
-	(cd $(@D); go build -o $(@F) -buildmode=plugin .)
+lint: go-lint ## lint the go code
 
 .PHONY: docs/api/openapi3.json
 docs/api/openapi3.json:
 	go run -ldflags '-s -X github.com/infrahq/infra/internal.Version=0.0.0' ./internal/openapigen $@
-
-.PHONY: check-psql-env
-check-psql-env:
-ifndef POSTGRESQL_CONNECTION
-	$(error POSTGRESQL_CONNECTION is not defined. Use `make postgres` if you need to start postgres)
-endif
 
 .PHONY: dev-oci
 dev-oci: clean-oci ## launch dev container environment withi initial test data

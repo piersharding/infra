@@ -1,0 +1,77 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+stages:
+  - lint
+  - build
+  - test
+  - scan
+  - publish
+
+.go_job_template:
+  image: golang:1.27
+  variables:
+    GOPATH: $CI_PROJECT_DIR/.go
+  before_script:
+    - mkdir -p "$GOPATH"
+    - export PATH="$GOPATH/bin:$PATH"
+  cache:
+    key:
+      files:
+        - go.sum
+    paths:
+      - .go/pkg/mod
+  rules:
+    - exists:
+        - go.mod
+
+go-lint:
+  extends: .go_job_template
+  stage: lint
+  script:
+    # not the local default of --fix: CI must never rewrite source
+    - make go-lint GO_SWITCHES_FOR_GOLANGCI_LINT=-v
+  artifacts:
+    when: always
+    paths:
+      - build/
+    reports:
+      junit: build/reports/linting.xml
+
+go-test:
+  extends: .go_job_template
+  stage: test
+  services:
+    - name: postgres:14-alpine
+      alias: postgres
+  variables:
+    GOPATH: $CI_PROJECT_DIR/.go
+    POSTGRES_DB: infra
+    POSTGRES_USER: infra
+    POSTGRES_PASSWORD: infra
+    POSTGRESQL_CONNECTION: "host=postgres port=5432 user=infra dbname=infra password=infra"
+  script:
+    # internal/server runs close to go test's default 10m per-package timeout
+    - make go-test GO_TEST_SWITCHES="-timeout 20m"
+  artifacts:
+    when: always
+    paths:
+      - build/
+    reports:
+      junit: build/reports/unit-tests.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: build/reports/code-coverage.xml
+
+include:
+  - project: 'ska-telescope/templates-repository'
+    file: 'gitlab-ci/includes/oci-image.gitlab-ci.yml'
+
+  - project: 'ska-telescope/templates-repository'
+    file: 'gitlab-ci/includes/helm-chart.gitlab-ci.yml'
+
+  - project: 'ska-telescope/templates-repository'
+    file: 'gitlab-ci/includes/release.gitlab-ci.yml'
+
+  - project: 'ska-telescope/templates-repository'
+    file: 'gitlab-ci/includes/finaliser.gitlab-ci.yml'

@@ -19,12 +19,15 @@ The Makefile uses several configurable variables that can be overridden:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TAG` | `0.21.7` | Version tag for images and releases |
+| `TAG` | from `.release` | Version tag for images and releases. Set by `.make/oci.mk`, so change it in `.release` rather than here |
 | `DOCKER_ENGINE` | `docker` | Container engine to use |
 | `DOCKER_REGISTRY` | `registry.gitlab.com/ska-telescope/external/infra` | Container registry URL |
 | `GITLAB_TOKEN` | (empty) | GitLab token for authentication |
 | `INFRA_ACCESS_KEY` | `06e294c1bb.f636105ae3142c1c896fe1f9` | Default admin access key |
 | `INFRA_PASSWORD` | `Passw0rd1!Thing` | Default admin password |
+
+Go build/lint/test settings live in `go.mk` as `GO_*` variables — run
+`make long-help` to list them with their defaults.
 
 You can override these by:
 1. Setting environment variables
@@ -133,6 +136,35 @@ make docker-push TAG=<0.21.n git tag>
 # 6. Publish release artifacts
 make release-artefacts TAG=<0.21.n git tag> GITLAB_TOKEN=$GITLAB_TOKEN
 ```
+
+---
+
+
+## Pipeline Machinery (add-on)
+
+The GitLab pipeline (`.gitlab-ci.yml`) is **additive** — it does not replace the
+manual flow above, which remains fully supported. It adds the SKA CI/CD
+makefile targets from the `.make` submodule plus a generic `go.mk`:
+
+| Target | What it does |
+|---|---|
+| `make oci-lint` | hadolint over `images/*/Dockerfile` |
+| `make oci-build-all` | builds every image under `images/` |
+| `make go-lint` | golangci-lint, incl. the querylinter plugin, with a JUnit report |
+| `make go-test` | gotestsum with JUnit + cobertura reports |
+| `make show-version` | current version from `.release` |
+
+Both Dockerfiles now live under `images/<name>/` and build from the
+**repository root** context, which is what `oci.mk` requires for a multi-image
+project — this is why the UI Dockerfile's `COPY` paths are prefixed with `ui/`.
+`make docker-build` is unchanged in behaviour and still produces the same image
+names and tags.
+
+`go.mk` is deliberately generic, written so it could move into
+`ska-cicd-makefile` unchanged. Everything infra-specific (binary name, ldflags,
+pinned tool versions, the querylinter plugin build, the test fixtures) is set in
+the top-level `Makefile` via `GO_*` variables and the `go-pre-lint` /
+`go-pre-test` hooks. Run `make long-help` to list them.
 
 ---
 

@@ -59,7 +59,7 @@ type GetUsersInGroupResponse struct {
 
 func (req ListGroupsRequest) SetPage(page int) Paginatable {
 
-	req.PaginationRequest.Page = page
+	req.Page = page
 
 	return req
 }

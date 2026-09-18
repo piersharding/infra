@@ -18,6 +18,12 @@ PrivateRules.mak
 dist/
 querylinter.so
 
+# custom-gcl golangci-lint binary (built by go-pre-lint)
+/.bin/
+
+# build artefacts and CI reports produced by go.mk
+build/
+
 sendgrid.env
 test/root.key
 SECURITY_AUDIT_REPORT.md
@@ -35,3 +41,5 @@ internal/server/testdata/pki/localhost.crt
 internal/server/testdata/pki/localhost.key
 /.sop
 /update-infra.sh
+# Local Pi runtime state
+.atl/

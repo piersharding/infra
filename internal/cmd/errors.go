@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	//lint:ignore ST1005, user facing error
+	//nolint:staticcheck // ST1005: user facing error
 	ErrConfigNotFound   = errors.New(`Could not read local credentials. Are you logged in? Use "infra login" to login`)
 	ErrUserNotFound     = errors.New(`user not found`)
 	ErrGroupNotFound    = errors.New(`group not found`)

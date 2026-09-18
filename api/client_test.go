@@ -219,7 +219,7 @@ func TestListGrants(t *testing.T) {
 		})
 		assert.NilError(t, err)
 
-		assert.Equal(t, resp.LastUpdateIndex.Index, int64(10010))
+		assert.Equal(t, resp.Index, int64(10010))
 
 		req := <-reqCh
 		assert.Equal(t, req.URL.Query().Get("lastUpdateIndex"), "1234")

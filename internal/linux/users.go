@@ -2,6 +2,7 @@ package linux
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -217,7 +218,7 @@ func AddUser(apiUser *api.User, group string) error {
 		"--comment", fmt.Sprintf("%v,%v", apiUser.ID, sentinelManagedByInfra),
 		"-m", "-p", "*", "-g", group, apiUser.SSHLoginName,
 	}
-	cmd := exec.Command("useradd", args...)
+	cmd := exec.CommandContext(context.Background(), "useradd", args...)
 	cmd.Stdout = logging.L
 	cmd.Stderr = logging.L
 
@@ -268,7 +269,7 @@ func SetPasswordExpiration(username string, days int) error {
 
 	nonNilDays := days
 	//nolint:gosec // username is validated above; exec.Command does not invoke a shell.
-	cmd := exec.Command("chage", "-M", fmt.Sprintf("%d", nonNilDays), username)
+	cmd := exec.CommandContext(context.Background(), "chage", "-M", fmt.Sprintf("%d", nonNilDays), username)
 	cmd.Stdout = logging.L
 	cmd.Stderr = logging.L
 
@@ -302,7 +303,7 @@ func KillUserProcesses(localUser LocalUser) error {
 
 	// Fallback to pkill with a validated username. exec.Command does not invoke a shell.
 	//nolint:gosec
-	cmd := exec.Command("pkill", "--signal", "KILL", "--uid", localUser.Username)
+	cmd := exec.CommandContext(context.Background(), "pkill", "--signal", "KILL", "--uid", localUser.Username)
 	cmd.Stdout = logging.L
 	cmd.Stderr = logging.L
 
@@ -355,7 +356,7 @@ func LockUser(u LocalUser) error {
 
 	comment := fmt.Sprintf("%s,%s,%s", u.Info[0], sentinelManagedByInfra, sentinelLocked)
 	//nolint:gosec // username and comment are derived from validated/trusted local data; exec.Command does not invoke a shell.
-	cmd := exec.Command("usermod", "--expiredate", "1970-01-01", "--comment", comment, u.Username)
+	cmd := exec.CommandContext(context.Background(), "usermod", "--expiredate", "1970-01-01", "--comment", comment, u.Username)
 	cmd.Stdout = logging.L
 	cmd.Stderr = logging.L
 
@@ -380,7 +381,7 @@ func UnlockUser(u LocalUser) error {
 
 	comment := fmt.Sprintf("%s,%s", u.Info[0], sentinelManagedByInfra)
 	//nolint:gosec // username and comment are derived from validated/trusted local data; exec.Command does not invoke a shell.
-	cmd := exec.Command("usermod", "--expiredate", "", "--comment", comment, u.Username)
+	cmd := exec.CommandContext(context.Background(), "usermod", "--expiredate", "", "--comment", comment, u.Username)
 	cmd.Stdout = logging.L
 	cmd.Stderr = logging.L
 
@@ -415,7 +416,7 @@ func RemoveUser(localUser LocalUser) error {
 
 	// Fallback to userdel with a validated username. exec.Command does not invoke a shell.
 	//nolint:gosec
-	cmd := exec.Command("userdel", "--remove", localUser.Username)
+	cmd := exec.CommandContext(context.Background(), "userdel", "--remove", localUser.Username)
 	cmd.Stdout = logging.L
 	cmd.Stderr = logging.L
 

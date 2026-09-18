@@ -32,7 +32,7 @@ func (a *API) ListMappingRules(rCtx access.RequestContext, r *api.ListMappingRul
 		ruleKey := fmt.Sprintf("%s:%s", rCtx.DBTxn.OrganizationID().String(), mapping.ID)
 		var matchedGrants []api.MappingRuleGrant
 		if val, ok := MRGrantsCache.Load(ruleKey); ok && val != nil {
-			matchedGrants = val.([]api.MappingRuleGrant)
+			matchedGrants, _ = val.([]api.MappingRuleGrant)
 		}
 		m := mapping
 		apiRule := *m.ToAPI()
@@ -65,7 +65,7 @@ func anchorRegex(s string) string {
 		s = "^" + s
 	}
 	if !strings.HasSuffix(s, "$") {
-		s = s + "$"
+		s += "$"
 	}
 	return s
 }

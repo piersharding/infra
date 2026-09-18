@@ -144,7 +144,7 @@ func (r ListGrantsRequest) fieldsWithValues(ignored ...string) []string {
 }
 
 func (r ListGrantsRequest) SetPage(page int) Paginatable {
-	r.PaginationRequest.Page = page
+	r.Page = page
 	return r
 }
 

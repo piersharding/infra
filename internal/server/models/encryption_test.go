@@ -48,8 +48,8 @@ func TestEncryptedAtRest(t *testing.T) {
 	err = db.QueryRow("select a_secret from struct_for_testings where id = ?", id).Scan(&result)
 	assert.NilError(t, err)
 
-	assert.Assert(t, "don't tell" != result)
-	assert.Assert(t, "" != result)
+	assert.Assert(t, result != "don't tell")
+	assert.Assert(t, result != "")
 
 	m2 := &StructForTesting{}
 	err = db.QueryRow(`SELECT a_secret FROM struct_for_testings where id = ?`, id).Scan(&m2.ASecret)

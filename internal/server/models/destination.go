@@ -31,10 +31,7 @@ type Destination struct {
 }
 
 func (d *Destination) ToAPI() *api.Destination {
-	connected := false
-	if time.Since(d.LastSeenAt) < 6*time.Minute {
-		connected = true
-	}
+	connected := time.Since(d.LastSeenAt) < 6*time.Minute
 
 	return &api.Destination{
 		ID:       d.ID,

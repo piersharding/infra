@@ -161,15 +161,37 @@ npm run lint    # ESLint
 npm run build   # production build
 ```
 
-### CI/CD Workflows (`.github/workflows/`)
+### CI/CD — GitLab (`.gitlab-ci.yml`)
 
-| File | Trigger | Purpose |
+**Additive.** The pipeline sits alongside the manual release flow documented in
+`readme-dev.md`; it does not replace it. Every pre-existing Make target
+(`docker-build`, `docker-push`, `docker-login`, `set-charts`,
+`git-tag-and-push`, `release-artefacts`, `release-artefacts-local`, `version`)
+still works exactly as before. Uses the SKAO CI templates from
+`ska-telescope/templates-repository` plus the `.make` submodule
+(`ska-cicd-makefile`).
+
+| Job | Stage | Purpose |
 |---|---|---|
-| `ci-core.yaml` | push / PR | Go vet, golangci-lint, tests with multiple PostgreSQL versions |
-| `ci-ui.yaml` | push / PR | npm lint, build, Jest tests |
-| `fuzz.yaml` | scheduled (weekly) | Go fuzzing for security |
-| `cd-binaries.yaml` | tag | goreleaser cross-platform binary builds |
-| `cd-containers.yaml` | tag | Docker image push to `registry.gitlab.com/ska-telescope/sdi/external/infra` |
+| `go-lint` | lint | `make go-lint` — golangci-lint incl. the querylinter plugin. Image `golang:1.27` (the SKA runner has no Go) |
+| `go-test` | test | `make go-test` — gotestsum with a `postgres:14-alpine` service; JUnit + cobertura reports |
+| `oci-image-lint` | lint | hadolint over `images/*/Dockerfile` |
+| `oci-image-build` | build | `make oci-build-all` — builds the `infra` and `ui` images |
+| `oci-image-publish` | publish | tag-gated push to the SKA registry |
+| `helm-chart-*` | lint/build/publish | `charts/infra`, `charts/infra-server` |
+
+`go.mk` is **generic** — written so it could move into `ska-cicd-makefile`
+unchanged. It contains no project specifics: the binary name, ldflags, pinned
+tool versions, `GO_TEST_REQUIRED_ENV` and the `go-pre-lint` / `go-pre-test`
+hooks (querylinter plugin build, test fixture generation) are all set in the
+top-level `Makefile`. Extend it by overriding `go-pre-<target>` /
+`go-post-<target>`, not by editing `go.mk`. Version state lives in `.release`.
+
+### Legacy GitHub workflows (`.github/workflows/`)
+
+Inherited from upstream `infrahq/infra` and **not run** on SKAO GitLab. Retained
+for reference only: `ci-core.yaml`, `ci-ui.yaml`, `fuzz.yaml`, `cd-binaries.yaml`,
+`cd-containers.yaml`.
 
 ---
 

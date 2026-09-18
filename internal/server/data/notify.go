@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx/v4"
-	pgxstdlib "github.com/jackc/pgx/v4/stdlib"
+	"github.com/jackc/pgx/v5"
+	pgxstdlib "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/infrahq/infra/internal/logging"
 	"github.com/infrahq/infra/uid"
 )
 
 type Listener struct {
-	sqlDB   *sql.DB
+	sqlConn *sql.Conn
 	pgxConn *pgx.Conn
 
 	isMatchingNotify func(payload string) error
@@ -57,7 +57,7 @@ func (l *Listener) Release(ctx context.Context) error {
 	if _, err := l.pgxConn.Exec(ctx, `UNLISTEN *`); err != nil {
 		errs = append(errs, err)
 	}
-	if err := pgxstdlib.ReleaseConn(l.sqlDB, l.pgxConn); err != nil {
+	if err := l.sqlConn.Close(); err != nil {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
@@ -85,13 +85,25 @@ func ListenForNotify(ctx context.Context, db *DB, opts ListenForNotifyOptions) (
 		return nil, fmt.Errorf("OrgID is required")
 	}
 
-	sqlDB := db.SQLdb()
-	pgxConn, err := pgxstdlib.AcquireConn(sqlDB)
+	sqlConn, err := db.SQLdb().Conn(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	listener := &Listener{sqlDB: sqlDB, pgxConn: pgxConn}
+	var pgxConn *pgx.Conn
+	if err := sqlConn.Raw(func(driverConn any) error {
+		conn, ok := driverConn.(*pgxstdlib.Conn)
+		if !ok {
+			return fmt.Errorf("unexpected driver connection type %T", driverConn)
+		}
+		pgxConn = conn.Conn()
+		return nil
+	}); err != nil {
+		_ = sqlConn.Close()
+		return nil, err
+	}
+
+	listener := &Listener{sqlConn: sqlConn, pgxConn: pgxConn}
 
 	var channel string
 	switch {
@@ -107,7 +119,7 @@ func ListenForNotify(ctx context.Context, db *DB, opts ListenForNotifyOptions) (
 	secureLogger.SecureDebug(fmt.Sprintf("listing for notify on %s", channel))
 	_, err = pgxConn.Exec(ctx, "SELECT listen_on_chan($1)", channel)
 	if err != nil {
-		if err := pgxstdlib.ReleaseConn(sqlDB, pgxConn); err != nil {
+		if err := sqlConn.Close(); err != nil {
 			logging.L.Warn().Err(err).Msgf("release pgx conn")
 		}
 		return nil, err

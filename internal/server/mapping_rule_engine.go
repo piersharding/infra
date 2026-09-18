@@ -156,7 +156,8 @@ func GetEvalStatus(orgID uid.ID) *EvalStatusReport {
 	if !ok || val == nil {
 		return nil
 	}
-	return val.(*EvalStatusReport)
+	report, _ := val.(*EvalStatusReport)
+	return report
 }
 
 // EvaluateMappingRulesAsync runs EvaluateMappingRules in a background goroutine
@@ -225,7 +226,7 @@ func EvaluateMappingRulesAsync(db *data.DB, orgID uid.ID) {
 // is supported — the latter is rejected to avoid ambiguity.
 func applyTemplate(template, input string, re *regexp.Regexp) (string, error) {
 	matches := re.FindStringSubmatch(input)
-	if matches == nil || len(matches) == 0 {
+	if len(matches) == 0 {
 		return "", fmt.Errorf("regex did not match")
 	}
 
@@ -431,15 +432,6 @@ func resolvePrivilege(mapping models.MappingRule, grpName string, re *regexp.Reg
 	}
 }
 
-// createNamespacedGrants creates auto-grants for each namespaced resource.
-func createNamespacedGrants(tx data.WriteTxn, orgID uid.ID, destType models.DestinationType, subjectID uid.ID, privilege string, nsResources []string) {
-	for _, nsResource := range nsResources {
-		if err := createOrUpdateGrant(tx, orgID, destType, subjectID, privilege, nsResource); err != nil {
-			logging.L.Warn().Err(err).Str("group", subjectID.String()).Msg("failed to create namespaced grant")
-		}
-	}
-}
-
 // evaluateRuleForGroup processes a single mapping rule against a matching group.
 func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.MappingRule, g models.Group, re *regexp.Regexp) {
 	ruleKey := fmt.Sprintf("%s:%s", orgID.String(), mapping.ID)
@@ -477,7 +469,7 @@ func evaluateRuleForGroup(tx data.WriteTxn, orgID uid.ID, mapping models.Mapping
 	addMatchedGrant := func(privilege, resource string) {
 		var grants []api.MappingRuleGrant
 		if val, ok := MRGrantsCache.Load(ruleKey); ok && val != nil {
-			grants = val.([]api.MappingRuleGrant)
+			grants, _ = val.([]api.MappingRuleGrant)
 		}
 		grantInfo := api.MappingRuleGrant{
 			GroupID:   g.ID,
@@ -730,20 +722,27 @@ func cleanupStaleGrants(tx data.WriteTxn) error {
 func cleanupOrphanedGroups(tx data.WriteTxn, rules []models.MappingRule) error {
 	// Load group IDs that have at least one non-soft-deleted non-auto-grant
 	// referencing them. These groups must not be deleted.
-	rowsWithGrants, err := tx.Query(`SELECT subject_id FROM grants WHERE deleted_at IS NULL AND organization_id = ? AND subject_kind = 2 AND (auto_grant IS NULL OR auto_grant = false)`, tx.OrganizationID())
-	if err != nil {
+	grantReferencedIDs := make(map[uid.ID]bool)
+	// Closure scopes the cursor so it is closed before the next query runs —
+	// database/sql doesn't allow multiple open result sets on one connection.
+	if err := func() error {
+		rows, err := tx.Query(`SELECT subject_id FROM grants WHERE deleted_at IS NULL AND organization_id = ? AND subject_kind = 2 AND (auto_grant IS NULL OR auto_grant = false)`, tx.OrganizationID())
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var subjectID uid.ID
+			if err := rows.Scan(&subjectID); err != nil {
+				logging.L.Warn().Err(err).Str("group", "unknown").Msg("failed to scan grant-referenced group ID")
+				continue
+			}
+			grantReferencedIDs[subjectID] = true
+		}
+		return rows.Err()
+	}(); err != nil {
 		return fmt.Errorf("query grant-referenced groups: %w", err)
 	}
-	grantReferencedIDs := make(map[uid.ID]bool)
-	for rowsWithGrants.Next() {
-		var subjectID uid.ID
-		if err := rowsWithGrants.Scan(&subjectID); err != nil {
-			logging.L.Warn().Err(err).Str("group", "unknown").Msg("failed to scan grant-referenced group ID")
-			continue
-		}
-		grantReferencedIDs[subjectID] = true
-	}
-	rowsWithGrants.Close()
 
 	// Pre-compile each rule's regex individually to avoid ReDoS risk from
 	// combining patterns with "|" (a single catastrophic pattern like ^(a+)+$
@@ -756,45 +755,48 @@ func cleanupOrphanedGroups(tx data.WriteTxn, rules []models.MappingRule) error {
 		// Silently skip invalid regexes — matches the existing graceful degradation pattern.
 	}
 
-	// Find all IDP-synced groups (created_by_provider != 0) that are not soft-deleted.
-	rows, err := tx.Query(`SELECT id, name FROM groups WHERE deleted_at IS NULL AND organization_id = ? AND created_by_provider <> 0`, tx.OrganizationID())
-	if err != nil {
-		return fmt.Errorf("query orphaned groups: %w", err)
-	}
-
 	// Collect all group IDs that need to be deleted first — we can't call DeleteGroup while iterating,
 	// because Go's database/sql doesn't allow multiple open result sets on one connection.
 	var idsToDelete []uid.ID
-	for rows.Next() {
-		var groupID uid.ID
-		var name string
-		if err := rows.Scan(&groupID, &name); err != nil {
-			logging.L.Warn().Err(err).Str("group", name).Msg("failed to scan orphaned group")
-			continue
+	if err := func() error {
+		rows, err := tx.Query(`SELECT id, name FROM groups WHERE deleted_at IS NULL AND organization_id = ? AND created_by_provider <> 0`, tx.OrganizationID())
+		if err != nil {
+			return err
 		}
+		defer rows.Close()
+		for rows.Next() {
+			var groupID uid.ID
+			var name string
+			if err := rows.Scan(&groupID, &name); err != nil {
+				logging.L.Warn().Err(err).Str("group", name).Msg("failed to scan orphaned group")
+				continue
+			}
 
-		// Skip groups that are still referenced by a non-auto-grant (manual access).
-		if grantReferencedIDs[groupID] {
-			continue
-		}
+			// Skip groups that are still referenced by a non-auto-grant (manual access).
+			if grantReferencedIDs[groupID] {
+				continue
+			}
 
-		// If there are no rules or this group doesn't match any rule, mark for deletion.
-		if len(precompiled) == 0 {
-			idsToDelete = append(idsToDelete, groupID)
-			continue
-		}
-		matched := false
-		for _, re := range precompiled {
-			if re != nil && re.MatchString(name) {
-				matched = true
-				break
+			// If there are no rules or this group doesn't match any rule, mark for deletion.
+			if len(precompiled) == 0 {
+				idsToDelete = append(idsToDelete, groupID)
+				continue
+			}
+			matched := false
+			for _, re := range precompiled {
+				if re != nil && re.MatchString(name) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				idsToDelete = append(idsToDelete, groupID)
 			}
 		}
-		if !matched {
-			idsToDelete = append(idsToDelete, groupID)
-		}
+		return rows.Err()
+	}(); err != nil {
+		return fmt.Errorf("query orphaned groups: %w", err)
 	}
-	rows.Close()
 
 	// Now delete all marked groups after the cursor is closed.
 	for _, groupID := range idsToDelete {

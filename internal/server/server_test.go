@@ -133,7 +133,7 @@ func TestServer_Run(t *testing.T) {
 
 	t.Run("metrics server started", func(t *testing.T) {
 		// perform one API call to populate metrics
-		req, err := http.NewRequest("GET", "http://"+srv.Addrs.HTTP.String()+"/api/version", nil)
+		req, err := http.NewRequestWithContext(t.Context(), "GET", "http://"+srv.Addrs.HTTP.String()+"/api/version", nil)
 		assert.NilError(t, err)
 		req.Header.Set("Infra-Version", apiVersionLatest)
 

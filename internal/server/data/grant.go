@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/infrahq/infra/internal/server/data/querybuilder"
 	"github.com/infrahq/infra/internal/server/models"
@@ -426,10 +426,7 @@ func ListAutoGrants(tx ReadTxn) ([]models.Grant, error) {
 // Only groups with non-auto-grants should be allowed through the IDP sync filter,
 // because they indicate a user has manually been granted access to something.
 func ListNonAutoGrants(tx ReadTxn) ([]models.Grant, error) {
-	query := querybuilder.New(`SELECT r.auto_grant, r.created_at, r.created_by, r.deleted_at, ` +
-		"r.id, r.organization_id, r.privilege, r.resource, " +
-		"r.subject_id, r.subject_kind, r.updated_at " +
-		"FROM grants r JOIN groups g ON r.subject_id = g.id AND r.subject_kind = 2")
+	query := querybuilder.New(`SELECT r.auto_grant, r.created_at, r.created_by, r.deleted_at, r.id, r.organization_id, r.privilege, r.resource, r.subject_id, r.subject_kind, r.updated_at FROM grants r JOIN groups g ON r.subject_id = g.id AND r.subject_kind = 2`)
 	query.B("AND r.deleted_at IS NULL")
 	query.B("AND g.organization_id = ?", tx.OrganizationID())
 	query.B("AND r.organization_id = ?", tx.OrganizationID())

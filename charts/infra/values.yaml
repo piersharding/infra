@@ -160,7 +160,9 @@ readinessProbe:
   periodSeconds: 10
 
   ## Seconds before the probe times out
-  timeoutSeconds: 1
+  ## The readiness probe verifies the connector's credentials against the
+  ## kubernetes API, so it needs more headroom than a static health check.
+  timeoutSeconds: 5
 
 ## Additional volumes to attach to the connector pod
 volumes: []

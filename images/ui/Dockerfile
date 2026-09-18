@@ -1,12 +1,14 @@
-FROM node:24-alpine AS builder
+# Built from the repository root context so that a single OCI_IMAGE_BUILD_CONTEXT
+# serves both images; all source paths are therefore prefixed with ui/.
+FROM node:26-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --legacy-peer-deps
-COPY . .
+COPY ui/ ./
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

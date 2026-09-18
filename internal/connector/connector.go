@@ -289,6 +289,23 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 	proxy := httputil.NewSingleHostReverseProxy(kubeAPIAddr)
 	proxy.Transport = proxyTransport
 	proxy.ErrorLog = httpErrorLog
+	proxy.ModifyResponse = logUpstreamErrors
+
+	bearerToken := k8s.BearerTokenSource()
+
+	// SelfSubjectReview is available to any authenticated identity through the
+	// system:basic-user role, so this reports on the connector's credentials
+	// without depending on its permissions. Unlike the unversioned /version
+	// endpoint it cannot be disabled and it names the identity the token
+	// resolved to, so the check cannot pass anonymously.
+	readyCheck := &credentialCheck{
+		// kept below the probe timeout so a slow API server fails the check
+		// rather than blocking subsequent probes on the cache lock.
+		client:      &http.Client{Transport: proxyTransport, Timeout: 3 * time.Second},
+		url:         kubeAPIAddr.JoinPath("apis", "authentication.k8s.io", "v1", "selfsubjectreviews").String(),
+		bearerToken: bearerToken,
+		interval:    30 * time.Second,
+	}
 
 	metricsServer := &http.Server{
 		ReadHeaderTimeout: 30 * time.Second,
@@ -306,8 +323,11 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 		return err
 	})
 
+	// served on the plaintext listener so that the proxy router keeps
+	// forwarding /readyz through to the kubernetes API.
 	healthOnlyRouter := http.NewServeMux()
 	healthOnlyRouter.HandleFunc("/healthz", healthHandler)
+	healthOnlyRouter.HandleFunc("/readyz", readyHandler(readyCheck))
 
 	plaintextServer := &http.Server{
 		ReadHeaderTimeout: 30 * time.Second,
@@ -326,7 +346,7 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 	})
 
 	authn := newAuthenticator(options)
-	router.HandleFunc("/", proxyMiddleware(proxy, authn, k8s.Config.BearerToken))
+	router.HandleFunc("/", proxyMiddleware(proxy, authn, bearerToken))
 	tlsServer := &http.Server{
 		ReadHeaderTimeout: 30 * time.Second,
 		ReadTimeout:       60 * time.Second,
@@ -338,7 +358,7 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 
 	logging.Infof("starting infra connector (%s) - http:%s https:%s metrics:%s", internal.FullVersion(), plaintextServer.Addr, tlsServer.Addr, metricsServer.Addr)
 
-	l, err := net.Listen("tcp", options.Addr.HTTPS)
+	l, err := (&net.ListenConfig{}).Listen(ctx, "tcp", options.Addr.HTTPS)
 	if err != nil {
 		return err
 	}
@@ -438,7 +458,7 @@ func syncDestination(ctx context.Context, con *connector) error {
 	if endpoint.Host != "" {
 		if ipAddr := net.ParseIP(endpoint.Host); ipAddr == nil {
 			// wait for DNS resolution if endpoint is not an IP address
-			if _, err := net.LookupIP(endpoint.Host); err != nil {
+			if _, err := net.DefaultResolver.LookupIPAddr(ctx, endpoint.Host); err != nil {
 				logging.L.Warn().Err(err).Msg("host could not be resolved")
 				endpoint.Host = ""
 			}
@@ -564,7 +584,7 @@ func syncGrantsToDestination(
 		}
 
 		// Only update latestIndex once the entire operation was a success
-		latestIndex = grantsResp.LastUpdateIndex.Index
+		latestIndex = grantsResp.Index
 		return nil
 	}
 
@@ -755,6 +775,7 @@ func slicesEqual(s1, s2 []string) bool {
 	}
 
 	for i := range s1 {
+		//nolint:gosec // bounds-safe: len(s1) == len(s2) is checked above
 		if s1[i] != s2[i] {
 			return false
 		}

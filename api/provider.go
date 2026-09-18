@@ -92,7 +92,7 @@ func (r ListProvidersRequest) ValidationRules() []validate.ValidationRule {
 }
 
 func (req ListProvidersRequest) SetPage(page int) Paginatable {
-	req.PaginationRequest.Page = page
+	req.Page = page
 
 	return req
 }

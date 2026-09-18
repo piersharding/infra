@@ -48,7 +48,7 @@ $ infra logout --all --clear`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				if options.all {
-					return fmt.Errorf("Argument [SERVER] and flag [--all] cannot be both specified.")
+					return fmt.Errorf("argument [SERVER] and flag [--all] cannot be both specified")
 				}
 				options.server = args[0]
 			}

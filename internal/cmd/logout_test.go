@@ -332,7 +332,7 @@ func TestLogout(t *testing.T) {
 	t.Run("with one and all", func(t *testing.T) {
 		testFields := setup(t, "infra:prod")
 		err := Run(context.Background(), "logout", testFields.serverURLs[0], "--all")
-		assert.Error(t, err, "Argument [SERVER] and flag [--all] cannot be both specified.")
+		assert.Error(t, err, "argument [SERVER] and flag [--all] cannot be both specified")
 
 		assert.Equal(t, int32(0), atomic.LoadInt32(testFields.count), "calls to API")
 

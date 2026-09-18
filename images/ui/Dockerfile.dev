@@ -1,0 +1,10 @@
+# Built from the repository root context - see images/ui/Dockerfile
+FROM node:26-alpine
+WORKDIR /app
+COPY ui/package.json ui/package-lock.json ./
+RUN npm install --legacy-peer-deps
+COPY ui/ ./
+EXPOSE 3000
+ENV PORT 3000
+
+CMD ["npm", "run", "dev"]

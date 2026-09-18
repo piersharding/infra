@@ -78,9 +78,9 @@ spec:
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
           readinessProbe:
             httpGet:
-              path: /healthz
-              port: https
-              scheme: HTTPS
+              path: /readyz
+              port: http
+              scheme: HTTP
             successThreshold: {{ .Values.readinessProbe.successThreshold }}
             failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}

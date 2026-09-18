@@ -11,7 +11,7 @@ import (
 func TestAnalyzer(t *testing.T) {
 	files := map[string]string{
 		"github.com/infrahq/infra/example/problems.go":                          readFile(t, "testdata/problems.go"),
-		"github.com/infrahq/infra/internal/server/data/querybuilder/builder.go": readFile(t, "../../server/data/querybuilder/builder.go"),
+		"github.com/infrahq/infra/internal/server/data/querybuilder/builder.go": readFile(t, "../../internal/server/data/querybuilder/builder.go"),
 	}
 
 	dir, cleanup, err := analysistest.WriteFiles(files)

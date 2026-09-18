@@ -146,7 +146,7 @@ users:
 				expected.TLS.CAPrivateKey = "file:foo/ca.key"
 				expected.DBConnectionString = "host=db port=5432 user=postgres dbname=postgres password=postgres"
 				expected.DBEncryptionKey = "/root.key"
-				expected.BootstrapConfig.Users = []server.User{
+				expected.Users = []server.User{
 					{
 						Name:      "username",
 						AccessKey: "access-key",
@@ -389,7 +389,7 @@ func TestServerCmd_WithSecretsConfig(t *testing.T) {
 			Password: "foo",
 		},
 	}
-	assert.DeepEqual(t, actual.BootstrapConfig.Users, expected)
+	assert.DeepEqual(t, actual.Users, expected)
 }
 
 func patchRunServer(t *testing.T, fn func(context.Context, *server.Server) error) {

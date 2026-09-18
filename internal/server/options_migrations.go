@@ -20,7 +20,7 @@ func (o OptionsDiffV0dot1) applyToV0dot2(base *Options) {
 	secureLogger.SecureWarn("updated server options from version 0.1 to 0.2", nil)
 
 	base.Version = 0.2
-	base.BootstrapConfig.Users = o.Identities
+	base.Users = o.Identities
 }
 
 type OptionsDiffV0dot2 struct {

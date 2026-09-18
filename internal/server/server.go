@@ -345,11 +345,12 @@ func registerUIRoutes(router *gin.Engine, opts UIOptions) {
 		return
 	}
 	remote := opts.ProxyURL.Value()
-	proxy := httputil.NewSingleHostReverseProxy(remote)
-	proxy.Director = func(req *http.Request) {
-		req.Host = remote.Host
-		req.URL.Scheme = remote.Scheme
-		req.URL.Host = remote.Host
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(pr *httputil.ProxyRequest) {
+			pr.Out.Host = remote.Host
+			pr.Out.URL.Scheme = remote.Scheme
+			pr.Out.URL.Host = remote.Host
+		},
 	}
 	proxy.ErrorLog = log.New(logging.L, "", 0)
 
@@ -419,7 +420,7 @@ func (s *Server) setupServer(server *http.Server) (net.Addr, error) {
 	if server.Addr == "" {
 		server.Addr = "127.0.0.1:"
 	}
-	l, err := net.Listen("tcp", server.Addr)
+	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", server.Addr)
 	if err != nil {
 		return nil, err
 	}

@@ -38,7 +38,7 @@ func addVersionHandler[Req, Res any](a *API, method, path, version string, route
 		a.versions = make(map[routeIdentifier][]routeVersion)
 	}
 
-	routeDef.routeSettings.omitFromDocs = true
+	routeDef.omitFromDocs = true
 
 	key := routeIdentifier{method: method, path: path}
 	a.versions[key] = append(a.versions[key], routeVersion{

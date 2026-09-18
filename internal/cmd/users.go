@@ -95,7 +95,7 @@ $ infra users edit janedoe@example.com --password`,
 		Args: ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !editPassword {
-				return errors.New("Please specify a field to update. For options, run 'infra users edit --help'")
+				return errors.New("please specify a field to update. For options, run 'infra users edit --help'")
 			}
 
 			return updateUser(cli, args[0])
@@ -342,11 +342,7 @@ func updateUser(cli *CLI, name string) error {
 }
 
 func getUserByNameOrID(client *api.Client, name string) (*api.User, error) {
-	showSystem := false
-
-	if name == "connector" {
-		showSystem = true
-	}
+	showSystem := name == "connector"
 
 	ctx := context.TODO()
 

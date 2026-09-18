@@ -75,6 +75,6 @@ func (r UpdateOrganizationRequest) ValidationRules() []validate.ValidationRule {
 }
 
 func (req ListOrganizationsRequest) SetPage(page int) Paginatable {
-	req.PaginationRequest.Page = page
+	req.Page = page
 	return req
 }

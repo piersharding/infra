@@ -77,7 +77,7 @@ type UpdateUserResponse struct {
 }
 
 func (req ListUsersRequest) SetPage(page int) Paginatable {
-	req.PaginationRequest.Page = page
+	req.Page = page
 
 	return req
 }

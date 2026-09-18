@@ -25,6 +25,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/transport"
 
 	"github.com/infrahq/infra/internal/logging"
 )
@@ -50,6 +51,30 @@ func NewKubernetes() (*Kubernetes, error) {
 
 	k := &Kubernetes{Config: config}
 	return k, nil
+}
+
+// BearerTokenSource returns a function that provides the bearer token used to
+// authenticate to the kubernetes API.
+//
+// In-cluster service account tokens are time-bound and are rotated on disk by
+// the kubelet. Config.BearerToken is only a snapshot of that file taken when
+// the config was loaded, so anything that holds on to the string will
+// eventually send an expired token. When a token file is available it is
+// re-read (cached between rotations) so that the current token is always used.
+func (k *Kubernetes) BearerTokenSource() func() (string, error) {
+	if k.Config.BearerTokenFile == "" {
+		token := k.Config.BearerToken
+		return func() (string, error) { return token, nil }
+	}
+
+	source := transport.NewCachedFileTokenSource(k.Config.BearerTokenFile)
+	return func() (string, error) {
+		token, err := source.Token()
+		if err != nil {
+			return "", fmt.Errorf("read service account token: %w", err)
+		}
+		return token.AccessToken, nil
+	}
 }
 
 // namespaceRole is used as a tuple to pair namespaces and grants as a map key
@@ -472,7 +497,9 @@ func (k *Kubernetes) Name(chksm string) (string, error) {
 	name := chksm[:12]
 
 	// 169.254.169.254 is an address used by cloud platforms for instance metadata
-	if _, err := net.DialTimeout("tcp", "169.254.169.254:80", 1*time.Second); err == nil {
+	dialer := &net.Dialer{Timeout: 1 * time.Second}
+	if conn, err := dialer.DialContext(context.Background(), "tcp", "169.254.169.254:80"); err == nil {
+		_ = conn.Close()
 		if name, err := k.ec2ClusterName(); err == nil {
 			return name, nil
 		}

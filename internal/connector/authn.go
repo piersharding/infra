@@ -85,7 +85,7 @@ func (j *authenticator) Authenticate(req *http.Request) (claims.Custom, error) {
 		return c, fmt.Errorf("invalid token claims: %w", err)
 	}
 
-	err = allClaims.Claims.Validate(jwt.Expected{Time: time.Now().UTC()})
+	err = allClaims.Validate(jwt.Expected{Time: time.Now().UTC()})
 	switch {
 	case errors.Is(err, jwt.ErrExpired):
 		return c, err
@@ -93,7 +93,7 @@ func (j *authenticator) Authenticate(req *http.Request) (claims.Custom, error) {
 		return c, fmt.Errorf("invalid JWT %w", err)
 	}
 
-	if allClaims.Custom.Name == "" {
+	if allClaims.Name == "" {
 		return c, fmt.Errorf("no username in JWT claims")
 	}
 

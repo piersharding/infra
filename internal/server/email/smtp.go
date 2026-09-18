@@ -1,6 +1,7 @@
 package email
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
@@ -35,17 +36,22 @@ func (c *Client) connect() (err error) {
 	}
 
 	if SendgridAPIKey == "" {
-		return fmt.Errorf("Sendgrid API key is not set")
+		return fmt.Errorf("missing sendgrid API key")
 	}
 
-	conn, err := tls.Dial("tcp", SMTPServer, &tls.Config{
+	dialer := &tls.Dialer{Config: &tls.Config{
 		MinVersion: tls.VersionTLS12,
 		MaxVersion: tls.VersionTLS13,
 		// nolint:gosec
 		InsecureSkipVerify: c.skipTLSVerify, // only used by tests
-	})
+	}}
+	netConn, err := dialer.DialContext(context.Background(), "tcp", SMTPServer)
 	if err != nil {
 		return err
+	}
+	conn, ok := netConn.(*tls.Conn)
+	if !ok {
+		return fmt.Errorf("unexpected connection type %T", netConn)
 	}
 
 	err = conn.SetDeadline(time.Now().Add(30 * time.Second))
