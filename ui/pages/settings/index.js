@@ -46,7 +46,7 @@ function PersonalKeys() {
         </div>
         <Link
           href='/settings/access-key/add'
-          className='ml-4 inline-flex items-center self-end rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
+          className='ml-4 inline-flex items-center self-end rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800'
         >
           <PlusIcon className='mr-1 h-3 w-3' /> Personal Key
         </Link>
@@ -212,7 +212,7 @@ function ConnectorKeys() {
         </div>
         <Link
           href='/settings/access-key/add?connector=true'
-          className='inline-flex items-center self-end whitespace-nowrap rounded-md border border-transparent bg-black px-3 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
+          className='inline-flex items-center self-end whitespace-nowrap rounded-md border border-transparent bg-black px-3 py-2 text-xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800'
         >
           <PlusIcon className='mr-1 h-3 w-3' /> Connector Key
         </Link>
@@ -462,7 +462,7 @@ function Password() {
               setErrors({})
               setError('')
             }}
-            className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
+            className={`mt-1 block w-full rounded-md shadow-xs focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
               errors.oldpassword ? 'border-red-500' : 'border-gray-300'
             }`}
           />
@@ -488,7 +488,7 @@ function Password() {
               setErrors({})
               setError('')
             }}
-            className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
+            className={`mt-1 block w-full rounded-md shadow-xs focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
               errors.password ? 'border-red-500' : 'border-gray-300'
             }`}
           />
@@ -514,7 +514,7 @@ function Password() {
               setErrors({})
               setError('')
             }}
-            className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
+            className={`mt-1 block w-full rounded-md shadow-xs focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
               errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
             }`}
           />
@@ -537,7 +537,7 @@ function Password() {
               error === ''
             )
           }
-          className='inline-flex cursor-pointer items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30'
+          className='inline-flex cursor-pointer items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-xs hover:bg-gray-800 focus:outline-hidden focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30'
         >
           Reset Password
         </button>
@@ -788,7 +788,7 @@ function Authentication() {
             </div>
           </header>
           <form
-            className='group form-input flex w-full flex-wrap rounded-md border-gray-300 leading-tight shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500'
+            className='group form-input flex w-full flex-wrap rounded-md border-gray-300 leading-tight shadow-xs focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500'
             onSubmit={addDomain}
           >
             {allowedDomains.map(domain => (
@@ -807,7 +807,7 @@ function Authentication() {
               </span>
             ))}
             <input
-              className='peer grow bg-transparent py-1 text-sm focus:outline-none'
+              className='peer grow bg-transparent py-1 text-sm focus:outline-hidden'
               value={newDomain}
               placeholder={allowedDomains.length === 0 ? ' Enter domains' : ''}
               onChange={e => {
@@ -832,7 +832,7 @@ function Authentication() {
         </div>
         <Link
           href='/settings/providers/add'
-          className='inline-flex items-center self-end whitespace-nowrap rounded-md border border-transparent bg-black px-3 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
+          className='inline-flex items-center self-end whitespace-nowrap rounded-md border border-transparent bg-black px-3 py-2 text-xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800'
         >
           <PlusIcon className='mr-1 h-3 w-3' /> Connect Provider
         </Link>
@@ -949,7 +949,7 @@ export default function Settings() {
                 Select a tab from settings page
               </label>
               <Menu as='div' className='relative inline-block w-full text-left'>
-                <Menu.Button className='inline-flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-100'>
+                <Menu.Button className='inline-flex w-full items-center justify-between rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-xs hover:bg-gray-50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-100'>
                   {tabs.find(t => t.name === tab)?.title}
                   <ChevronDownIcon
                     className='ml-2 h-4 w-4'
@@ -957,7 +957,7 @@ export default function Settings() {
                   />
                 </Menu.Button>
 
-                <Menu.Items className='absolute right-0 z-10 mt-2 w-full origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none'>
+                <Menu.Items className='absolute right-0 z-10 mt-2 w-full origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black/5 focus:outline-hidden'>
                   <div className='py-1'>
                     {tabs.map(t => (
                       <Menu.Item key={t.name}>

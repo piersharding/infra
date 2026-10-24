@@ -125,7 +125,7 @@ export default function Device() {
                         .replace('-', '')
                         .substring(i, i + 1)}
                       onKeyDown={e => processKeyDown(e, i)}
-                      className={`focus:border-blue-80 focus:ring-blue-80 xs:w-8  mr-1 w-8 rounded-md pl-0 pr-0 text-center uppercase shadow-sm sm:w-10 lg:text-lg ${
+                      className={`focus:border-blue-80 focus:ring-blue-80 xs:w-8  mr-1 w-8 rounded-md pl-0 pr-0 text-center uppercase shadow-xs sm:w-10 lg:text-lg ${
                         error ? 'border-red-500' : 'border-gray-300'
                       }`}
                     />
@@ -141,7 +141,7 @@ export default function Device() {
               <button
                 type='submit'
                 disabled={codeEntered}
-                className='mt-4 mb-2 flex w-full cursor-pointer justify-center rounded-md border border-transparent bg-blue-500 py-2 px-4 font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed  disabled:opacity-30 sm:text-sm'
+                className='mt-4 mb-2 flex w-full cursor-pointer justify-center rounded-md border border-transparent bg-blue-500 py-2 px-4 font-medium text-white shadow-xs hover:bg-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed  disabled:opacity-30 sm:text-sm'
               >
                 Confirm and Authorize New Device
               </button>

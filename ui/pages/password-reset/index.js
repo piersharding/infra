@@ -85,7 +85,7 @@ export default function PasswordReset() {
                       setEmail(e.target.value)
                       setError('')
                     }}
-                    className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
+                    className={`mt-1 block w-full rounded-md shadow-xs focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
                       error ? 'border-red-500' : 'border-gray-300'
                     }`}
                   />
@@ -93,7 +93,7 @@ export default function PasswordReset() {
                 <button
                   disabled={!email}
                   type='submit'
-                  className='mt-4 mb-2 flex w-full cursor-pointer justify-center rounded-md border border-transparent bg-blue-500 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30'
+                  className='mt-4 mb-2 flex w-full cursor-pointer justify-center rounded-md border border-transparent bg-blue-500 py-2 px-4 text-sm font-medium text-white shadow-xs hover:bg-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30'
                 >
                   Reset Password
                 </button>

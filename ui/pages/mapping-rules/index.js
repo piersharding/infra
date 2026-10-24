@@ -199,7 +199,7 @@ function AddMappingRuleDialog({
                     value={ruleName}
                     onChange={e => setRuleName(e.target.value)}
                     placeholder='e.g., team-platform-access'
-                    className={`mt-1 block w-full rounded-md border ${errors.rule_name ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 sm:text-sm`}
+                    className={`mt-1 block w-full rounded-md border ${errors.rule_name ? 'border-red-500' : 'border-gray-300'} shadow-xs focus:border-blue-500 sm:text-sm`}
                   />
                   {errors.rule_name && (
                     <p className='mt-1 text-xs text-red-500'>
@@ -218,7 +218,7 @@ function AddMappingRuleDialog({
                     id='mr-type'
                     value={destinationType}
                     onChange={e => setDestinationType(e.target.value)}
-                    className='mt-1 block w-full rounded-md border border-gray-300 shadow-sm sm:text-sm'
+                    className='mt-1 block w-full rounded-md border border-gray-300 shadow-xs sm:text-sm'
                   >
                     <option value='kubernetes'>Kubernetes</option>
                     <option value='ssh'>SSH</option>
@@ -237,7 +237,7 @@ function AddMappingRuleDialog({
                     value={sourceGroupRegex}
                     onChange={e => setSourceGroupRegex(e.target.value)}
                     placeholder='e.g., ^team-(.*)$'
-                    className={`mt-1 block w-full rounded-md border ${errors.source_group_regex ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 sm:text-sm`}
+                    className={`mt-1 block w-full rounded-md border ${errors.source_group_regex ? 'border-red-500' : 'border-gray-300'} shadow-xs focus:border-blue-500 sm:text-sm`}
                   />
                   {errors.source_group_regex && (
                     <p className='mt-1 text-xs text-red-500'>
@@ -261,7 +261,7 @@ function AddMappingRuleDialog({
                       value={testGroupName}
                       onChange={e => setTestGroupName(e.target.value)}
                       placeholder="e.g., team-platform, ops-general"
-                      className='block w-full rounded-md border border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-2 py-1'
+                      className='block w-full rounded-md border border-blue-200 shadow-xs focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-2 py-1'
                     />
                     {testGroupMatched === true && (
                       <div className='flex flex-col items-center gap-0.5 text-green-700'>
@@ -289,7 +289,7 @@ function AddMappingRuleDialog({
                     value={nameTemplate}
                     onChange={e => setNameTemplate(e.target.value)}
                     placeholder='e.g., cluster-$1-prod'
-                    className={`mt-1 block w-full rounded-md border ${errors.name_template ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 sm:text-sm`}
+                    className={`mt-1 block w-full rounded-md border ${errors.name_template ? 'border-red-500' : 'border-gray-300'} shadow-xs focus:border-blue-500 sm:text-sm`}
                   />
                   {errors.name_template && (
                     <p className='mt-1 text-xs text-red-500'>
@@ -311,7 +311,7 @@ function AddMappingRuleDialog({
                         value={roleTemplate}
                         onChange={e => setRoleTemplate(e.target.value)}
                         placeholder='e.g., $1-admin'
-                        className={`mt-1 block w-full rounded-md border ${errors.role_template ? 'border-red-500' : 'border-gray-300'} shadow-sm focus:border-blue-500 sm:text-sm`}
+                        className={`mt-1 block w-full rounded-md border ${errors.role_template ? 'border-red-500' : 'border-gray-300'} shadow-xs focus:border-blue-500 sm:text-sm`}
                       />
                       {errors.role_template && (
                         <p className='mt-1 text-xs text-red-500'>
@@ -331,7 +331,7 @@ function AddMappingRuleDialog({
                         value={namespaceTemplate}
                         onChange={e => setNamespaceTemplate(e.target.value)}
                         placeholder='Optional: e.g., $1-ns'
-                        className='mt-1 block w-full rounded-md border border-gray-300 shadow-sm sm:text-sm'
+                        className='mt-1 block w-full rounded-md border border-gray-300 shadow-xs sm:text-sm'
                       />
                     </div>
                   </>
@@ -387,12 +387,7 @@ export default function GroupsMapping() {
   const limit = 50
 
   const { user, isAdmin } = useUser()
-
-  // Hide from non-admins — mapping rules control group access policies.
-  if (user && !isAdmin) {
-    router.replace('/')
-    return null
-  }
+  const denied = user && !isAdmin
 
   // Search functionality
   const { searchQuery, setSearchQuery, executeSearch, getEmptyMessage } =
@@ -411,14 +406,16 @@ export default function GroupsMapping() {
   }, [page, limit, searchQuery])
 
   // SWR hook fetches mapping rules from the API. Mutate is used to invalidate cache after CRUD operations.
-  const { data: mappingsData } = useSWR(apiUrl) || {}
+  const { data: mappingsData } = useSWR(denied ? null : apiUrl) || {}
   const items = mappingsData?.items || []
   const totalPages = mappingsData?.totalPages || 0
   const totalCount = mappingsData?.totalCount || 0
 
 
 
-  const { data: evalStatus } = useSWR('/api/mapping-rules/eval-status')
+  const { data: evalStatus } = useSWR(
+    denied ? null : '/api/mapping-rules/eval-status'
+  )
   const lastEvalTime = evalStatus?.last_run_at
     ? new Date(evalStatus.last_run_at).toLocaleString()
     : null
@@ -462,12 +459,18 @@ export default function GroupsMapping() {
   }
 
   // Clear notification after 5 seconds
-  useState(() => {
+  useEffect(() => {
     if (showNotification) {
       const timer = setTimeout(() => setShowNotification(false), 5000)
       return () => clearTimeout(timer)
     }
-  })
+  }, [showNotification])
+
+  // Hide from non-admins — mapping rules control group access policies.
+  if (denied) {
+    router.replace('/')
+    return null
+  }
 
   return (
     <div className='mb-10'>
@@ -503,7 +506,7 @@ export default function GroupsMapping() {
               setEditingRuleId(null)
               setAddOpen(true)
             }}
-            className='ml-4 inline-flex items-center self-end rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
+            className='ml-4 inline-flex items-center self-end rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800'
           >
             <PlusIcon className='mr-1 h-3 w-3' /> Add Rule
           </button>
@@ -581,7 +584,7 @@ export default function GroupsMapping() {
                   <span className='text-sm font-medium text-gray-900'>
                     {info.row.original.ruleName}
                   </span>
-                  <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-2xs font-mono text-gray-600'>
+                  <code className='w-fit rounded-sm border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-2xs font-mono text-gray-600'>
                     {info.row.original.sourceGroupRegex}
                   </code>
                 </div>
@@ -605,7 +608,7 @@ export default function GroupsMapping() {
                     <span className='text-xs text-gray-900 font-medium'>
                       Destination
                     </span>
-                    <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
+                    <code className='w-fit rounded-sm border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
                       {m.templatePreview}
                     </code>
                     {m.roleTemplate && m.roleTemplate !== '-' && (
@@ -613,7 +616,7 @@ export default function GroupsMapping() {
                         <span className='text-xs text-gray-900 font-medium'>
                           Role
                         </span>
-                        <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
+                        <code className='w-fit rounded-sm border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
                           {m.roleTemplate}
                         </code>
                       </>
@@ -623,7 +626,7 @@ export default function GroupsMapping() {
                         <span className='text-xs text-gray-900 font-medium'>
                           Namespace
                         </span>
-                        <code className='w-fit rounded border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
+                        <code className='w-fit rounded-sm border border-gray-200 bg-zinc-50 px-1.5 py-0.5 text-xs font-mono text-gray-600'>
                           {m.namespaceTemplate}
                         </code>
                       </>
@@ -638,7 +641,8 @@ export default function GroupsMapping() {
             // for each grant. Uses absolute-position overlay relative to the cell.
             {
               id: 'matchedGrants',
-              cell: info => {
+              // flexRender mounts this as a component, so it may hold state
+              cell: function MatchedGrantsCell(info) {
                 const matchedGrants = info.row.original.matchedGrants || []
                 const [isHovered, setIsHovered] = useState(false)
 
@@ -656,7 +660,7 @@ export default function GroupsMapping() {
                       <div
                         onMouseEnter={() => setIsHovered(true)}
                         onMouseLeave={() => setIsHovered(false)}
-                        className='absolute z-[100] mt-2 w-max max-w-[90vw] max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-xl'
+                        className='absolute z-100 mt-2 w-max max-w-[90vw] max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-white/95 backdrop-blur-xs shadow-xl'
                         style={{
                           left: '50%',
                           transform: 'translateX(-50%)',
@@ -770,7 +774,7 @@ export default function GroupsMapping() {
                 passHref
               >
                 <span
-                  className={`inline-block rounded px-3 py-1 text-sm ${page === i + 1 ? 'bg-gray-200 font-medium' : 'hover:bg-gray-100 cursor-pointer'}`}
+                  className={`inline-block rounded-sm px-3 py-1 text-sm ${page === i + 1 ? 'bg-gray-200 font-medium' : 'hover:bg-gray-100 cursor-pointer'}`}
                 >
                   {i + 1}
                 </span>

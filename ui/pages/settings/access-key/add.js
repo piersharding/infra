@@ -70,7 +70,7 @@ function AccessKeyDialogContent({ accessKey }) {
         <div className='my-10 flex justify-end'>
           <Link
             href='/settings'
-            className='flex-none items-center self-center rounded-md border border-transparent bg-black px-4 py-2 text-2xs font-medium text-white shadow-sm hover:bg-gray-800'
+            className='flex-none items-center self-center rounded-md border border-transparent bg-black px-4 py-2 text-2xs font-medium text-white shadow-xs hover:bg-gray-800'
           >
             Finish
           </Link>
@@ -93,7 +93,7 @@ function AccessKeyDialog({ accessKey, accessKeyDialogOpen }) {
           leaveFrom='opacity-100'
           leaveTo='opacity-0'
         >
-          <div className='fixed inset-0 bg-white bg-opacity-75 backdrop-blur-xl transition-opacity' />
+          <div className='fixed inset-0 bg-white/75 backdrop-blur-xl transition-opacity' />
         </Transition.Child>
         <div className='fixed inset-0 z-10 overflow-y-auto'>
           <div className='flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0'>
@@ -141,7 +141,7 @@ function ExpirationRateMenu({ selected, setSelected }) {
       <div className='relative'>
         <Listbox.Button
           ref={setReferenceElement}
-          className='relative w-48 cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm'
+          className='relative w-48 cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 sm:text-sm'
         >
           <span className='block truncate'>{selected.name}</span>
           <span className='pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2'>
@@ -157,7 +157,7 @@ function ExpirationRateMenu({ selected, setSelected }) {
             ref={setPopperElement}
             style={styles.popper}
             {...attributes.popper}
-            className='absolute z-10 w-48 overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-none'
+            className='absolute z-10 w-48 overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-hidden'
           >
             <div className='max-h-64 overflow-auto'>
               {EXPIRATION_RATE.map(rate => (
@@ -206,7 +206,7 @@ function CalendarInput({ setSelectedExpiry, selectedExpiry }) {
 
   return (
     <Popover className='relative'>
-      <Popover.Button className='relative w-48 cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:text-sm'>
+      <Popover.Button className='relative w-48 cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 sm:text-sm'>
         {selectedCustom}
       </Popover.Button>
       <Popover.Panel className='absolute z-20 mt-2'>
@@ -323,7 +323,7 @@ export default function AccessKey() {
                 setName(e.target.value)
                 setError('')
               }}
-              className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
+              className={`mt-1 block w-full rounded-md shadow-xs focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
                 error ? 'border-red-500' : 'border-gray-300'
               }`}
             />
@@ -392,7 +392,7 @@ export default function AccessKey() {
             <button
               type='submit'
               disabled={!name}
-              className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-black'
+              className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-black'
             >
               Generate Access Key
             </button>

@@ -43,7 +43,7 @@ export default function DestinationsAdd() {
     window.addEventListener('blur', blur)
     return () => {
       window.removeEventListener('focus', focus)
-      window.removeEventListener('blur', blur)
+      window.removeEventListener('blur-sm', blur)
     }
   }, [])
 
@@ -159,7 +159,7 @@ export default function DestinationsAdd() {
                 setError('')
                 setName(e.target.value)
               }}
-              className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-30 sm:text-sm ${
+              className={`mt-1 block w-full rounded-md shadow-xs focus:border-blue-500 focus:ring-blue-500 disabled:opacity-30 sm:text-sm ${
                 error ? 'border-red-500' : 'border-gray-300'
               }`}
             />
@@ -171,7 +171,7 @@ export default function DestinationsAdd() {
           </div>
           <div className='mt-6 flex flex-row items-center justify-end'>
             <button
-              className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-2xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
+              className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-2xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
               type='submit'
             >
               Next
@@ -247,7 +247,7 @@ export default function DestinationsAdd() {
             </div>
           )}
           <button
-            className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-2xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
+            className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-2xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
             type='button'
             onClick={async () => {
               // grant the person that added this cluster 'cluster-admin' access automatically

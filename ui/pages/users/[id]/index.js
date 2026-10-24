@@ -250,7 +250,7 @@ export default function UserDetail() {
               <button
                 disabled={selectedResources.length === 0}
                 type='submit'
-                className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-[7px] text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
+                className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-[7px] text-xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
               >
                 <PlusIcon className='mr-1 h-3 w-3' />
                 Add

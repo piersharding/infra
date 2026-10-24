@@ -194,7 +194,7 @@ export default function Calendar({
   }, [selectedDate])
 
   return (
-    <div className='w-60 border border-gray-200 bg-white p-3 sm:w-80 sm:rounded sm:p-4 sm:shadow-lg'>
+    <div className='w-60 border border-gray-200 bg-white p-3 sm:w-80 sm:rounded-sm sm:p-4 sm:shadow-lg'>
       {/* datepicker */}
       <div className=' flex-col'>
         <div className='mb-4 flex items-center justify-between'>

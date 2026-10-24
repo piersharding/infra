@@ -39,7 +39,7 @@ export default function OrgSignup({
               setSubDomain(getURLSafeDomain(e.target.value))
             }
           }}
-          className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
+          className={`mt-1 block w-full rounded-md shadow-xs focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
             errors['org.name'] ? 'border-red-500' : 'border-gray-300'
           }`}
         />
@@ -54,7 +54,7 @@ export default function OrgSignup({
         >
           Domain
         </label>
-        <div className='shadow-sm" mt-1 flex rounded-md'>
+        <div className='mt-1 flex rounded-md shadow-xs'>
           <input
             required
             name='orgDomain'
@@ -68,11 +68,11 @@ export default function OrgSignup({
               setErrors({})
               setError('')
             }}
-            className={`block w-full min-w-0 rounded-l-lg px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
+            className={`block w-full min-w-0 rounded-l-lg px-3 py-2 shadow-xs focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
               errors['org.subdomain'] ? 'border-red-500' : 'border-gray-300'
             }`}
           />
-          <span className='inline-flex select-none items-center rounded-r-lg border border-l-0 border-gray-300 bg-gray-50 px-3 text-2xs text-gray-500 shadow-sm'>
+          <span className='inline-flex select-none items-center rounded-r-lg border border-l-0 border-gray-300 bg-gray-50 px-3 text-2xs text-gray-500 shadow-xs'>
             .{baseDomain}
           </span>
         </div>

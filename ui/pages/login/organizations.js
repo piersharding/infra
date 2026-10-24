@@ -39,7 +39,7 @@ export default function Organizations() {
               href={`//${o.url}`}
               className='group my-2 flex w-full items-center justify-between
              rounded-md border border-gray-300 bg-white py-2.5 px-4
-              hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
+              hover:bg-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
             >
               <div className='truncate text-left'>
                 <div className='truncate text-sm leading-snug'>{o.name}</div>

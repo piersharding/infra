@@ -39,7 +39,7 @@ export default function RoleSelect({ role, roles, onChange }) {
       <div className='relative'>
         <Listbox.Button
           ref={setReferenceElement}
-          className='relative w-36 cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-left text-xs shadow-sm hover:cursor-pointer hover:bg-gray-100 focus:outline-none'
+          className='relative w-36 cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-left text-xs shadow-xs hover:cursor-pointer hover:bg-gray-100 focus:outline-hidden'
         >
           <span className='pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2'>
             <ChevronDownIcon
@@ -54,7 +54,7 @@ export default function RoleSelect({ role, roles, onChange }) {
             ref={setPopperElement}
             style={styles.popper}
             {...attributes.popper}
-            className='absolute z-10 w-48 overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-none'
+            className='absolute z-10 w-48 overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-hidden'
           >
             <div className='max-h-64 overflow-auto'>
               {roles?.map(r => (

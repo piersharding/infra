@@ -56,7 +56,7 @@ export default function SearchInput({
             {searchQuery && !disabled && (
                 <button
                     onClick={handleClear}
-                    className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded'
+                    className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-sm'
                     aria-label='Clear search'
                     type='button'
                 >
@@ -78,7 +78,7 @@ export default function SearchInput({
                 <div className='flex items-center md:hidden'>
                     <button
                         onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-                        className='p-2 rounded-md text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
+                        className='p-2 rounded-md text-gray-400 hover:text-gray-600 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
                         aria-label='Toggle search'
                         aria-expanded={mobileSearchOpen}
                     >
@@ -93,7 +93,7 @@ export default function SearchInput({
 
             {/* Mobile search input */}
             {showMobileToggle && mobileSearchOpen && (
-                <div className='absolute left-0 right-0 top-full z-10 bg-white border-b border-gray-200 px-6 py-3 shadow-sm md:hidden'>
+                <div className='absolute left-0 right-0 top-full z-10 bg-white border-b border-gray-200 px-6 py-3 shadow-xs md:hidden'>
                     {renderSearchField(true)}
                 </div>
             )}

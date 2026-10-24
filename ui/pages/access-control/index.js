@@ -145,7 +145,7 @@ function CreateAccessDialog({ setOpen, onCreated = () => {} }) {
               onChange={setSelected}
             >
               <Combobox.Input
-                className={`block w-full rounded-md border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500`}
+                className={`block w-full rounded-md border-gray-300 text-xs shadow-xs focus:border-blue-500 focus:ring-blue-500`}
                 placeholder='User or group'
                 onChange={e => {
                   setError({})
@@ -160,7 +160,7 @@ function CreateAccessDialog({ setOpen, onCreated = () => {} }) {
               />
               {options?.length > 0 && (
                 <div className='relative'>
-                  <Combobox.Options className='absolute z-50 mt-2 max-h-60 w-full origin-top-right divide-y divide-gray-100 overflow-auto rounded-md bg-white text-xs shadow-lg shadow-gray-300/20 ring-1 ring-black ring-opacity-5 focus:outline-none'>
+                  <Combobox.Options className='absolute z-50 mt-2 max-h-60 w-full origin-top-right divide-y divide-gray-100 overflow-auto rounded-md bg-white text-xs shadow-lg shadow-gray-300/20 ring-1 ring-black/5 focus:outline-hidden'>
                     {options?.map(f => (
                       <Combobox.Option
                         key={f.id}
@@ -210,7 +210,7 @@ function CreateAccessDialog({ setOpen, onCreated = () => {} }) {
                 onChange={setSelectedResource}
               >
                 <Combobox.Input
-                  className={`block w-full rounded-md border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500`}
+                  className={`block w-full rounded-md border-gray-300 text-xs shadow-xs focus:border-blue-500 focus:ring-blue-500`}
                   placeholder='infrastructure'
                   onChange={e => {
                     setError({})
@@ -225,7 +225,7 @@ function CreateAccessDialog({ setOpen, onCreated = () => {} }) {
                 />
                 {resourcesOptions?.length > 0 && (
                   <div className='relative'>
-                    <Combobox.Options className=' absolute z-50 mt-2 max-h-60 w-full origin-top-right divide-y divide-gray-100 overflow-auto rounded-md bg-white text-xs shadow-lg shadow-gray-300/20 ring-1 ring-black ring-opacity-5 focus:outline-none'>
+                    <Combobox.Options className=' absolute z-50 mt-2 max-h-60 w-full origin-top-right divide-y divide-gray-100 overflow-auto rounded-md bg-white text-xs shadow-lg shadow-gray-300/20 ring-1 ring-black/5 focus:outline-hidden'>
                       {resourcesOptions?.map(f => (
                         <Combobox.Option
                           key={f.id}
@@ -296,7 +296,7 @@ function CreateAccessDialog({ setOpen, onCreated = () => {} }) {
                       multiple
                     >
                       <div className='relative'>
-                        <Listbox.Button className='relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-left text-xs shadow-sm hover:cursor-pointer hover:bg-gray-100 focus:border-blue-500 focus:ring-blue-500'>
+                        <Listbox.Button className='relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-left text-xs shadow-xs hover:cursor-pointer hover:bg-gray-100 focus:border-blue-500 focus:ring-blue-500'>
                           <div className='flex space-x-1 truncate'>
                             <span className='pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2'>
                               <ChevronDownIcon
@@ -311,7 +311,7 @@ function CreateAccessDialog({ setOpen, onCreated = () => {} }) {
                             </span>
                           </div>
                         </Listbox.Button>
-                        <Listbox.Options className='absolute z-10 w-full overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-none'>
+                        <Listbox.Options className='absolute z-10 w-full overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-hidden'>
                           <div className='max-h-64 overflow-auto'>
                             {selectedResource?.resources?.map(r => (
                               <Listbox.Option
@@ -387,7 +387,7 @@ function CreateAccessDialog({ setOpen, onCreated = () => {} }) {
                       multiple
                     >
                       <div className='relative'>
-                        <Listbox.Button className='relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-left text-xs shadow-sm hover:cursor-pointer hover:bg-gray-100 focus:border-blue-500 focus:ring-blue-50'>
+                        <Listbox.Button className='relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-left text-xs shadow-xs hover:cursor-pointer hover:bg-gray-100 focus:border-blue-500 focus:ring-blue-50'>
                           <div className='flex space-x-1 truncate'>
                             <span className='pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2'>
                               <ChevronDownIcon
@@ -402,7 +402,7 @@ function CreateAccessDialog({ setOpen, onCreated = () => {} }) {
                             </span>
                           </div>
                         </Listbox.Button>
-                        <Listbox.Options className='absolute z-[100] w-full overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-none'>
+                        <Listbox.Options className='absolute z-100 w-full overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-hidden'>
                           <div className='max-h-64 overflow-auto'>
                             {roles?.map(r => (
                               <Listbox.Option
@@ -457,7 +457,7 @@ function CreateAccessDialog({ setOpen, onCreated = () => {} }) {
           <button
             type='button'
             onClick={() => setOpen(false)}
-            className='inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-100'
+            className='inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-100'
           >
             Cancel
           </button>
@@ -466,7 +466,7 @@ function CreateAccessDialog({ setOpen, onCreated = () => {} }) {
             disabled={
               !selected || !selectedResource || selectedRoles.length === 0
             }
-            className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
+            className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-xs hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
           >
             Add
           </button>
@@ -593,7 +593,7 @@ export default function AccessControl() {
           <>
             <button
               onClick={() => setOpenCreateAccess(true)}
-              className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
+              className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800'
             >
               <PlusIcon className='mr-1 h-3 w-3' /> Grant Access
             </button>
@@ -608,7 +608,7 @@ export default function AccessControl() {
                   leaveFrom='opacity-100'
                   leaveTo='opacity-0'
                 >
-                  <div className='fixed inset-0 bg-white bg-opacity-75 backdrop-blur-xl transition-opacity' />
+                  <div className='fixed inset-0 bg-white/75 backdrop-blur-xl transition-opacity' />
                 </Transition.Child>
                 <div className='fixed inset-0 z-30 overflow-y-auto'>
                   <div className='flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0'>

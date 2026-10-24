@@ -61,8 +61,10 @@ export default [
         location: 'readonly',
         history: 'readonly',
         URLSearchParams: 'readonly',
+        crypto: 'readonly',
         // Node.js globals
         process: 'readonly',
+        require: 'readonly',
         global: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',

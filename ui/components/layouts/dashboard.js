@@ -70,7 +70,7 @@ function SidebarNav({ children, open, setOpen }) {
               {children}
             </Dialog.Panel>
           </Transition.Child>
-          <div className='w-14 flex-shrink-0'></div>
+          <div className='w-14 shrink-0'></div>
         </div>
       </Dialog>
     </Transition.Root>
@@ -143,7 +143,7 @@ export default function Dashboard({ children }) {
   function Nav() {
     return (
       <>
-        <div className='mb-2 flex flex-shrink-0 select-none items-center px-3'>
+        <div className='mb-2 flex shrink-0 select-none items-center px-3'>
           <Link href='/destinations'>
             <img className='my-2 h-7' src='/logo.svg' alt='Infra' />
           </Link>
@@ -171,7 +171,7 @@ export default function Dashboard({ children }) {
                         ? 'fill-blue-100 text-blue-500'
                         : 'fill-gray-50 text-gray-500/75 group-hover:text-gray-500'
                     }
-                    mr-2 h-[18px] w-[18px] flex-shrink`}
+                    mr-2 h-[18px] w-[18px] shrink`}
                     aria-hidden='true'
                   />
                   {item.name}
@@ -229,10 +229,10 @@ export default function Dashboard({ children }) {
 
       {/* Main content */}
       <div className='mx-auto flex min-w-0 flex-1 flex-col'>
-        <div className='sticky top-0 z-20 flex flex-shrink-0 border-b border-gray-100 bg-white/90 px-6 pl-2 backdrop-blur-lg md:hidden md:py-2 md:px-6'>
+        <div className='sticky top-0 z-20 flex shrink-0 border-b border-gray-100 bg-white/90 px-6 pl-2 backdrop-blur-lg md:hidden md:py-2 md:px-6'>
           <button
             type='button'
-            className='p-4 text-black focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 md:hidden'
+            className='p-4 text-black focus:outline-hidden focus:ring-2 focus:ring-inset focus:ring-blue-500 md:hidden'
             onClick={() => setSidebarOpen(true)}
           >
             <span className='sr-only'>Open sidebar</span>

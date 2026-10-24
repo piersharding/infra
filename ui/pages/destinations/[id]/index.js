@@ -86,7 +86,7 @@ function EditRoleMenu({
       <div className='relative'>
         <Listbox.Button
           ref={setReferenceElement}
-          className='relative w-48 cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-left text-xs shadow-sm hover:cursor-pointer hover:bg-gray-100 focus:outline-none'
+          className='relative w-48 cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-left text-xs shadow-xs hover:cursor-pointer hover:bg-gray-100 focus:outline-hidden'
         >
           <div className='flex space-x-1 truncate'>
             <span className='pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2'>
@@ -106,7 +106,7 @@ function EditRoleMenu({
             ref={setPopperElement}
             style={styles.popper}
             {...attributes.popper}
-            className='absolute z-10 w-48 overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-none'
+            className='absolute z-10 w-48 overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-hidden'
           >
             <div className='max-h-64 overflow-auto'>
               {roles?.map(r => (
@@ -252,7 +252,7 @@ function GrantCell({ grantsList, grant, destination, onRemove, onUpdate }) {
                     <div className='flex items-center space-x-2'>
                       <input
                         type='checkbox'
-                        className='h-4 w-4 rounded border-gray-300 text-blue-600 hover:cursor-pointer focus:ring-blue-500'
+                        className='h-4 w-4 rounded-sm border-gray-300 text-blue-600 hover:cursor-pointer focus:ring-blue-500'
                         ref={checkbox}
                         checked={checked}
                         onChange={() => {
@@ -327,7 +327,7 @@ function GrantCell({ grantsList, grant, destination, onRemove, onUpdate }) {
                               >
                                 <input
                                   type='checkbox'
-                                  className='h-4 w-4 rounded border-gray-300 text-blue-600 hover:cursor-pointer focus:ring-blue-500 sm:left-6'
+                                  className='h-4 w-4 rounded-sm border-gray-300 text-blue-600 hover:cursor-pointer focus:ring-blue-500 sm:left-6'
                                   checked={selectedNamespaces.includes(
                                     resource
                                   )}
@@ -544,7 +544,7 @@ function NamespacesDropdownMenu({
         <div className='relative'>
           <Listbox.Button
             ref={setReferenceElement}
-            className='relative w-48 cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-left text-xs shadow-sm hover:cursor-pointer hover:bg-gray-100 focus:outline-none'
+            className='relative w-48 cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-8 text-left text-xs shadow-xs hover:cursor-pointer hover:bg-gray-100 focus:outline-hidden'
           >
             <div className='flex space-x-1 truncate'>
               <span className='pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2'>
@@ -568,7 +568,7 @@ function NamespacesDropdownMenu({
               ref={setPopperElement}
               style={styles.popper}
               {...attributes.popper}
-              className='absolute z-10 w-48 overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-none'
+              className='absolute z-10 w-48 overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-hidden'
             >
               <div className='max-h-64 overflow-auto'>
                 {resources?.map(r => (
@@ -782,7 +782,7 @@ export default function DestinationDetail() {
           <div className='my-3 flex space-x-2 md:my-0'>
             {currentUserRoles && currentUserRoles?.length > 0 && (
               <Popover className='relative'>
-                <Popover.Button className='inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-blue-500 shadow-sm hover:text-blue-600'>
+                <Popover.Button className='inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-semibold text-blue-500 shadow-xs hover:text-blue-600'>
                   Access cluster
                   <ChevronDownIcon className='ml-1 h-4 w-4' />
                 </Popover.Button>

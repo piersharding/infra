@@ -86,7 +86,7 @@ export default function Destinations() {
           {isAdmin && (
             <Link
               href='/destinations/add'
-              className='inline-flex items-center rounded-md border border-transparent bg-black  px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
+              className='inline-flex items-center rounded-md border border-transparent bg-black  px-4 py-2 text-xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800'
             >
               <PlusIcon className='mr-1 h-3 w-3' /> Connect Cluster
             </Link>

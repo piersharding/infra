@@ -109,7 +109,7 @@ export default function Table({
                   <th scope='col' className='relative w-5 px-6'>
                     <input
                       type='checkbox'
-                      className='left-4 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-30 disabled:focus:ring-0 sm:left-6'
+                      className='left-4 h-4 w-4 rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-30 disabled:focus:ring-0 sm:left-6'
                       ref={el => (checkbox.current = el)}
                       checked={checkedAll}
                       onChange={toggleAll}
@@ -154,7 +154,7 @@ export default function Table({
                     <th scope='col'>
                       <input
                         type='checkbox'
-                        className='left-4 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-30 disabled:focus:ring-0 sm:left-6'
+                        className='left-4 h-4 w-4 rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-30 disabled:focus:ring-0 sm:left-6'
                         value={row.id}
                         checked={selectedRowIds.includes(row.original.id)}
                         disabled={row.original.disabledCheckbox}

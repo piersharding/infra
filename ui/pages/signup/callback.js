@@ -89,7 +89,7 @@ export default function Callback() {
         <button
           type='submit'
           disabled={submitted}
-          className='mt-6 mb-4 flex w-full cursor-pointer justify-center rounded-lg border border-transparent bg-blue-500 py-2.5 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:pointer-events-none disabled:bg-blue-700/50'
+          className='mt-6 mb-4 flex w-full cursor-pointer justify-center rounded-lg border border-transparent bg-blue-500 py-2.5 px-4 text-sm font-medium text-white shadow-xs hover:bg-blue-700 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:pointer-events-none disabled:bg-blue-700/50'
         >
           Sign Up
         </button>

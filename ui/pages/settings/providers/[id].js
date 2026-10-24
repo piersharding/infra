@@ -69,13 +69,13 @@ function SCIMKeyDialog({ provider, setOpen }) {
                 <button
                   type='button'
                   onClick={() => setOpen(false)}
-                  className='inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-100'
+                  className='inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-xs hover:bg-gray-100'
                 >
                   Cancel
                 </button>
                 <button
                   type='submit'
-                  className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-gray-800'
+                  className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-xs hover:bg-gray-800'
                 >
                   Continue
                 </button>
@@ -217,7 +217,7 @@ export default function ProvidersEditDetails() {
                   leaveFrom='opacity-100'
                   leaveTo='opacity-0'
                 >
-                  <div className='fixed inset-0 bg-white bg-opacity-75 backdrop-blur-xl transition-opacity' />
+                  <div className='fixed inset-0 bg-white/75 backdrop-blur-xl transition-opacity' />
                 </Transition.Child>
                 <div className='fixed inset-0 z-10 overflow-y-auto'>
                   <div className='flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0'>
@@ -246,7 +246,7 @@ export default function ProvidersEditDetails() {
           <div className='my-3 flex space-x-2 md:my-0'>
             <button
               onClick={() => setKeyDialogOpen(true)}
-              className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800'
+              className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800'
               type='button'
             >
               Generate SCIM Access Key
@@ -309,7 +309,7 @@ export default function ProvidersEditDetails() {
                 setErrors({})
                 setError('')
               }}
-              className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
+              className={`mt-1 block w-full rounded-md shadow-xs focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
                 errors.name ? 'border-red-500' : 'border-gray-300'
               }`}
             />
@@ -325,7 +325,7 @@ export default function ProvidersEditDetails() {
               type='text'
               value={provider?.url}
               readOnly
-              className='mt-1 block w-full rounded-md border-gray-300 bg-gray-200 text-gray-600 shadow-sm focus:border-gray-300 focus:ring-0 sm:text-sm'
+              className='mt-1 block w-full rounded-md border-gray-300 bg-gray-200 text-gray-600 shadow-xs focus:border-gray-300 focus:ring-0 sm:text-sm'
             />
           </div>
 
@@ -337,7 +337,7 @@ export default function ProvidersEditDetails() {
               readOnly
               type='text'
               value={provider?.clientID}
-              className='mt-1 block w-full rounded-md border-gray-300 bg-gray-200 text-gray-600 shadow-sm focus:border-gray-300 focus:ring-0 sm:text-sm'
+              className='mt-1 block w-full rounded-md border-gray-300 bg-gray-200 text-gray-600 shadow-xs focus:border-gray-300 focus:ring-0 sm:text-sm'
             />
           </div>
 
@@ -354,7 +354,7 @@ export default function ProvidersEditDetails() {
                 setErrors({})
                 setError('')
               }}
-              className={`mt-1 block w-full rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
+              className={`mt-1 block w-full rounded-md shadow-xs focus:border-blue-500 focus:ring-blue-500 sm:text-sm ${
                 errors.clientsecret ? 'border-red-500' : 'border-gray-300'
               }`}
             />
@@ -372,7 +372,7 @@ export default function ProvidersEditDetails() {
                   (name === provider?.name || name.length === 0)
                 }
                 type='submit'
-                className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-sm hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
+                className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-2 text-xs font-medium text-white shadow-xs hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
               >
                 Save Changes
               </button>

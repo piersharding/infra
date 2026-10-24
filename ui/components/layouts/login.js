@@ -33,7 +33,7 @@ export default function Login({ children }) {
         viewBox='0 0 192 74'
         fill='none'
         xmlns='http://www.w3.org/2000/svg'
-        className='mt-6 mb-16 h-4 fill-current text-black/[7%]'
+        className='mt-6 mb-16 h-4 fill-current text-black/7'
       >
         <g clipPath='url(#clip0_170_6)'>
           <path d='M8.6 0C3.9 0 0 3.9 0 8.5C0 13.2 3.9 17.1 8.6 17.1C13.3 17.1 17.2 13.2 17.2 8.5C17.2 3.9 13.3 0 8.6 0ZM1.6 23.8V72.9H15.7V23.8H1.6Z' />

@@ -33,7 +33,7 @@ function ComboBox({ options = [], selected, setSelected }) {
       }}
     >
       <HeadlessUIComboBox.Input
-        className='w-full rounded-md border border-gray-300 bg-white pl-2.5 pr-10 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 md:text-xs'
+        className='w-full rounded-md border border-gray-300 bg-white pl-2.5 pr-10 text-sm shadow-xs focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 md:text-xs'
         placeholder='Enter user'
         type='search'
         onChange={event => {
@@ -49,7 +49,7 @@ function ComboBox({ options = [], selected, setSelected }) {
         }}
       />
       {filtered?.length > 0 && (
-        <HeadlessUIComboBox.Options className='absolute z-30 mt-2 max-h-64 min-w-[16rem] max-w-full overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-none'>
+        <HeadlessUIComboBox.Options className='absolute z-30 mt-2 max-h-64 min-w-[16rem] max-w-full overflow-auto rounded-md border  border-gray-200 bg-white text-left text-xs text-gray-800 shadow-lg shadow-gray-300/20 focus:outline-hidden'>
           {filtered.map(o => (
             <HeadlessUIComboBox.Option
               key={o}
@@ -227,7 +227,7 @@ export default function GroupDetails() {
             <button
               disabled={!addUser}
               type='submit'
-              className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-[7px] text-xs font-medium text-white shadow-sm hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
+              className='inline-flex items-center rounded-md border border-transparent bg-black px-4 py-[7px] text-xs font-medium text-white shadow-xs hover:cursor-pointer hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-30'
             >
               <PlusIcon className='mr-1 h-3 w-3' />
               Add
