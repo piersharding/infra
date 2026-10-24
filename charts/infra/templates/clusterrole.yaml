@@ -9,8 +9,17 @@ rules:
     resources:
       - users
       - groups
+      - serviceaccounts
     verbs:
       - impersonate
+  # checks whether a user may impersonate the identity they requested with
+  # kubectl --as, before the connector impersonates it on their behalf
+  - apiGroups:
+      - authorization.k8s.io
+    resources:
+      - subjectaccessreviews
+    verbs:
+      - create
   - apiGroups: [""]
     resources:
       - pods

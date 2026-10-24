@@ -17,6 +17,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -242,6 +244,7 @@ func TestProxyMiddleware_BearerTokenIsReadPerRequest(t *testing.T) {
 		httputil.NewSingleHostReverseProxy(upstreamURL),
 		authn,
 		func() (string, error) { return token, nil },
+		nil,
 	)
 
 	send := func() *httptest.ResponseRecorder {
@@ -279,6 +282,7 @@ func TestProxyMiddleware_BearerTokenUnavailable(t *testing.T) {
 		httputil.NewSingleHostReverseProxy(upstreamURL),
 		authn,
 		func() (string, error) { return "", errors.New("no such file") },
+		nil,
 	)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/apis", nil)
@@ -287,6 +291,176 @@ func TestProxyMiddleware_BearerTokenUnavailable(t *testing.T) {
 	handler(resp, req)
 
 	assert.Equal(t, resp.Code, http.StatusInternalServerError)
+}
+
+func TestProxyMiddleware_Impersonation(t *testing.T) {
+	pub, priv := generateJWK(t)
+
+	type sar struct {
+		Spec struct {
+			User               string             `json:"user"`
+			Groups             []string           `json:"groups"`
+			ResourceAttributes resourceAttributes `json:"resourceAttributes"`
+		} `json:"spec"`
+	}
+
+	type testCase struct {
+		name           string
+		headers        http.Header
+		allowed        []string // resource/name pairs user@example.com may impersonate
+		expectedCode   int
+		expectedHeader http.Header // impersonation headers reaching the kubernetes API
+		expectedBody   string
+	}
+
+	testCases := []testCase{
+		{
+			name:         "no impersonation requested",
+			expectedCode: http.StatusOK,
+			expectedHeader: http.Header{
+				"Impersonate-User":  {"user@example.com"},
+				"Impersonate-Group": {"developers"},
+			},
+		},
+		{
+			name: "escalation to system:masters is refused",
+			headers: http.Header{
+				"Impersonate-User":  {"user@example.com"},
+				"Impersonate-Group": {"system:masters"},
+			},
+			allowed:      []string{"users/user@example.com"},
+			expectedCode: http.StatusForbidden,
+			expectedBody: `cannot impersonate groups \"system:masters\"`,
+		},
+		{
+			name:         "group without user is rejected",
+			headers:      http.Header{"Impersonate-Group": {"system:masters"}},
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			name:         "extra without user is rejected",
+			headers:      http.Header{"Impersonate-Extra-Scopes": {"view"}},
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			name:         "impersonating a user without permission",
+			headers:      http.Header{"Impersonate-User": {"bob"}},
+			expectedCode: http.StatusForbidden,
+			expectedBody: `user \"user@example.com\" cannot impersonate users \"bob\"`,
+		},
+		{
+			name:         "impersonating a permitted user",
+			headers:      http.Header{"Impersonate-User": {"bob"}},
+			allowed:      []string{"users/bob"},
+			expectedCode: http.StatusOK,
+			expectedHeader: http.Header{
+				"Impersonate-User": {"bob"},
+			},
+		},
+		{
+			name: "impersonating a permitted user and groups",
+			headers: http.Header{
+				"Impersonate-User":         {"bob"},
+				"Impersonate-Group":        {"ops", "devs"},
+				"Impersonate-Uid":          {"1234"},
+				"Impersonate-Extra-Scopes": {"view"},
+			},
+			allowed:      []string{"users/bob", "groups/ops", "groups/devs", "uids/1234", "userextras/scopes/view"},
+			expectedCode: http.StatusOK,
+			expectedHeader: http.Header{
+				"Impersonate-User":         {"bob"},
+				"Impersonate-Group":        {"ops", "devs"},
+				"Impersonate-Uid":          {"1234"},
+				"Impersonate-Extra-Scopes": {"view"},
+			},
+		},
+		{
+			name: "one group not permitted",
+			headers: http.Header{
+				"Impersonate-User":  {"bob"},
+				"Impersonate-Group": {"ops", "admins"},
+			},
+			allowed:      []string{"users/bob", "groups/ops"},
+			expectedCode: http.StatusForbidden,
+			expectedBody: `cannot impersonate groups \"admins\"`,
+		},
+		{
+			name:         "impersonating a permitted service account",
+			headers:      http.Header{"Impersonate-User": {"system:serviceaccount:apps:builder"}},
+			allowed:      []string{"serviceaccounts/apps/builder"},
+			expectedCode: http.StatusOK,
+			expectedHeader: http.Header{
+				"Impersonate-User": {"system:serviceaccount:apps:builder"},
+			},
+		},
+		{
+			name:         "service account permission is namespaced",
+			headers:      http.Header{"Impersonate-User": {"system:serviceaccount:apps:builder"}},
+			allowed:      []string{"users/system:serviceaccount:apps:builder"},
+			expectedCode: http.StatusForbidden,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var forwarded http.Header
+			upstream := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+				if req.URL.Path != "/apis/authorization.k8s.io/v1/subjectaccessreviews" {
+					forwarded = http.Header{}
+					for k, v := range req.Header {
+						if strings.HasPrefix(k, "Impersonate-") {
+							forwarded[k] = v
+						}
+					}
+					resp.WriteHeader(http.StatusOK)
+					return
+				}
+
+				assert.Equal(t, req.Header.Get("Authorization"), "Bearer the-token")
+				var review sar
+				assert.NilError(t, json.NewDecoder(req.Body).Decode(&review))
+				assert.Equal(t, review.Spec.User, "user@example.com")
+				assert.DeepEqual(t, review.Spec.Groups, []string{"developers", "system:authenticated"})
+
+				attr := review.Spec.ResourceAttributes
+				assert.Equal(t, attr.Verb, "impersonate")
+				key := strings.Join(slices.DeleteFunc([]string{attr.Resource, attr.Subresource, attr.Namespace, attr.Name}, func(s string) bool { return s == "" }), "/")
+				_, _ = fmt.Fprintf(resp, `{"status":{"allowed":%v}}`, slices.Contains(tc.allowed, key))
+			}))
+			t.Cleanup(upstream.Close)
+
+			upstreamURL, err := url.Parse(upstream.URL)
+			assert.NilError(t, err)
+
+			opts := Options{Server: ServerOptions{SkipTLSVerify: true, AccessKey: "the-access-key"}}
+			assert.NilError(t, opts.Server.URL.Set("https://127.0.0.1:12345"))
+			authn := newAuthenticator(opts)
+			authn.client = fakeClient{key: *pub}
+
+			handler := proxyMiddleware(
+				httputil.NewSingleHostReverseProxy(upstreamURL),
+				authn,
+				func() (string, error) { return "the-token", nil },
+				&impersonationAuthorizer{client: upstream.Client(), url: upstream.URL + "/apis/authorization.k8s.io/v1/subjectaccessreviews"},
+			)
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/pods", nil)
+			for k, v := range tc.headers {
+				req.Header[k] = v
+			}
+			req.Header.Set("Authorization", "Bearer "+generateJWT(t, priv, "user@example.com", time.Now().Add(time.Hour)))
+			resp := httptest.NewRecorder()
+			handler(resp, req)
+
+			assert.Equal(t, resp.Code, tc.expectedCode, resp.Body.String())
+			assert.Assert(t, strings.Contains(resp.Body.String(), tc.expectedBody), resp.Body.String())
+			if tc.expectedCode != http.StatusOK {
+				assert.Assert(t, forwarded == nil, "request should not have reached the kubernetes API")
+				return
+			}
+			assert.DeepEqual(t, forwarded, tc.expectedHeader)
+		})
+	}
 }
 
 func TestCredentialCheck(t *testing.T) {

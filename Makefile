@@ -58,6 +58,8 @@ GO_BUILD_LDFLAGS ?= -s -X github.com/infrahq/infra/internal.Version="v$(BUILDVER
 					-X github.com/infrahq/infra/internal.TelemetryWriteKey="none" \
 					-linkmode external -extldflags "-static"
 
+OCI_BUILD_ADDITIONAL_ARGS= --build-arg BUILDVERSION=v$(TAG)
+
 include .make/base.mk
 include .make/oci.mk
 include .make/helm.mk
@@ -178,7 +180,7 @@ docker/%:
 OCI_BUILD_FLAGS ?=
 OCI_UI_FILE ?= Dockerfile
 docker-build: fmt vet
-	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --file images/infra/Dockerfile --build-arg BUILDVERSION=v$(TAG) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
+	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --file images/infra/Dockerfile $(OCI_BUILD_ADDITIONAL_ARGS) --load -t $(DOCKER_REGISTRY)/infra:$(TAG)
 	$(DOCKER_ENGINE) buildx build $(DOCKER_CONTEXT) $(OCI_BUILD_FLAGS) --file images/ui/$(OCI_UI_FILE) --load -t $(DOCKER_REGISTRY)/ui:$(TAG)
 
 # perform update of go dependencies

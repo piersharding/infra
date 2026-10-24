@@ -346,7 +346,11 @@ func runKubernetesConnector(ctx context.Context, options Options) error {
 	})
 
 	authn := newAuthenticator(options)
-	router.HandleFunc("/", proxyMiddleware(proxy, authn, bearerToken))
+	impersonationAuthz := &impersonationAuthorizer{
+		client: &http.Client{Transport: proxyTransport, Timeout: 10 * time.Second},
+		url:    kubeAPIAddr.JoinPath("apis", "authorization.k8s.io", "v1", "subjectaccessreviews").String(),
+	}
+	router.HandleFunc("/", proxyMiddleware(proxy, authn, bearerToken, impersonationAuthz))
 	tlsServer := &http.Server{
 		ReadHeaderTimeout: 30 * time.Second,
 		ReadTimeout:       60 * time.Second,
